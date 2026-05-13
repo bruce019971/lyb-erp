@@ -1,0 +1,92 @@
+import type { SortOrder } from "antd/es/table/interface";
+
+import { supabase } from "@/lib/supabase";
+
+import {
+  logisticsKeywordFields,
+  type LogisticsProviderCreateValues,
+  type LogisticsProviderRecord,
+} from "./logistics";
+
+type LogisticsProviderRequestParams = {
+  current?: number;
+  pageSize?: number;
+} & Record<string, unknown>;
+
+export async function requestLogisticsProviderRecords(
+  params: LogisticsProviderRequestParams,
+  sorter: Record<string, SortOrder>,
+) {
+  const current = params.current ?? 1;
+  const pageSize = params.pageSize ?? 20;
+  const from = (current - 1) * pageSize;
+  const to = from + pageSize - 1;
+
+  let query = supabase
+    .from("logistics_providers")
+    .select("*", { count: "exact" })
+    .range(from, to);
+
+  logisticsKeywordFields.forEach((field) => {
+    const value = params[field];
+    if (typeof value === "string" && value.trim()) {
+      query = query.ilike(field, `%${value.trim()}%`);
+    }
+  });
+
+  const orderField = Object.keys(sorter ?? {})[0];
+  const orderDirection = orderField ? sorter[orderField] : undefined;
+
+  if (orderField && orderDirection) {
+    query = query.order(orderField, {
+      ascending: orderDirection === "ascend",
+    });
+  } else {
+    query = query.order("created_at", {
+      ascending: false,
+      nullsFirst: false,
+    });
+  }
+
+  const { data, error, count } = await query;
+
+  if (error) {
+    return {
+      data: [],
+      success: false,
+      total: 0,
+    };
+  }
+
+  return {
+    data: (data ?? []) as LogisticsProviderRecord[],
+    success: true,
+    total: count ?? 0,
+  };
+}
+
+function normalizeTextValue(value?: string | null) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+export async function createLogisticsProviderRecord(
+  values: LogisticsProviderCreateValues,
+) {
+  const payload = {
+    provider_name: values.provider_name.trim(),
+    system_url: normalizeTextValue(values.system_url),
+  };
+
+  const { data, error } = await supabase
+    .from("logistics_providers")
+    .insert(payload)
+    .select("*")
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data as LogisticsProviderRecord;
+}

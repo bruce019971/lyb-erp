@@ -12,15 +12,46 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.app-workbench-tabs > .ant-tabs-nav {
+  margin: 0;
+  height: 48px;
+  padding: 0 16px;
+  background: #ffffff;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.app-workbench-tabs > .ant-tabs-nav .ant-tabs-tab {
+  border-radius: 0 !important;
+  border-top: 0 !important;
+  border-left: 0 !important;
+  border-right: 0 !important;
+  background: transparent !important;
+}
+
+.app-workbench-tabs > .ant-tabs-nav .ant-tabs-tab-active {
+  border-bottom-color: #1677ff !important;
+}
+
+.app-workbench-tabs > .ant-tabs-content-holder {
+  min-height: 0;
+  flex: 1;
+}
+
+.app-workbench-tabs > .ant-tabs-content-holder > .ant-tabs-content {
+  height: 100%;
+}
+
+.app-workbench-tabs > .ant-tabs-content-holder > .ant-tabs-content > .ant-tabs-tabpane {
+  height: 100%;
+  overflow: hidden;
 }
