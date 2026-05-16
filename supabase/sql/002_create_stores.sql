@@ -3,6 +3,7 @@ create table if not exists public.stores (
 
   seller_id text not null,
   seller_name text not null,
+  seller_code text,
   seller_address text,
   seller_type text,
 
@@ -13,6 +14,7 @@ create table if not exists public.stores (
 comment on table public.stores is '店铺基础资料表';
 comment on column public.stores.seller_id is '店铺ID';
 comment on column public.stores.seller_name is '店铺名称';
+comment on column public.stores.seller_code is '店铺Code';
 comment on column public.stores.seller_address is '店铺地址';
 comment on column public.stores.seller_type is '店铺类型';
 
@@ -21,6 +23,9 @@ on public.stores(seller_id);
 
 create index if not exists idx_stores_seller_name
 on public.stores(seller_name);
+
+create index if not exists idx_stores_seller_code
+on public.stores(seller_code);
 
 create index if not exists idx_stores_seller_type
 on public.stores(seller_type);

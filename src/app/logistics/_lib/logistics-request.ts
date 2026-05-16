@@ -5,7 +5,9 @@ import { supabase } from "@/lib/supabase";
 import {
   logisticsKeywordFields,
   type LogisticsProviderCreateValues,
+  type LogisticsProviderOption,
   type LogisticsProviderRecord,
+  type LogisticsProviderUpdateValues,
 } from "./logistics";
 
 type LogisticsProviderRequestParams = {
@@ -76,6 +78,8 @@ export async function createLogisticsProviderRecord(
   const payload = {
     provider_name: values.provider_name.trim(),
     system_url: normalizeTextValue(values.system_url),
+    username: normalizeTextValue(values.username),
+    password: normalizeTextValue(values.password),
   };
 
   const { data, error } = await supabase
@@ -89,4 +93,42 @@ export async function createLogisticsProviderRecord(
   }
 
   return data as LogisticsProviderRecord;
+}
+
+export async function updateLogisticsProviderRecord(
+  id: string,
+  values: LogisticsProviderUpdateValues,
+) {
+  const payload = {
+    provider_name: values.provider_name.trim(),
+    system_url: normalizeTextValue(values.system_url),
+    username: normalizeTextValue(values.username),
+    password: normalizeTextValue(values.password),
+  };
+
+  const { data, error } = await supabase
+    .from("logistics_providers")
+    .update(payload)
+    .eq("id", id)
+    .select("*")
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data as LogisticsProviderRecord;
+}
+
+export async function requestLogisticsProviderOptions() {
+  const { data, error } = await supabase
+    .from("logistics_providers")
+    .select("id, provider_name, system_url")
+    .order("provider_name", { ascending: true });
+
+  if (error) {
+    throw error;
+  }
+
+  return (data ?? []) as LogisticsProviderOption[];
 }

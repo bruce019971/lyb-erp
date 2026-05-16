@@ -2,21 +2,41 @@
 
 import type { ActionType } from "@ant-design/pro-components";
 import { App, ConfigProvider } from "antd";
+import zhCN from "antd/locale/zh_CN";
+import dayjs from "dayjs";
+import "dayjs/locale/zh-cn";
 import { useEffect, useRef, useState } from "react";
 
 import ShipmentsTableSkeleton from "../../shipments/_components/shipments-table-skeleton";
-import type { ProductRecord } from "../_lib/products";
+import type {
+  ProductFilterOption,
+  ProductRecord,
+} from "../_lib/products";
+import { requestProductFilterOptions } from "../_lib/products-request";
 import ProductFormDrawer from "./product-form-drawer";
-import ProductsHeader from "./products-header";
 import ProductsTable from "./products-table";
+import ProductViewDrawer from "./product-view-drawer";
+
+dayjs.locale("zh-cn");
 
 export default function ProductsPage() {
   const [mounted, setMounted] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [viewOpen, setViewOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<ProductRecord | undefined>(
     undefined,
   );
+  const [viewingRecord, setViewingRecord] = useState<ProductRecord | undefined>(
+    undefined,
+  );
+  const [productNameOptions, setProductNameOptions] = useState<
+    ProductFilterOption[]
+  >([]);
+  const [skuOptions, setSkuOptions] = useState<ProductFilterOption[]>([]);
+  const [storeNameOptions, setStoreNameOptions] = useState<
+    ProductFilterOption[]
+  >([]);
   const tableActionRef = useRef<ActionType>(undefined);
 
   useEffect(() => {
@@ -24,8 +44,38 @@ export default function ProductsPage() {
     return () => window.clearTimeout(timer);
   }, []);
 
+  useEffect(() => {
+    if (!mounted) return;
+
+    let cancelled = false;
+
+    async function loadFilterOptions() {
+      try {
+        const options = await requestProductFilterOptions();
+        if (cancelled) return;
+
+        setProductNameOptions(options.productNameOptions);
+        setSkuOptions(options.skuOptions);
+        setStoreNameOptions(options.storeNameOptions);
+      } catch {
+        if (cancelled) return;
+
+        setProductNameOptions([]);
+        setSkuOptions([]);
+        setStoreNameOptions([]);
+      }
+    }
+
+    void loadFilterOptions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [mounted]);
+
   return (
     <ConfigProvider
+      locale={zhCN}
       theme={{
         token: {
           borderRadius: 6,
@@ -36,25 +86,37 @@ export default function ProductsPage() {
       <App>
         <main className="h-full overflow-auto bg-slate-100 px-6 py-6">
           <section className="mx-auto flex max-w-[1600px] flex-col gap-4">
-            <ProductsHeader
-              onReload={() => tableActionRef.current?.reload()}
-              onCreate={() => setCreateOpen(true)}
-              canReload={mounted}
-            />
-
             {mounted ? (
               <ProductsTable
                 actionRef={tableActionRef}
+                onCreate={() => setCreateOpen(true)}
+                onView={(record) => {
+                  setViewingRecord(record);
+                  setViewOpen(true);
+                }}
                 onEdit={(record) => {
                   setEditingRecord(record);
                   setEditOpen(true);
                 }}
+                productNameOptions={productNameOptions}
+                skuOptions={skuOptions}
+                storeNameOptions={storeNameOptions}
               />
             ) : (
               <ShipmentsTableSkeleton />
             )}
           </section>
         </main>
+        {mounted ? (
+          <ProductViewDrawer
+            open={viewOpen}
+            record={viewingRecord}
+            onClose={() => {
+              setViewOpen(false);
+              setViewingRecord(undefined);
+            }}
+          />
+        ) : null}
         {mounted ? (
           <ProductFormDrawer
             open={createOpen}

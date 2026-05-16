@@ -26,6 +26,7 @@ import {
   createProductRecord,
   updateProductRecord,
   uploadProductImage,
+  uploadProductLabel,
 } from "../_lib/products-request";
 import type { StoreOption } from "../../stores/_lib/stores";
 import { requestStoreOptions } from "../../stores/_lib/stores-request";
@@ -49,13 +50,25 @@ function buildInitialValues(record?: ProductRecord): ProductCreateValues {
     ml_code: record?.ml_code ?? undefined,
     store_name: record?.store_name ?? undefined,
     product_image_url: record?.product_image_url ?? undefined,
+    product_label_url: record?.product_label_url ?? undefined,
     product_parameters: record?.product_parameters ?? undefined,
     packing_list: record?.packing_list ?? undefined,
     color_box_size: record?.color_box_size ?? undefined,
     single_gross_weight: record?.single_gross_weight ?? undefined,
+    product_unit_price: record?.product_unit_price ?? undefined,
     carton_spec: record?.carton_spec ?? undefined,
     pcs_per_carton: record?.pcs_per_carton ?? undefined,
   };
+}
+
+function getFileNameFromUrl(url: string, fallbackName: string) {
+  try {
+    const pathname = new URL(url).pathname;
+    const name = pathname.split("/").pop();
+    return name || fallbackName;
+  } catch {
+    return fallbackName;
+  }
 }
 
 function buildInitialImageFileList(record?: ProductRecord): UploadFile[] {
@@ -64,9 +77,22 @@ function buildInitialImageFileList(record?: ProductRecord): UploadFile[] {
   return [
     {
       uid: record.id,
-      name: record.product_name ?? "product-image",
+      name: getFileNameFromUrl(record.product_image_url, "product-image"),
       status: "done",
       url: record.product_image_url,
+    },
+  ];
+}
+
+function buildInitialLabelFileList(record?: ProductRecord): UploadFile[] {
+  if (!record?.product_label_url) return [];
+
+  return [
+    {
+      uid: `${record.id}-label`,
+      name: getFileNameFromUrl(record.product_label_url, "product-label"),
+      status: "done",
+      url: record.product_label_url,
     },
   ];
 }
@@ -83,19 +109,32 @@ export default function ProductFormDrawer({
   const [storesLoading, setStoresLoading] = useState(false);
   const [storeOptions, setStoreOptions] = useState<StoreOption[]>([]);
   const [imageUploading, setImageUploading] = useState(false);
+  const [labelUploading, setLabelUploading] = useState(false);
   const [imageUrlOverride, setImageUrlOverride] = useState<string | undefined>(
     record?.product_image_url ?? undefined,
   );
   const imageUrlRef = useRef<string | undefined>(
     record?.product_image_url ?? undefined,
   );
+  const [labelUrlOverride, setLabelUrlOverride] = useState<string | undefined>(
+    record?.product_label_url ?? undefined,
+  );
+  const labelUrlRef = useRef<string | undefined>(
+    record?.product_label_url ?? undefined,
+  );
   const [imageFileListOverride, setImageFileListOverride] = useState<
+    UploadFile[] | null
+  >(null);
+  const [labelFileListOverride, setLabelFileListOverride] = useState<
     UploadFile[] | null
   >(null);
   const { message } = App.useApp();
   const imageFileList =
     imageFileListOverride ?? buildInitialImageFileList(record);
+  const labelFileList =
+    labelFileListOverride ?? buildInitialLabelFileList(record);
   const currentImageUrl = imageUrlOverride ?? record?.product_image_url ?? undefined;
+  const currentLabelUrl = labelUrlOverride ?? record?.product_label_url ?? undefined;
 
   useEffect(() => {
     if (!open) return;
@@ -131,19 +170,14 @@ export default function ProductFormDrawer({
   const handleFinish: FormProps<ProductCreateValues>["onFinish"] = async (
     values,
   ) => {
-    const submittedImageUrl =
-      imageUrlRef.current ?? currentImageUrl ?? record?.product_image_url;
-
-    if (!submittedImageUrl) {
-      message.error("请上传产品图片");
-      return;
-    }
-
     try {
       setSubmitting(true);
       const nextValues = {
         ...values,
-        product_image_url: submittedImageUrl,
+        product_image_url:
+          imageUrlRef.current ?? currentImageUrl ?? record?.product_image_url,
+        product_label_url:
+          labelUrlRef.current ?? currentLabelUrl ?? record?.product_label_url,
       };
 
       if (mode === "edit" && record) {
@@ -158,6 +192,9 @@ export default function ProductFormDrawer({
       imageUrlRef.current = undefined;
       setImageUrlOverride(undefined);
       setImageFileListOverride(null);
+      labelUrlRef.current = undefined;
+      setLabelUrlOverride(undefined);
+      setLabelFileListOverride(null);
       onSaved();
     } catch (error) {
       const description =
@@ -175,7 +212,11 @@ export default function ProductFormDrawer({
     imageUrlRef.current = record?.product_image_url ?? undefined;
     setImageUrlOverride(record?.product_image_url ?? undefined);
     setImageFileListOverride(null);
+    labelUrlRef.current = record?.product_label_url ?? undefined;
+    setLabelUrlOverride(record?.product_label_url ?? undefined);
+    setLabelFileListOverride(null);
     setImageUploading(false);
+    setLabelUploading(false);
     onClose();
   }
 
@@ -220,6 +261,46 @@ export default function ProductFormDrawer({
     },
   };
 
+  const labelUploadProps: UploadProps = {
+    accept: ".pdf,image/*",
+    maxCount: 1,
+    fileList: labelFileList,
+    showUploadList: true,
+    customRequest: async ({ file, onError, onSuccess }) => {
+      try {
+        setLabelUploading(true);
+        const labelUrl = await uploadProductLabel(file as File);
+        labelUrlRef.current = labelUrl;
+        setLabelUrlOverride(labelUrl);
+        setLabelFileListOverride([
+          {
+            uid: crypto.randomUUID(),
+            name: (file as File).name,
+            status: "done",
+            url: labelUrl,
+          },
+        ]);
+        onSuccess?.({ url: labelUrl });
+      } catch (error) {
+        const description =
+          error instanceof Error ? error.message : "请检查标签存储权限";
+        message.error(`标签上传失败：${description}`);
+        setLabelFileListOverride(buildInitialLabelFileList(record));
+        labelUrlRef.current = record?.product_label_url ?? undefined;
+        setLabelUrlOverride(record?.product_label_url ?? undefined);
+        onError?.(error as Error);
+      } finally {
+        setLabelUploading(false);
+      }
+    },
+    onRemove: () => {
+      labelUrlRef.current = undefined;
+      setLabelUrlOverride(undefined);
+      setLabelFileListOverride([]);
+      return true;
+    },
+  };
+
   return (
     <Drawer
       title={mode === "edit" ? "编辑产品" : "新增产品"}
@@ -234,8 +315,8 @@ export default function ProductFormDrawer({
             <Button onClick={handleClose}>取消</Button>
             <Button
               type="primary"
-              loading={submitting || imageUploading}
-              disabled={imageUploading}
+              loading={submitting || imageUploading || labelUploading}
+              disabled={imageUploading || labelUploading}
               onClick={() => {
                 form.submit();
               }}
@@ -268,47 +349,9 @@ export default function ProductFormDrawer({
           </Form.Item>
 
           <Form.Item
-            label="产品图片"
-            className="col-span-2"
-            required
-          >
-            <Upload {...uploadProps}>
-              {imageFileList.length >= 1 ? null : (
-                <div>
-                  {imageUploading ? <LoadingOutlined /> : <PlusOutlined />}
-                  <div className="mt-2">上传图片</div>
-                </div>
-              )}
-            </Upload>
-          </Form.Item>
-
-          <Form.Item
-            label="产品ID"
-            name="product_id"
-            rules={[{ required: true, whitespace: true, message: "请输入产品ID" }]}
-          >
-            <Input placeholder="请输入产品ID" />
-          </Form.Item>
-
-          <Form.Item
-            label="SKU"
-            name="sku"
-            rules={[{ required: true, whitespace: true, message: "请输入SKU" }]}
-          >
-            <Input placeholder="请输入SKU" />
-          </Form.Item>
-
-          <Form.Item
-            label="ML Code"
-            name="ml_code"
-            rules={[{ required: true, whitespace: true, message: "请输入ML Code" }]}
-          >
-            <Input placeholder="请输入ML Code" />
-          </Form.Item>
-
-          <Form.Item
             label="所属店铺"
             name="store_name"
+            className="col-span-2"
             rules={[{ required: true, message: "请选择所属店铺" }]}
           >
             <Select
@@ -325,6 +368,53 @@ export default function ProductFormDrawer({
             />
           </Form.Item>
 
+          <Form.Item
+            label="产品图片"
+            className="col-span-2"
+          >
+            <Upload {...uploadProps}>
+              {imageFileList.length >= 1 ? null : (
+                <div>
+                  {imageUploading ? <LoadingOutlined /> : <PlusOutlined />}
+                  <div className="mt-2">上传图片</div>
+                </div>
+              )}
+            </Upload>
+          </Form.Item>
+
+          <Form.Item
+            label="产品标签"
+            name="product_label_url"
+            className="col-span-2"
+          >
+            <Upload {...labelUploadProps}>
+              {labelFileList.length >= 1 ? null : (
+                <Button loading={labelUploading}>上传产品标签</Button>
+              )}
+            </Upload>
+          </Form.Item>
+
+          <Form.Item
+            label="产品ID"
+            name="product_id"
+          >
+            <Input placeholder="请输入产品ID" />
+          </Form.Item>
+
+          <Form.Item
+            label="SKU"
+            name="sku"
+          >
+            <Input placeholder="请输入SKU" />
+          </Form.Item>
+
+          <Form.Item
+            label="ML Code"
+            name="ml_code"
+          >
+            <Input placeholder="请输入ML Code" />
+          </Form.Item>
+
           <Form.Item label="产品链接" name="product_url" className="col-span-2">
             <Input placeholder="请输入产品链接" />
           </Form.Item>
@@ -339,6 +429,15 @@ export default function ProductFormDrawer({
               min={0}
               precision={3}
               placeholder="请输入单个毛重"
+            />
+          </Form.Item>
+
+          <Form.Item label="产品单价" name="product_unit_price">
+            <InputNumber
+              className="!w-full"
+              min={0}
+              precision={2}
+              placeholder="请输入产品单价"
             />
           </Form.Item>
 

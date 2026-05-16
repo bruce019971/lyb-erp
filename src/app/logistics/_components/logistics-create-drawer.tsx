@@ -84,6 +84,14 @@ export default function LogisticsCreateDrawer({
         <Form.Item label="系统链接" name="system_url">
           <Input placeholder="请输入系统链接" />
         </Form.Item>
+
+        <Form.Item label="用户名" name="username">
+          <Input placeholder="请输入用户名" maxLength={200} showCount />
+        </Form.Item>
+
+        <Form.Item label="密码" name="password">
+          <Input.Password placeholder="请输入密码" maxLength={200} />
+        </Form.Item>
       </Form>
     </Drawer>
   );
