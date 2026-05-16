@@ -9,6 +9,7 @@ import {
   type StoreUpdateValues,
   type StoreRecord,
 } from "./stores";
+import { buildStoreUrl, generateStoreCode } from "./store-code";
 
 type StoreRequestParams = {
   current?: number;
@@ -60,8 +61,16 @@ export async function requestStoreRecords(
     };
   }
 
+  const records = ((data ?? []) as StoreRecord[]).map((record) => ({
+    ...record,
+    seller_code:
+      record.seller_code?.trim() || generateStoreCode(record.seller_name),
+    seller_address:
+      record.seller_address?.trim() || buildStoreUrl(record.seller_id),
+  }));
+
   return {
-    data: (data ?? []) as StoreRecord[],
+    data: records,
     success: true,
     total: count ?? 0,
   };
@@ -76,7 +85,8 @@ export async function createStoreRecord(values: StoreCreateValues) {
   const payload = {
     seller_id: values.seller_id.trim(),
     seller_name: values.seller_name.trim(),
-    seller_address: normalizeTextValue(values.seller_address),
+    seller_code: generateStoreCode(values.seller_name),
+    seller_address: buildStoreUrl(values.seller_id),
     seller_type: normalizeTextValue(values.seller_type) ?? "CBT",
   };
 
@@ -97,7 +107,8 @@ export async function updateStoreRecord(id: string, values: StoreUpdateValues) {
   const payload = {
     seller_id: values.seller_id.trim(),
     seller_name: values.seller_name.trim(),
-    seller_address: normalizeTextValue(values.seller_address),
+    seller_code: generateStoreCode(values.seller_name),
+    seller_address: buildStoreUrl(values.seller_id),
     seller_type: normalizeTextValue(values.seller_type) ?? "CBT",
   };
 
@@ -118,12 +129,16 @@ export async function updateStoreRecord(id: string, values: StoreUpdateValues) {
 export async function requestStoreOptions() {
   const { data, error } = await supabase
     .from("stores")
-    .select("id, seller_name")
+    .select("id, seller_id, seller_name, seller_address")
     .order("seller_name", { ascending: true });
 
   if (error) {
     throw error;
   }
 
-  return (data ?? []) as StoreOption[];
+  return ((data ?? []) as StoreOption[]).map((item) => ({
+    ...item,
+    seller_address:
+      item.seller_address?.trim() || buildStoreUrl(item.seller_id),
+  }));
 }

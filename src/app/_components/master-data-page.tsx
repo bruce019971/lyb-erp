@@ -3,7 +3,7 @@
 import type { ProColumns } from "@ant-design/pro-components";
 import { ProTable } from "@ant-design/pro-components";
 import { PlusOutlined, ReloadOutlined } from "@ant-design/icons";
-import { App, Button, ConfigProvider, Space, Typography } from "antd";
+import { App, Button, ConfigProvider, Space, Typography, message } from "antd";
 import { useEffect, useState } from "react";
 
 import ShipmentsTableSkeleton from "../shipments/_components/shipments-table-skeleton";
@@ -19,24 +19,28 @@ type MasterDataPageProps = {
 };
 
 function MasterDataActions() {
-  const { message } = App.useApp();
+  const [messageApi, contextHolder] = message.useMessage();
 
   return (
-    <Space>
-      <Button
-        icon={<ReloadOutlined />}
-        onClick={() => message.info("暂无可刷新数据")}
-      >
-        刷新
-      </Button>
-      <Button
-        type="primary"
-        icon={<PlusOutlined />}
-        onClick={() => message.info("请先接入数据表")}
-      >
-        新增
-      </Button>
-    </Space>
+    <>
+      {contextHolder}
+      <Space>
+        <Button
+          type="text"
+          icon={<ReloadOutlined />}
+          onClick={() => messageApi.info("暂无可刷新数据")}
+        >
+          刷新
+        </Button>
+        <Button
+          type="text"
+          icon={<PlusOutlined />}
+          onClick={() => messageApi.info("请先接入数据表")}
+        >
+          新增
+        </Button>
+      </Space>
+    </>
   );
 }
 

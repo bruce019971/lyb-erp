@@ -4,7 +4,9 @@ import { supabase } from "@/lib/supabase";
 
 import {
   productKeywordFields,
+  type ProductFilterOptions,
   type ProductCreateValues,
+  type ProductShipmentOption,
   type ProductRecord,
   type ProductUpdateValues,
 } from "./products";
@@ -16,6 +18,7 @@ type ProductRequestParams = {
 
 type StoreLinkRecord = {
   seller_name: string | null;
+  seller_code: string | null;
   seller_address: string | null;
 };
 
@@ -32,19 +35,28 @@ async function attachStoreUrls(records: ProductRecord[]) {
 
   const { data } = await supabase
     .from("stores")
-    .select("seller_name, seller_address")
+    .select("seller_name, seller_code, seller_address")
     .in("seller_name", storeNames);
 
-  const storeUrlMap = new Map(
+  const storeInfoMap = new Map(
     ((data ?? []) as StoreLinkRecord[])
       .filter((store) => store.seller_name)
-      .map((store) => [store.seller_name!, store.seller_address]),
+      .map((store) => [
+        store.seller_name!,
+        {
+          seller_code: store.seller_code,
+          seller_address: store.seller_address,
+        },
+      ]),
   );
 
   return records.map((record) => ({
     ...record,
+    store_code: record.store_name
+      ? storeInfoMap.get(record.store_name)?.seller_code ?? null
+      : null,
     store_url: record.store_name
-      ? storeUrlMap.get(record.store_name) ?? null
+      ? storeInfoMap.get(record.store_name)?.seller_address ?? null
       : null,
   }));
 }
@@ -65,6 +77,16 @@ export async function requestProductRecords(
 
   productKeywordFields.forEach((field) => {
     const value = params[field];
+    if (Array.isArray(value)) {
+      const values = value
+        .map((item) => (typeof item === "string" ? item.trim() : ""))
+        .filter(Boolean);
+      if (values.length > 0) {
+        query = query.in(field, values);
+      }
+      return;
+    }
+
     if (typeof value === "string" && value.trim()) {
       query = query.ilike(field, `%${value.trim()}%`);
     }
@@ -103,6 +125,60 @@ export async function requestProductRecords(
   };
 }
 
+function toUniqueOptions(values: Array<string | null | undefined>) {
+  return Array.from(
+    new Set(
+      values
+        .map((value) => value?.trim())
+        .filter((value): value is string => Boolean(value)),
+    ),
+  )
+    .sort((a, b) => a.localeCompare(b))
+    .map((value) => ({
+      label: value,
+      value,
+    }));
+}
+
+export async function requestProductFilterOptions() {
+  const { data, error } = await supabase
+    .from("products")
+    .select("product_name, product_id, sku, store_name")
+    .order("product_name", { ascending: true });
+
+  if (error) {
+    throw error;
+  }
+
+  const rows = (data ?? []) as Array<{
+    product_name: string | null;
+    product_id: string | null;
+    sku: string | null;
+    store_name: string | null;
+  }>;
+
+  const options: ProductFilterOptions = {
+    productNameOptions: toUniqueOptions(rows.map((row) => row.product_name)),
+    skuOptions: toUniqueOptions(rows.map((row) => row.sku)),
+    storeNameOptions: toUniqueOptions(rows.map((row) => row.store_name)),
+  };
+
+  return options;
+}
+
+export async function requestProductShipmentOptions() {
+  const { data, error } = await supabase
+    .from("products")
+    .select("id, product_name, store_name, pcs_per_carton, product_unit_price")
+    .order("product_name", { ascending: true });
+
+  if (error) {
+    throw error;
+  }
+
+  return (data ?? []) as ProductShipmentOption[];
+}
+
 function normalizeTextValue(value?: string | null) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
@@ -112,8 +188,14 @@ function normalizeNumberValue(value?: number | null) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function compactPayload<T extends Record<string, unknown>>(payload: T) {
+  return Object.fromEntries(
+    Object.entries(payload).filter(([, value]) => value !== null && value !== undefined),
+  ) as Partial<T>;
+}
+
 export async function createProductRecord(values: ProductCreateValues) {
-  const payload = {
+  const payload = compactPayload({
     product_name: values.product_name.trim(),
     product_url: normalizeTextValue(values.product_url),
     product_id: normalizeTextValue(values.product_id),
@@ -121,13 +203,15 @@ export async function createProductRecord(values: ProductCreateValues) {
     ml_code: normalizeTextValue(values.ml_code),
     store_name: normalizeTextValue(values.store_name),
     product_image_url: normalizeTextValue(values.product_image_url),
+    product_label_url: normalizeTextValue(values.product_label_url),
     product_parameters: normalizeTextValue(values.product_parameters),
     packing_list: normalizeTextValue(values.packing_list),
     color_box_size: normalizeTextValue(values.color_box_size),
     single_gross_weight: normalizeNumberValue(values.single_gross_weight),
+    product_unit_price: normalizeNumberValue(values.product_unit_price),
     carton_spec: normalizeTextValue(values.carton_spec),
     pcs_per_carton: normalizeNumberValue(values.pcs_per_carton),
-  };
+  });
 
   const { error } = await supabase.from("products").insert(payload);
 
@@ -140,7 +224,7 @@ export async function updateProductRecord(
   id: string,
   values: ProductUpdateValues,
 ) {
-  const payload = {
+  const payload = compactPayload({
     product_name: values.product_name.trim(),
     product_url: normalizeTextValue(values.product_url),
     product_id: normalizeTextValue(values.product_id),
@@ -148,13 +232,15 @@ export async function updateProductRecord(
     ml_code: normalizeTextValue(values.ml_code),
     store_name: normalizeTextValue(values.store_name),
     product_image_url: normalizeTextValue(values.product_image_url),
+    product_label_url: normalizeTextValue(values.product_label_url),
     product_parameters: normalizeTextValue(values.product_parameters),
     packing_list: normalizeTextValue(values.packing_list),
     color_box_size: normalizeTextValue(values.color_box_size),
     single_gross_weight: normalizeNumberValue(values.single_gross_weight),
+    product_unit_price: normalizeNumberValue(values.product_unit_price),
     carton_spec: normalizeTextValue(values.carton_spec),
     pcs_per_carton: normalizeNumberValue(values.pcs_per_carton),
-  };
+  });
 
   const { data, error } = await supabase
     .from("products")
@@ -172,17 +258,39 @@ export async function updateProductRecord(
   }
 }
 
-function getProductImagePath(file: File) {
+function getProductAssetPath(prefix: string, file: File) {
   const extension = file.name.includes(".")
     ? file.name.split(".").pop()?.toLowerCase()
     : undefined;
   const suffix = extension ? `.${extension}` : "";
   const randomId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-  return `products/${randomId}${suffix}`;
+  return `${prefix}/${randomId}${suffix}`;
 }
 
 export async function uploadProductImage(file: File) {
-  const filePath = getProductImagePath(file);
+  const filePath = getProductAssetPath("products", file);
+
+  const { error } = await supabase.storage
+    .from("product-images")
+    .upload(filePath, file, {
+      cacheControl: "3600",
+      upsert: false,
+      contentType: file.type || undefined,
+    });
+
+  if (error) {
+    throw error;
+  }
+
+  const { data } = supabase.storage
+    .from("product-images")
+    .getPublicUrl(filePath);
+
+  return data.publicUrl;
+}
+
+export async function uploadProductLabel(file: File) {
+  const filePath = getProductAssetPath("labels", file);
 
   const { error } = await supabase.storage
     .from("product-images")

@@ -2,10 +2,11 @@
 
 import { App, Button, Drawer, Form, Input, Select, Space } from "antd";
 import type { FormProps } from "antd";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { StoreCreateValues } from "../_lib/stores";
 import { createStoreRecord } from "../_lib/stores-request";
+import { generateStoreCode } from "../_lib/store-code";
 
 type StoreCreateDrawerProps = {
   open: boolean;
@@ -21,6 +22,11 @@ export default function StoreCreateDrawer({
   const [form] = Form.useForm<StoreCreateValues>();
   const [submitting, setSubmitting] = useState(false);
   const { message } = App.useApp();
+  const sellerName = Form.useWatch("seller_name", form);
+
+  useEffect(() => {
+    form.setFieldValue("seller_code", generateStoreCode(sellerName));
+  }, [form, sellerName]);
 
   const handleFinish: FormProps<StoreCreateValues>["onFinish"] = async (
     values,
@@ -69,7 +75,7 @@ export default function StoreCreateDrawer({
         form={form}
         layout="vertical"
         requiredMark
-        initialValues={{ seller_type: "CBT" }}
+        initialValues={{ seller_type: "CBT", seller_code: "" }}
         onFinish={handleFinish}
         onFinishFailed={() => message.error("请先完善必填信息")}
       >
@@ -91,8 +97,8 @@ export default function StoreCreateDrawer({
           <Input placeholder="请输入店铺名称" maxLength={200} showCount />
         </Form.Item>
 
-        <Form.Item label="店铺地址" name="seller_address">
-          <Input placeholder="请输入店铺链接" />
+        <Form.Item label="店铺Code" name="seller_code">
+          <Input placeholder="根据店铺名称自动生成" readOnly disabled />
         </Form.Item>
 
         <Form.Item label="店铺类型" name="seller_type">

@@ -16,10 +16,15 @@ function LogisticsHeaderActions({
 }: LogisticsHeaderProps) {
   return (
     <Space>
-      <Button icon={<ReloadOutlined />} onClick={onReload} disabled={!canReload}>
+      <Button
+        type="text"
+        icon={<ReloadOutlined />}
+        onClick={onReload}
+        disabled={!canReload}
+      >
         刷新
       </Button>
-      <Button type="primary" icon={<PlusOutlined />} onClick={onCreate}>
+      <Button type="text" icon={<PlusOutlined />} onClick={onCreate}>
         新增物流商
       </Button>
     </Space>

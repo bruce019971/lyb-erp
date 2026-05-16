@@ -2,14 +2,18 @@
 
 import type { ActionType } from "@ant-design/pro-components";
 import { App, ConfigProvider } from "antd";
+import zhCN from "antd/locale/zh_CN";
+import dayjs from "dayjs";
+import "dayjs/locale/zh-cn";
 import { useEffect, useRef, useState } from "react";
 
 import ShipmentsTableSkeleton from "../../shipments/_components/shipments-table-skeleton";
 import StoreCreateDrawer from "./store-create-drawer";
 import StoreEditDrawer from "./store-edit-drawer";
-import StoresHeader from "./stores-header";
 import StoresTable from "./stores-table";
 import type { StoreRecord } from "../_lib/stores";
+
+dayjs.locale("zh-cn");
 
 export default function StoresPage() {
   const [mounted, setMounted] = useState(false);
@@ -27,6 +31,7 @@ export default function StoresPage() {
 
   return (
     <ConfigProvider
+      locale={zhCN}
       theme={{
         token: {
           borderRadius: 6,
@@ -37,15 +42,10 @@ export default function StoresPage() {
       <App>
         <main className="h-full overflow-auto bg-slate-100 px-6 py-6">
           <section className="mx-auto flex max-w-[1600px] flex-col gap-4">
-            <StoresHeader
-              onReload={() => tableActionRef.current?.reload()}
-              onCreate={() => setCreateOpen(true)}
-              canReload={mounted}
-            />
-
             {mounted ? (
               <StoresTable
                 actionRef={tableActionRef}
+                onCreate={() => setCreateOpen(true)}
                 onEdit={(record) => {
                   setEditingRecord(record);
                   setEditOpen(true);
