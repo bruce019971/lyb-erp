@@ -1,7 +1,9 @@
 "use client";
 
+import { PlusOutlined } from "@ant-design/icons";
 import type { ActionType } from "@ant-design/pro-components";
 import { ProTable } from "@ant-design/pro-components";
+import { Button, Tooltip } from "antd";
 import type { MutableRefObject } from "react";
 
 import type { StoreRecord } from "../_lib/stores";
@@ -10,26 +12,33 @@ import { getStoreColumns } from "./stores-columns";
 
 type StoresTableProps = {
   actionRef?: MutableRefObject<ActionType | undefined>;
+  onCreate: () => void;
   onEdit: (record: StoreRecord) => void;
 };
 
-export default function StoresTable({ actionRef, onEdit }: StoresTableProps) {
+export default function StoresTable({
+  actionRef,
+  onCreate,
+  onEdit,
+}: StoresTableProps) {
   return (
     <ProTable<StoreRecord>
       actionRef={actionRef}
       rowKey="id"
       columns={getStoreColumns(onEdit)}
       scroll={{ x: 900 }}
-      search={{
-        labelWidth: "auto",
-        defaultCollapsed: false,
-      }}
+      search={false}
       options={{
-        density: true,
-        fullScreen: true,
-        reload: true,
+        density: false,
+        fullScreen: false,
+        reload: false,
         setting: true,
       }}
+      toolBarRender={() => [
+        <Tooltip key="create" title="新增店铺">
+          <Button type="text" icon={<PlusOutlined />} onClick={onCreate} />
+        </Tooltip>,
+      ]}
       pagination={{
         defaultPageSize: 20,
         showSizeChanger: true,

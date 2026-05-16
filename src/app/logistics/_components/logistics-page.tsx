@@ -2,16 +2,26 @@
 
 import type { ActionType } from "@ant-design/pro-components";
 import { App, ConfigProvider } from "antd";
+import zhCN from "antd/locale/zh_CN";
+import dayjs from "dayjs";
+import "dayjs/locale/zh-cn";
 import { useEffect, useRef, useState } from "react";
 
 import ShipmentsTableSkeleton from "../../shipments/_components/shipments-table-skeleton";
 import LogisticsCreateDrawer from "./logistics-create-drawer";
-import LogisticsHeader from "./logistics-header";
+import LogisticsEditDrawer from "./logistics-edit-drawer";
 import LogisticsTable from "./logistics-table";
+import type { LogisticsProviderRecord } from "../_lib/logistics";
+
+dayjs.locale("zh-cn");
 
 export default function LogisticsPage() {
   const [mounted, setMounted] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingRecord, setEditingRecord] = useState<
+    LogisticsProviderRecord | undefined
+  >(undefined);
   const tableActionRef = useRef<ActionType>(undefined);
 
   useEffect(() => {
@@ -21,6 +31,7 @@ export default function LogisticsPage() {
 
   return (
     <ConfigProvider
+      locale={zhCN}
       theme={{
         token: {
           borderRadius: 6,
@@ -31,14 +42,15 @@ export default function LogisticsPage() {
       <App>
         <main className="h-full overflow-auto bg-slate-100 px-6 py-6">
           <section className="mx-auto flex max-w-[1600px] flex-col gap-4">
-            <LogisticsHeader
-              onReload={() => tableActionRef.current?.reload()}
-              onCreate={() => setCreateOpen(true)}
-              canReload={mounted}
-            />
-
             {mounted ? (
-              <LogisticsTable actionRef={tableActionRef} />
+              <LogisticsTable
+                actionRef={tableActionRef}
+                onCreate={() => setCreateOpen(true)}
+                onEdit={(record) => {
+                  setEditingRecord(record);
+                  setEditOpen(true);
+                }}
+              />
             ) : (
               <ShipmentsTableSkeleton />
             )}
@@ -50,6 +62,18 @@ export default function LogisticsPage() {
             onClose={() => setCreateOpen(false)}
             onCreated={() => {
               setCreateOpen(false);
+              tableActionRef.current?.reload();
+            }}
+          />
+        ) : null}
+        {mounted ? (
+          <LogisticsEditDrawer
+            open={editOpen}
+            record={editingRecord}
+            onClose={() => setEditOpen(false)}
+            onUpdated={() => {
+              setEditOpen(false);
+              setEditingRecord(undefined);
               tableActionRef.current?.reload();
             }}
           />

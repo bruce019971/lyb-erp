@@ -12,6 +12,7 @@ create table if not exists public.products (
   packing_list text,
   color_box_size text,
   single_gross_weight numeric(10, 3),
+  product_unit_price numeric(12, 2),
   carton_spec text,
   pcs_per_carton integer default 0,
 
@@ -31,6 +32,7 @@ comment on column public.products.product_parameters is '产品参数';
 comment on column public.products.packing_list is '包装清单';
 comment on column public.products.color_box_size is '彩盒尺寸';
 comment on column public.products.single_gross_weight is '单个毛重';
+comment on column public.products.product_unit_price is '产品单价';
 comment on column public.products.carton_spec is '箱规';
 comment on column public.products.pcs_per_carton is '装箱数量';
 

@@ -3,6 +3,8 @@ create table if not exists public.logistics_providers (
 
   provider_name text not null,
   system_url text,
+  username text,
+  password text,
 
   created_at timestamptz default now(),
   updated_at timestamptz default now()
@@ -11,6 +13,8 @@ create table if not exists public.logistics_providers (
 comment on table public.logistics_providers is '物流商基础资料表';
 comment on column public.logistics_providers.provider_name is '物流商';
 comment on column public.logistics_providers.system_url is '系统链接';
+comment on column public.logistics_providers.username is '用户名';
+comment on column public.logistics_providers.password is '密码';
 
 create unique index if not exists idx_logistics_providers_provider_name_unique
 on public.logistics_providers(provider_name);

@@ -55,3 +55,36 @@ body {
   height: 100%;
   overflow: hidden;
 }
+
+.relabel-alert-row > td {
+  background: #fff1f0 !important;
+}
+
+.relabel-alert-row:hover > td {
+  background: #ffe4e1 !important;
+}
+
+.role-status-group .ant-radio-button-wrapper {
+  min-width: 148px;
+  height: 56px;
+  line-height: 54px;
+  text-align: center;
+  border-radius: 8px !important;
+  margin-right: 16px;
+  font-size: 18px;
+}
+
+.role-status-group .ant-radio-button-wrapper::before {
+  display: none;
+}
+
+.role-permission-tree .ant-tree-treenode {
+  margin-bottom: 12px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: #fafafa;
+}
+
+.role-permission-tree .ant-tree-node-content-wrapper {
+  font-size: 16px;
+}

@@ -42,6 +42,13 @@ export function getStoreColumns(
       },
     },
     {
+      title: "店铺Code",
+      dataIndex: "seller_code",
+      width: 140,
+      ellipsis: true,
+      copyable: true,
+    },
+    {
       title: "店铺类型",
       dataIndex: "seller_type",
       width: 140,

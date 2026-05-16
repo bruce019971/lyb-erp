@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 
 import type { StoreRecord, StoreUpdateValues } from "../_lib/stores";
 import { updateStoreRecord } from "../_lib/stores-request";
+import { generateStoreCode } from "../_lib/store-code";
 
 type StoreEditDrawerProps = {
   open: boolean;
@@ -23,6 +24,7 @@ export default function StoreEditDrawer({
   const [form] = Form.useForm<StoreUpdateValues>();
   const [submitting, setSubmitting] = useState(false);
   const { message } = App.useApp();
+  const sellerName = Form.useWatch("seller_name", form);
 
   useEffect(() => {
     if (!open || !record) return;
@@ -30,10 +32,17 @@ export default function StoreEditDrawer({
     form.setFieldsValue({
       seller_id: record.seller_id ?? "",
       seller_name: record.seller_name ?? "",
-      seller_address: record.seller_address ?? "",
+      seller_code:
+        record.seller_code ?? generateStoreCode(record.seller_name ?? ""),
       seller_type: record.seller_type ?? "CBT",
     });
   }, [form, open, record]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (!sellerName) return;
+    form.setFieldValue("seller_code", generateStoreCode(sellerName));
+  }, [form, open, sellerName]);
 
   const handleFinish: FormProps<StoreUpdateValues>["onFinish"] = async (
     values,
@@ -104,8 +113,8 @@ export default function StoreEditDrawer({
           <Input placeholder="请输入店铺名称" maxLength={200} showCount />
         </Form.Item>
 
-        <Form.Item label="店铺地址" name="seller_address">
-          <Input placeholder="请输入店铺链接" />
+        <Form.Item label="店铺Code" name="seller_code">
+          <Input placeholder="根据店铺名称自动生成" readOnly disabled />
         </Form.Item>
 
         <Form.Item label="店铺类型" name="seller_type">
