@@ -40,6 +40,7 @@ export default function StoreEditDrawer({
 
   useEffect(() => {
     if (!open) return;
+    if (!sellerName) return;
     form.setFieldValue("seller_code", generateStoreCode(sellerName));
   }, [form, open, sellerName]);
 

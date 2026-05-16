@@ -113,13 +113,13 @@ export default function ProductFormDrawer({
   const [imageUrlOverride, setImageUrlOverride] = useState<string | undefined>(
     record?.product_image_url ?? undefined,
   );
-  const imageUrlRef = useRef<string | undefined>(
+  const imageUrlRef = useRef<string | null | undefined>(
     record?.product_image_url ?? undefined,
   );
   const [labelUrlOverride, setLabelUrlOverride] = useState<string | undefined>(
     record?.product_label_url ?? undefined,
   );
-  const labelUrlRef = useRef<string | undefined>(
+  const labelUrlRef = useRef<string | null | undefined>(
     record?.product_label_url ?? undefined,
   );
   const [imageFileListOverride, setImageFileListOverride] = useState<
@@ -175,9 +175,13 @@ export default function ProductFormDrawer({
       const nextValues = {
         ...values,
         product_image_url:
-          imageUrlRef.current ?? currentImageUrl ?? record?.product_image_url,
+          imageUrlRef.current !== undefined
+            ? imageUrlRef.current
+            : currentImageUrl ?? record?.product_image_url,
         product_label_url:
-          labelUrlRef.current ?? currentLabelUrl ?? record?.product_label_url,
+          labelUrlRef.current !== undefined
+            ? labelUrlRef.current
+            : currentLabelUrl ?? record?.product_label_url,
       };
 
       if (mode === "edit" && record) {
@@ -254,7 +258,7 @@ export default function ProductFormDrawer({
       }
     },
     onRemove: () => {
-      imageUrlRef.current = undefined;
+      imageUrlRef.current = null;
       setImageUrlOverride(undefined);
       setImageFileListOverride([]);
       return true;
@@ -294,7 +298,7 @@ export default function ProductFormDrawer({
       }
     },
     onRemove: () => {
-      labelUrlRef.current = undefined;
+      labelUrlRef.current = null;
       setLabelUrlOverride(undefined);
       setLabelFileListOverride([]);
       return true;

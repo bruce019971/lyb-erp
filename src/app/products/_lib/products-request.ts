@@ -65,15 +65,9 @@ export async function requestProductRecords(
   params: ProductRequestParams,
   sorter: Record<string, SortOrder>,
 ) {
-  const current = params.current ?? 1;
-  const pageSize = params.pageSize ?? 20;
-  const from = (current - 1) * pageSize;
-  const to = from + pageSize - 1;
-
   let query = supabase
     .from("products")
-    .select("*", { count: "exact" })
-    .range(from, to);
+    .select("*", { count: "exact" });
 
   productKeywordFields.forEach((field) => {
     const value = params[field];
@@ -224,7 +218,7 @@ export async function updateProductRecord(
   id: string,
   values: ProductUpdateValues,
 ) {
-  const payload = compactPayload({
+  const payload = {
     product_name: values.product_name.trim(),
     product_url: normalizeTextValue(values.product_url),
     product_id: normalizeTextValue(values.product_id),
@@ -240,7 +234,7 @@ export async function updateProductRecord(
     product_unit_price: normalizeNumberValue(values.product_unit_price),
     carton_spec: normalizeTextValue(values.carton_spec),
     pcs_per_carton: normalizeNumberValue(values.pcs_per_carton),
-  });
+  };
 
   const { data, error } = await supabase
     .from("products")
@@ -309,4 +303,50 @@ export async function uploadProductLabel(file: File) {
     .getPublicUrl(filePath);
 
   return data.publicUrl;
+}
+
+export async function checkProductReferences(productName: string) {
+  const references: string[] = [];
+
+  // 检查货件管理关联
+  const { data: shipments } = await supabase
+    .from("shipments")
+    .select("id")
+    .eq("product_name", productName)
+    .limit(1);
+
+  if (shipments && shipments.length > 0) {
+    references.push("货件管理");
+  }
+
+  // 检查运费管理关联
+  const { data: freights } = await supabase
+    .from("freights")
+    .select("id")
+    .eq("product_name", productName)
+    .limit(1);
+
+  if (freights && freights.length > 0) {
+    references.push("运费管理");
+  }
+
+  return references;
+}
+
+export async function deleteProductRecord(id: string, productName: string) {
+  // 先检查关联
+  const references = await checkProductReferences(productName);
+
+  if (references.length > 0) {
+    throw new Error(`产品被${references.join("、")}关联，请先删除关联数据`);
+  }
+
+  const { error } = await supabase
+    .from("products")
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    throw error;
+  }
 }
