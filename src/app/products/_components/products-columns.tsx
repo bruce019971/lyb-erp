@@ -17,6 +17,7 @@ function getExternalHref(value?: string | null) {
 export function getProductColumns(
   onView: (record: ProductRecord) => void,
   onEdit: (record: ProductRecord) => void,
+  onDelete: (record: ProductRecord) => void,
   productNameOptions: ProductFilterOption[],
   skuOptions: ProductFilterOption[],
   storeNameOptions: ProductFilterOption[],
@@ -37,20 +38,6 @@ export function getProductColumns(
       },
     },
     {
-      title: "SKU",
-      dataIndex: "sku",
-      hideInTable: true,
-      valueType: "select",
-      fieldProps: {
-        mode: "multiple",
-        allowClear: true,
-        showSearch: true,
-        optionFilterProp: "label",
-        options: skuOptions,
-        placeholder: "请选择SKU",
-      },
-    },
-    {
       title: "所在店铺",
       dataIndex: "store_name",
       hideInTable: true,
@@ -67,7 +54,7 @@ export function getProductColumns(
     {
       title: "产品图片",
       dataIndex: "product_image_url",
-      width: 92,
+      width: 80,
       fixed: "left",
       search: false,
       render: (_, record) =>
@@ -86,7 +73,7 @@ export function getProductColumns(
     {
       title: "产品名称",
       dataIndex: "product_name",
-      width: 220,
+      width: 160,
       fixed: "left",
       ellipsis: true,
       search: false,
@@ -109,7 +96,7 @@ export function getProductColumns(
     {
       title: "产品ID/SKU",
       dataIndex: "product_id",
-      width: 260,
+      width: 200,
       search: false,
       render: (_, record) => (
         <div className="flex min-w-0 flex-col gap-1">
@@ -137,14 +124,14 @@ export function getProductColumns(
     {
       title: "ML Code",
       dataIndex: "ml_code",
-      width: 130,
+      width: 110,
       search: false,
       copyable: true,
     },
     {
       title: "所在店铺",
       dataIndex: "store_name",
-      width: 140,
+      width: 120,
       ellipsis: true,
       search: false,
       render: (_, record) => {
@@ -167,54 +154,54 @@ export function getProductColumns(
       title: "装箱数量(pcs)",
       dataIndex: "pcs_per_carton",
       valueType: "digit",
-      width: 120,
+      width: 100,
       search: false,
     },
     {
       title: "彩盒尺寸(cm)",
       dataIndex: "color_box_size",
-      width: 130,
+      width: 110,
       search: false,
     },
     {
       title: "单个毛重(kg)",
       dataIndex: "single_gross_weight",
       valueType: "digit",
-      width: 120,
+      width: 100,
       search: false,
     },
     {
       title: "产品单价",
       dataIndex: "product_unit_price",
       valueType: "money",
-      width: 120,
+      width: 100,
       search: false,
     },
     {
       title: "箱规",
       dataIndex: "carton_spec",
-      width: 140,
+      width: 120,
       search: false,
       ellipsis: true,
     },
     {
       title: "产品参数",
       dataIndex: "product_parameters",
-      width: 220,
+      width: 160,
       search: false,
       ellipsis: true,
     },
     {
       title: "包装清单",
       dataIndex: "packing_list",
-      width: 220,
+      width: 160,
       search: false,
       ellipsis: true,
     },
     {
       title: "操作",
       valueType: "option",
-      width: 140,
+      width: 180,
       fixed: "right",
       render: (_, record) => (
         <>
@@ -223,6 +210,14 @@ export function getProductColumns(
           </Button>
           <Button type="link" size="small" onClick={() => onEdit(record)}>
             编辑
+          </Button>
+          <Button
+            type="link"
+            size="small"
+            danger
+            onClick={() => onDelete(record)}
+          >
+            删除
           </Button>
         </>
       ),

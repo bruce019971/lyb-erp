@@ -3,15 +3,12 @@
 import { DownloadOutlined, PlusOutlined } from "@ant-design/icons";
 import type { ActionType } from "@ant-design/pro-components";
 import { ProTable } from "@ant-design/pro-components";
-import { App, Button, Tooltip } from "antd";
+import { App, Button, Tooltip, Typography } from "antd";
 import type { Key, MutableRefObject } from "react";
 import { useState } from "react";
 
-import type {
-  ProductFilterOption,
-  ProductRecord,
-} from "../_lib/products";
-import { requestProductRecords } from "../_lib/products-request";
+import type { ProductFilterOption, ProductRecord } from "../_lib/products";
+import { requestProductRecords, deleteProductRecord } from "../_lib/products-request";
 import { getProductColumns } from "./products-columns";
 
 type ProductsTableProps = {
@@ -38,7 +35,8 @@ export default function ProductsTable({
     null,
   );
   const [downloadingLabel, setDownloadingLabel] = useState(false);
-  const { message } = App.useApp();
+  const [totalCount, setTotalCount] = useState(0);
+  const { message, modal } = App.useApp();
 
   function buildLabelFilename(product: ProductRecord) {
     const safePart = (value?: string | null) =>
@@ -71,9 +69,7 @@ export default function ProductsTable({
         selectedProduct.product_label_url.split(".").pop()?.split("?")[0] ?? "";
       const filenameBase = buildLabelFilename(selectedProduct);
       link.href = objectUrl;
-      link.download = suffix
-        ? `${filenameBase}.${suffix}`
-        : filenameBase;
+      link.download = suffix ? `${filenameBase}.${suffix}` : filenameBase;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -85,6 +81,27 @@ export default function ProductsTable({
     } finally {
       setDownloadingLabel(false);
     }
+  }
+
+  function handleDelete(record: ProductRecord) {
+    modal.confirm({
+      title: "确认删除",
+      content: `确定要删除产品"${record.product_name ?? "未命名"}"吗？`,
+      okText: "删除",
+      okType: "danger",
+      cancelText: "取消",
+      onOk: async () => {
+        try {
+          await deleteProductRecord(record.id, record.product_name ?? "");
+          message.success("删除成功");
+          actionRef?.current?.reload();
+        } catch (error) {
+          const description =
+            error instanceof Error ? error.message : "删除失败";
+          message.error(description);
+        }
+      },
+    });
   }
 
   return (
@@ -100,14 +117,20 @@ export default function ProductsTable({
         },
       }}
       tableAlertRender={false}
+      headerTitle={
+        <Typography.Text>
+          产品数：<Typography.Text strong>{totalCount}</Typography.Text>
+        </Typography.Text>
+      }
       columns={getProductColumns(
         onView,
         onEdit,
+        handleDelete,
         productNameOptions,
         skuOptions,
         storeNameOptions,
       )}
-      scroll={{ x: 1900 }}
+      scroll={{ x: 1900, y: "calc(100vh - 320px)" }}
       search={{
         labelWidth: "auto",
         defaultCollapsed: false,
@@ -118,10 +141,7 @@ export default function ProductsTable({
         reload: false,
         setting: true,
       }}
-      pagination={{
-        defaultPageSize: 20,
-        showSizeChanger: true,
-      }}
+      pagination={false}
       onRow={(record) => ({
         onClick: () => {
           setSelectedRowKeys([record.id]);
@@ -136,7 +156,7 @@ export default function ProductsTable({
         ];
 
         if (selectedProduct) {
-          actions.unshift(
+          actions.push(
             <Tooltip
               key="download-label"
               title={
@@ -159,7 +179,11 @@ export default function ProductsTable({
         return actions;
       }}
       dateFormatter="string"
-      request={requestProductRecords}
+      request={async (params, sorter) => {
+        const result = await requestProductRecords(params, sorter);
+        setTotalCount(result.total);
+        return result;
+      }}
     />
   );
 }
