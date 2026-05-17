@@ -1,9 +1,6 @@
 "use client";
 
-import {
-  LoadingOutlined,
-  PlusOutlined,
-} from "@ant-design/icons";
+import { LoadingOutlined, PlusOutlined } from "@ant-design/icons";
 import {
   App,
   Button,
@@ -18,10 +15,7 @@ import {
 import type { FormProps, UploadFile, UploadProps } from "antd";
 import { useEffect, useRef, useState } from "react";
 
-import type {
-  ProductCreateValues,
-  ProductRecord,
-} from "../_lib/products";
+import type { ProductCreateValues, ProductRecord } from "../_lib/products";
 import {
   createProductRecord,
   updateProductRecord,
@@ -133,8 +127,10 @@ export default function ProductFormDrawer({
     imageFileListOverride ?? buildInitialImageFileList(record);
   const labelFileList =
     labelFileListOverride ?? buildInitialLabelFileList(record);
-  const currentImageUrl = imageUrlOverride ?? record?.product_image_url ?? undefined;
-  const currentLabelUrl = labelUrlOverride ?? record?.product_label_url ?? undefined;
+  const currentImageUrl =
+    imageUrlOverride ?? record?.product_image_url ?? undefined;
+  const currentLabelUrl =
+    labelUrlOverride ?? record?.product_label_url ?? undefined;
 
   useEffect(() => {
     if (!open) return;
@@ -177,11 +173,11 @@ export default function ProductFormDrawer({
         product_image_url:
           imageUrlRef.current !== undefined
             ? imageUrlRef.current
-            : currentImageUrl ?? record?.product_image_url,
+            : (currentImageUrl ?? record?.product_image_url),
         product_label_url:
           labelUrlRef.current !== undefined
             ? labelUrlRef.current
-            : currentLabelUrl ?? record?.product_label_url,
+            : (currentLabelUrl ?? record?.product_label_url),
       };
 
       if (mode === "edit" && record) {
@@ -372,10 +368,7 @@ export default function ProductFormDrawer({
             />
           </Form.Item>
 
-          <Form.Item
-            label="产品图片"
-            className="col-span-2"
-          >
+          <Form.Item label="产品图片" className="col-span-2">
             <Upload {...uploadProps}>
               {imageFileList.length >= 1 ? null : (
                 <div>
@@ -398,25 +391,25 @@ export default function ProductFormDrawer({
             </Upload>
           </Form.Item>
 
-          <Form.Item
-            label="产品ID"
-            name="product_id"
-          >
+          <Form.Item label="产品ID" name="product_id">
             <Input placeholder="请输入产品ID" />
           </Form.Item>
 
-          <Form.Item
-            label="SKU"
-            name="sku"
-          >
+          <Form.Item label="SKU" name="sku">
             <Input placeholder="请输入SKU" />
           </Form.Item>
 
-          <Form.Item
-            label="ML Code"
-            name="ml_code"
-          >
+          <Form.Item label="ML Code" name="ml_code">
             <Input placeholder="请输入ML Code" />
+          </Form.Item>
+
+          <Form.Item label="装箱数量(pcs/箱)" name="pcs_per_carton">
+            <InputNumber
+              className="!w-full"
+              min={0}
+              precision={0}
+              placeholder="请输入装箱数量"
+            />
           </Form.Item>
 
           <Form.Item label="产品链接" name="product_url" className="col-span-2">
@@ -445,17 +438,8 @@ export default function ProductFormDrawer({
             />
           </Form.Item>
 
-          <Form.Item label="箱规" name="carton_spec">
+          <Form.Item label="箱规(cm)" name="carton_spec">
             <Input placeholder="请输入箱规" />
-          </Form.Item>
-
-          <Form.Item label="装箱数量" name="pcs_per_carton">
-            <InputNumber
-              className="!w-full"
-              min={0}
-              precision={0}
-              placeholder="请输入装箱数量"
-            />
           </Form.Item>
 
           <Form.Item

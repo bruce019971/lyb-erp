@@ -1,10 +1,7 @@
 import type { ProColumns } from "@ant-design/pro-components";
 import { Button, Typography } from "antd";
 
-import {
-  formatShipmentDate,
-  type ShipmentRecord,
-} from "../_lib/shipments";
+import { formatShipmentDate, type ShipmentRecord } from "../_lib/shipments";
 import type { ProductShipmentOption } from "../../products/_lib/products";
 import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
 import type { StoreOption } from "../../stores/_lib/stores";
@@ -173,7 +170,7 @@ export function getShipmentColumns(
       search: false,
     },
     {
-      title: "装箱数",
+      title: "装箱数(pcs/箱）",
       dataIndex: "pcs_per_box",
       valueType: "digit",
       width: 80,

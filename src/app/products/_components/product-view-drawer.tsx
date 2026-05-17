@@ -110,17 +110,60 @@ export default function ProductViewDrawer({
           column={2}
           size="middle"
           items={[
-            { key: "product_name", label: "产品名称", children: renderText(record?.product_name), span: 2 },
-            { key: "store_name", label: "所在店铺", children: renderText(record?.store_name), span: 2 },
-            { key: "product_url", label: "产品链接", children: renderLink(record?.product_url), span: 2 },
-            { key: "product_id", label: "产品ID", children: renderText(record?.product_id) },
+            {
+              key: "product_name",
+              label: "产品名称",
+              children: renderText(record?.product_name),
+              span: 2,
+            },
+            {
+              key: "store_name",
+              label: "所在店铺",
+              children: renderText(record?.store_name),
+              span: 2,
+            },
+            {
+              key: "product_url",
+              label: "产品链接",
+              children: renderLink(record?.product_url),
+              span: 2,
+            },
+            {
+              key: "product_id",
+              label: "产品ID",
+              children: renderText(record?.product_id),
+            },
             { key: "sku", label: "SKU", children: renderText(record?.sku) },
-            { key: "ml_code", label: "ML Code", children: renderText(record?.ml_code) },
-            { key: "product_unit_price", label: "产品单价", children: record?.product_unit_price ?? <EmptyText /> },
-            { key: "color_box_size", label: "彩盒尺寸", children: renderText(record?.color_box_size) },
-            { key: "single_gross_weight", label: "单个毛重", children: record?.single_gross_weight ?? <EmptyText /> },
-            { key: "carton_spec", label: "箱规", children: renderText(record?.carton_spec) },
-            { key: "pcs_per_carton", label: "装箱数量", children: record?.pcs_per_carton ?? <EmptyText /> },
+            {
+              key: "ml_code",
+              label: "ML Code",
+              children: renderText(record?.ml_code),
+            },
+            {
+              key: "product_unit_price",
+              label: "产品单价",
+              children: record?.product_unit_price ?? <EmptyText />,
+            },
+            {
+              key: "color_box_size",
+              label: "彩盒尺寸(cm)",
+              children: renderText(record?.color_box_size),
+            },
+            {
+              key: "single_gross_weight",
+              label: "单个毛重(kg)",
+              children: record?.single_gross_weight ?? <EmptyText />,
+            },
+            {
+              key: "carton_spec",
+              label: "箱规(cm)",
+              children: renderText(record?.carton_spec),
+            },
+            {
+              key: "pcs_per_carton",
+              label: "装箱数量(pcs/箱）",
+              children: record?.pcs_per_carton ?? <EmptyText />,
+            },
             {
               key: "product_parameters",
               label: "产品参数",

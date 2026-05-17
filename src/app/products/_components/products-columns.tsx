@@ -158,9 +158,10 @@ export function getProductColumns(
       search: false,
     },
     {
-      title: "彩盒尺寸(cm)",
-      dataIndex: "color_box_size",
-      width: 110,
+      title: "产品单价",
+      dataIndex: "product_unit_price",
+      valueType: "money",
+      width: 100,
       search: false,
     },
     {
@@ -171,14 +172,13 @@ export function getProductColumns(
       search: false,
     },
     {
-      title: "产品单价",
-      dataIndex: "product_unit_price",
-      valueType: "money",
-      width: 100,
+      title: "彩盒尺寸(cm)",
+      dataIndex: "color_box_size",
+      width: 110,
       search: false,
     },
     {
-      title: "箱规",
+      title: "箱规尺寸(cm)",
       dataIndex: "carton_spec",
       width: 120,
       search: false,
