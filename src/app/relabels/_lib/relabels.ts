@@ -5,6 +5,9 @@ export type RelabelRecord = {
   original_shipment_no: string | null;
   delivery_store: string | null;
   delivery_shipment_no: string | null;
+  box_count: number | null;
+  product_count: number | null;
+  relabel_fee: number | null;
   relabel_type: string | null;
   instruction_submitted: string | null;
   delivery_status: string | null;
@@ -17,6 +20,9 @@ export type RelabelCreateValues = {
   original_shipment_no: string;
   delivery_store?: string | null;
   delivery_shipment_no?: string | null;
+  box_count?: number | null;
+  product_count?: number | null;
+  relabel_fee?: number | null;
   relabel_type?: string | null;
   instruction_submitted?: string | null;
   delivery_status?: string | null;

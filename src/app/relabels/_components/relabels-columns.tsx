@@ -1,26 +1,14 @@
-import { EditOutlined } from "@ant-design/icons";
+import { DeleteOutlined, EditOutlined } from "@ant-design/icons";
 import type { ProColumns } from "@ant-design/pro-components";
-import { Button, Select, Tag, Tooltip, Typography } from "antd";
+import { Button, Input, Select, Tag, Tooltip, Typography } from "antd";
 
+import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
 import {
   canEditRelabelDeliveryStatus,
   formatRelabelDate,
-  isRelabelAlert,
   relabelTypeOptions,
   type RelabelRecord,
 } from "../_lib/relabels";
-
-function StatusTag({
-  value,
-  positiveColor = "green",
-}: {
-  value?: string | null;
-  positiveColor?: string;
-}) {
-  if (value === "是") return <Tag color={positiveColor}>是</Tag>;
-  if (value === "否") return <Tag>否</Tag>;
-  return <span />;
-}
 
 function RelabelTypeTag({ value }: { value?: string | null }) {
   if (!value) return <span />;
@@ -30,38 +18,65 @@ function RelabelTypeTag({ value }: { value?: string | null }) {
   return <Tag color="orange">{value}</Tag>;
 }
 
+function openShipmentPage(shipmentNo?: string | null) {
+  const trimmedShipmentNo = shipmentNo?.trim();
+  if (!trimmedShipmentNo) return;
+
+  const params = new URLSearchParams();
+  params.set("shipment_no", trimmedShipmentNo);
+  window.history.pushState(null, "", `/shipments?${params.toString()}`);
+}
+
+function openStorePage(storeName?: string | null) {
+  const trimmedStoreName = storeName?.trim();
+  if (!trimmedStoreName) return;
+
+  const params = new URLSearchParams();
+  params.set("seller_name", trimmedStoreName);
+  window.history.pushState(null, "", `/stores?${params.toString()}`);
+}
+
+function renderShipmentNoSearchInput(
+  _item: unknown,
+  _config: unknown,
+) {
+  return (
+    <Input.TextArea
+      autoSize={{ minRows: 1, maxRows: 3 }}
+      placeholder="可用回车、空格或逗号分隔"
+    />
+  );
+}
+
 export function getRelabelColumns(
   onEdit: (record: RelabelRecord) => void,
-  onChangeInstructionSubmitted: (record: RelabelRecord, value: string) => void,
+  onDelete: (record: RelabelRecord) => void,
+  onStartDeliveryStatusEdit: (record: RelabelRecord) => void,
+  onCancelDeliveryStatusEdit: () => void,
   onChangeDeliveryStatus: (record: RelabelRecord, value: string) => void,
+  isDeliveryStatusEditing: (record: RelabelRecord) => boolean,
   isStatusUpdating: (
     record: RelabelRecord,
-    field: "instruction_submitted" | "delivery_status",
+    field: "delivery_status",
   ) => boolean,
+  isDeleting: (record: RelabelRecord) => boolean,
+  logisticsOptions: LogisticsProviderOption[],
 ): ProColumns<RelabelRecord>[] {
+  const logisticsSelectOptions = logisticsOptions
+    .map((item) => item.provider_name?.trim())
+    .filter((item): item is string => Boolean(item))
+    .map((providerName) => ({
+      label: providerName,
+      value: providerName,
+    }));
+
   return [
-    {
-      title: "原货件号",
-      dataIndex: "original_shipment_no",
-      width: 180,
-      fixed: "left",
-      render: (_, record) => (
-        <Typography.Text
-          className="whitespace-nowrap"
-          copyable={
-            record.original_shipment_no
-              ? { text: record.original_shipment_no }
-              : false
-          }
-        >
-          {record.original_shipment_no ?? ""}
-        </Typography.Text>
-      ),
-    },
     {
       title: "送仓货件号",
       dataIndex: "delivery_shipment_no",
-      width: 180,
+      width: 130,
+      fixed: "left",
+      renderFormItem: renderShipmentNoSearchInput,
       render: (_, record) => (
         <Typography.Text
           className="whitespace-nowrap"
@@ -76,95 +91,187 @@ export function getRelabelColumns(
       ),
     },
     {
+      title: "原货件号",
+      dataIndex: "original_shipment_no",
+      width: 130,
+      renderFormItem: renderShipmentNoSearchInput,
+      render: (_, record) => {
+        const shipmentNo = record.original_shipment_no?.trim();
+        const copyable = shipmentNo ? { text: shipmentNo } : false;
+
+        return shipmentNo ? (
+          <Typography.Link
+            className="whitespace-nowrap"
+            copyable={copyable}
+            onClick={() => openShipmentPage(shipmentNo)}
+          >
+            {shipmentNo}
+          </Typography.Link>
+        ) : (
+          <Typography.Text className="whitespace-nowrap" copyable={copyable}>
+            {record.original_shipment_no ?? ""}
+          </Typography.Text>
+        );
+      },
+    },
+    {
+      title: "外箱数",
+      dataIndex: "box_count",
+      width: 86,
+      search: false,
+      render: (_, record) => record.box_count ?? "",
+    },
+    {
+      title: "产品数",
+      dataIndex: "product_count",
+      width: 86,
+      search: false,
+      render: (_, record) => record.product_count ?? "",
+    },
+    {
+      title: "换标费用",
+      dataIndex: "relabel_fee",
+      width: 92,
+      search: false,
+      render: () => "",
+    },
+    {
+      title: "送仓时间",
+      dataIndex: "delivery_time",
+      width: 100,
+      search: false,
+      render: (_, record) => formatRelabelDate(record.delivery_time),
+    },
+    {
+      title: "是否送仓",
+      dataIndex: "delivery_status",
+      width: 96,
+      search: false,
+      onCell: (record) => ({
+        className:
+          record.delivery_status === "是"
+            ? "relabel-delivery-done-cell"
+            : canEditRelabelDeliveryStatus(record)
+              ? "relabel-delivery-overdue-cell"
+              : undefined,
+        onDoubleClick: () => {
+          if (
+            record.delivery_status !== "是" &&
+            !isStatusUpdating(record, "delivery_status")
+          ) {
+            onStartDeliveryStatusEdit(record);
+          }
+        },
+      }),
+      render: (_, record) => {
+        if (isDeliveryStatusEditing(record)) {
+          return (
+            <Select
+              autoFocus
+              size="small"
+              value={record.delivery_status ?? "否"}
+              className="w-[88px]"
+              loading={isStatusUpdating(record, "delivery_status")}
+              disabled={isStatusUpdating(record, "delivery_status")}
+              options={[
+                { label: "否", value: "否" },
+                { label: "是", value: "是" },
+              ]}
+              onChange={(value) => onChangeDeliveryStatus(record, value)}
+              onBlur={onCancelDeliveryStatusEdit}
+            />
+          );
+        }
+
+        return (
+          <span
+            className={
+              record.delivery_status === "是"
+                ? "inline-flex"
+                : "inline-flex cursor-pointer"
+            }
+          >
+            <Typography.Text>{record.delivery_status ?? "否"}</Typography.Text>
+          </span>
+        );
+      },
+      valueEnum: {
+        是: { text: "是" },
+        否: { text: "否" },
+      },
+    },
+    {
+      title: "物流商",
+      dataIndex: "logistics_provider",
+      hideInTable: true,
+      valueType: "select",
+      fieldProps: {
+        mode: "multiple",
+        showSearch: true,
+        optionFilterProp: "label",
+        placeholder: "请选择物流商",
+        options: logisticsSelectOptions,
+      },
+    },
+    {
+      title: "送仓店铺",
+      dataIndex: "delivery_store",
+      width: 110,
+      ellipsis: true,
+      search: false,
+      render: (_, record) => {
+        const storeName = record.delivery_store?.trim();
+
+        return storeName ? (
+          <Typography.Link
+            className="whitespace-nowrap"
+            onClick={() => openStorePage(storeName)}
+          >
+            {storeName}
+          </Typography.Link>
+        ) : (
+          <Typography.Text className="whitespace-nowrap">
+            {record.delivery_store ?? ""}
+          </Typography.Text>
+        );
+      },
+    },
+    {
       title: "换标类型",
       dataIndex: "relabel_type",
-      width: 180,
+      width: 110,
+      search: false,
       render: (_, record) => <RelabelTypeTag value={record.relabel_type} />,
       valueEnum: Object.fromEntries(
         relabelTypeOptions.map((item) => [item, { text: item }]),
       ),
     },
     {
-      title: "是否提交指令",
-      dataIndex: "instruction_submitted",
-      width: 140,
-      render: (_, record) =>
-        record.instruction_submitted === "是" ? (
-          <StatusTag value={record.instruction_submitted} />
-        ) : (
-          <div className="flex flex-col gap-1">
-            <Select
-              size="small"
-              value="否"
-              className="w-[88px]"
-              loading={isStatusUpdating(record, "instruction_submitted")}
-              disabled={isStatusUpdating(record, "instruction_submitted")}
-              options={[
-                { label: "否", value: "否" },
-                { label: "是", value: "是" },
-              ]}
-              onChange={(value) => onChangeInstructionSubmitted(record, value)}
-            />
-            {isRelabelAlert(record) ? (
-              <Typography.Text type="danger" className="text-xs">
-                指令尚未提交
-              </Typography.Text>
-            ) : null}
-          </div>
-        ),
-      valueEnum: {
-        是: { text: "是" },
-        否: { text: "否" },
-      },
-    },
-    {
-      title: "送仓状态",
-      dataIndex: "delivery_status",
-      width: 140,
-      render: (_, record) =>
-        record.delivery_status === "是" || !canEditRelabelDeliveryStatus(record) ? (
-          <StatusTag value={record.delivery_status} positiveColor="cyan" />
-        ) : (
-          <Select
-            size="small"
-            value="否"
-            className="w-[88px]"
-            loading={isStatusUpdating(record, "delivery_status")}
-            disabled={isStatusUpdating(record, "delivery_status")}
-            options={[
-              { label: "否", value: "否" },
-              { label: "是", value: "是" },
-            ]}
-            onChange={(value) => onChangeDeliveryStatus(record, value)}
-          />
-        ),
-      valueEnum: {
-        是: { text: "是" },
-        否: { text: "否" },
-      },
-    },
-    {
-      title: "送仓时间",
-      dataIndex: "delivery_time",
-      width: 140,
-      render: (_, record) => formatRelabelDate(record.delivery_time),
-    },
-    {
       title: "操作",
       valueType: "option",
-      width: 64,
+      width: 84,
       fixed: "right",
       search: false,
-      render: (_, record) => (
-        <Tooltip title="编辑">
+      render: (_, record) => [
+        <Tooltip key="edit" title="编辑">
           <Button
             type="text"
             size="small"
             icon={<EditOutlined />}
             onClick={() => onEdit(record)}
           />
-        </Tooltip>
-      ),
+        </Tooltip>,
+        <Tooltip key="delete" title="删除">
+          <Button
+            type="text"
+            size="small"
+            danger
+            icon={<DeleteOutlined />}
+            loading={isDeleting(record)}
+            onClick={() => onDelete(record)}
+          />
+        </Tooltip>,
+      ],
     },
   ];
 }

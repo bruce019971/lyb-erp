@@ -5,6 +5,7 @@ import { App, ConfigProvider } from "antd";
 import zhCN from "antd/locale/zh_CN";
 import dayjs from "dayjs";
 import "dayjs/locale/zh-cn";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import ShipmentsTableSkeleton from "../../shipments/_components/shipments-table-skeleton";
@@ -16,6 +17,8 @@ import type { StoreRecord } from "../_lib/stores";
 dayjs.locale("zh-cn");
 
 export default function StoresPage() {
+  const searchParams = useSearchParams();
+  const sellerName = searchParams.get("seller_name")?.trim();
   const [mounted, setMounted] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -45,6 +48,7 @@ export default function StoresPage() {
             {mounted ? (
               <StoresTable
                 actionRef={tableActionRef}
+                sellerName={sellerName}
                 onCreate={() => setCreateOpen(true)}
                 onEdit={(record) => {
                   setEditingRecord(record);

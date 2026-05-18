@@ -64,6 +64,45 @@ body {
   background: #ffe4e1 !important;
 }
 
+.relabel-delivered-row > td {
+  background: #f8fafc !important;
+  color: #94a3b8 !important;
+}
+
+.relabel-delivered-row:hover > td {
+  background: #f1f5f9 !important;
+  color: #94a3b8 !important;
+}
+
+.relabel-delivered-row .ant-typography,
+.relabel-delivered-row .ant-typography-copy,
+.relabel-delivered-row .ant-btn,
+.relabel-delivered-row .ant-btn-link,
+.relabel-delivered-row .ant-select-selection-item,
+.relabel-delivered-row a {
+  color: #94a3b8 !important;
+}
+
+td.relabel-delivery-overdue-cell,
+.relabel-delivered-row > td.relabel-delivery-overdue-cell {
+  background: #fff1f0 !important;
+}
+
+td.relabel-delivery-overdue-cell:hover,
+.relabel-delivered-row:hover > td.relabel-delivery-overdue-cell {
+  background: #ffe4e1 !important;
+}
+
+td.relabel-delivery-done-cell,
+.relabel-delivered-row > td.relabel-delivery-done-cell {
+  background: #f6ffed !important;
+}
+
+td.relabel-delivery-done-cell:hover,
+.relabel-delivered-row:hover > td.relabel-delivery-done-cell {
+  background: #eaffd0 !important;
+}
+
 .shipment-delivered-row > td {
   background: #f8fafc !important;
   color: #94a3b8 !important;

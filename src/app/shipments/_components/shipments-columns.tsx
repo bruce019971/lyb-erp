@@ -13,13 +13,6 @@ import type { ProductShipmentOption } from "../../products/_lib/products";
 import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
 import type { StoreOption } from "../../stores/_lib/stores";
 
-function getExternalHref(value?: string | null) {
-  const trimmed = value?.trim();
-  if (!trimmed) return undefined;
-  if (/^https?:\/\//i.test(trimmed)) return trimmed;
-  return `https://${trimmed}`;
-}
-
 function openProductPage(
   productName?: string | null,
   storeName?: string | null,
@@ -47,14 +40,46 @@ function openProductPage(
   window.history.pushState(null, "", href);
 }
 
+function openRelabelPage(shipmentNo?: string | null) {
+  const trimmedShipmentNo = shipmentNo?.trim();
+  if (!trimmedShipmentNo) return;
+
+  const params = new URLSearchParams();
+  params.set("original_shipment_no", trimmedShipmentNo);
+  window.history.pushState(null, "", `/relabels?${params.toString()}`);
+}
+
+function openStorePage(storeName?: string | null) {
+  const trimmedStoreName = storeName?.trim();
+  if (!trimmedStoreName) return;
+
+  const params = new URLSearchParams();
+  params.set("seller_name", trimmedStoreName);
+  window.history.pushState(null, "", `/stores?${params.toString()}`);
+}
+
+function openLogisticsPage(providerName?: string | null) {
+  const trimmedProviderName = providerName?.trim();
+  if (!trimmedProviderName) return;
+
+  const params = new URLSearchParams();
+  params.set("provider_name", trimmedProviderName);
+  window.history.pushState(null, "", `/logistics?${params.toString()}`);
+}
+
 export function getShipmentColumns(
   onEdit: (record: ShipmentRecord) => void,
   onDelete: (record: ShipmentRecord) => void,
   onStartDeliveryStatusEdit: (record: ShipmentRecord) => void,
   onCancelDeliveryStatusEdit: () => void,
   onChangeDeliveryStatus: (record: ShipmentRecord, value: string) => void,
+  onStartRelabelEdit: (record: ShipmentRecord) => void,
+  onCancelRelabelEdit: () => void,
+  onChangeRelabel: (record: ShipmentRecord, value: string) => void,
   isDeliveryStatusEditing: (record: ShipmentRecord) => boolean,
   isDeliveryStatusUpdating: (record: ShipmentRecord) => boolean,
+  isRelabelEditing: (record: ShipmentRecord) => boolean,
+  isRelabelUpdating: (record: ShipmentRecord) => boolean,
   isDeleting: (record: ShipmentRecord) => boolean,
   shipmentOptions: ShipmentOption[],
   storeOptions: StoreOption[],
@@ -109,20 +134,10 @@ export function getShipmentColumns(
     label: item,
     value: item,
   }));
-  const storeAddressMap = new Map(
-    storeOptions
-      .filter((item) => item.seller_name?.trim())
-      .map((item) => [item.seller_name.trim(), item.seller_address]),
-  );
   const productStoreMap = new Map(
     productOptions
       .filter((item) => item.product_name?.trim())
       .map((item) => [item.product_name!.trim(), item.store_name]),
-  );
-  const logisticsUrlMap = new Map(
-    logisticsOptions
-      .filter((item) => item.provider_name?.trim())
-      .map((item) => [item.provider_name!.trim(), item.system_url]),
   );
 
   return [
@@ -145,14 +160,28 @@ export function getShipmentColumns(
       width: 84,
       fixed: "left",
       search: false,
-      render: (_, record) => (
-        <Typography.Text
-          className="whitespace-nowrap"
-          copyable={record.shipment_no ? { text: record.shipment_no } : false}
-        >
-          {record.shipment_no ?? "-"}
-        </Typography.Text>
-      ),
+      render: (_, record) => {
+        const shipmentNo = record.shipment_no?.trim();
+        const copyable = shipmentNo ? { text: shipmentNo } : false;
+
+        if (shipmentNo && record.is_relabel === "是") {
+          return (
+            <Typography.Link
+              className="whitespace-nowrap"
+              copyable={copyable}
+              onClick={() => openRelabelPage(shipmentNo)}
+            >
+              {shipmentNo}
+            </Typography.Link>
+          );
+        }
+
+        return (
+          <Typography.Text className="whitespace-nowrap" copyable={copyable}>
+            {shipmentNo || "-"}
+          </Typography.Text>
+        );
+      },
     },
     {
       title: "产品名称",
@@ -204,18 +233,11 @@ export function getShipmentColumns(
         const storeName =
           record.order_store?.trim() ||
           (productName ? productStoreMap.get(productName)?.trim() : undefined);
-        const href = getExternalHref(
-          storeName ? storeAddressMap.get(storeName) : undefined,
-        );
 
         return storeName ? (
-          href ? (
-            <Typography.Link href={href} target="_blank">
-              {storeName}
-            </Typography.Link>
-          ) : (
-            storeName
-          )
+          <Typography.Link onClick={() => openStorePage(storeName)}>
+            {storeName}
+          </Typography.Link>
         ) : (
           "-"
         );
@@ -236,18 +258,11 @@ export function getShipmentColumns(
       },
       render: (_, record) => {
         const providerName = record.logistics_provider?.trim();
-        const href = getExternalHref(
-          providerName ? logisticsUrlMap.get(providerName) : undefined,
-        );
 
         return providerName ? (
-          href ? (
-            <Typography.Link href={href} target="_blank">
-              {providerName}
-            </Typography.Link>
-          ) : (
-            providerName
-          )
+          <Typography.Link onClick={() => openLogisticsPage(providerName)}>
+            {providerName}
+          </Typography.Link>
         ) : (
           "-"
         );
@@ -297,12 +312,79 @@ export function getShipmentColumns(
         formatShipmentDate(record.overseas_warehouse_arrived_at),
     },
     {
-      title: "约仓时间",
+      title: "送仓时间",
       dataIndex: "appointment_time",
       valueType: "dateRange",
-      width: 88,
+      width: 120,
       hideInSearch: true,
-      render: (_, record) => formatShipmentDate(record.appointment_time),
+      render: (_, record) => {
+        if (record.is_relabel === "是") {
+          const deliveryTimes = record.relabel_delivery_times ?? [];
+
+          return deliveryTimes.length > 0 ? (
+            <div className="flex flex-col gap-1">
+              {deliveryTimes.map((value) => (
+                <Typography.Text key={value} className="whitespace-nowrap">
+                  {formatShipmentDate(value)}
+                </Typography.Text>
+              ))}
+            </div>
+          ) : (
+            ""
+          );
+        }
+
+        return formatShipmentDate(record.appointment_time);
+      },
+    },
+    {
+      title: "是否换标",
+      dataIndex: "is_relabel",
+      width: 96,
+      onCell: (record) => ({
+        onDoubleClick: () => {
+          if (!isRelabelUpdating(record)) {
+            onStartRelabelEdit(record);
+          }
+        },
+      }),
+      render: (_, record) => {
+        if (isRelabelEditing(record)) {
+          return (
+            <Select
+              autoFocus
+              size="small"
+              value={record.is_relabel ?? ""}
+              className="w-[88px]"
+              loading={isRelabelUpdating(record)}
+              disabled={isRelabelUpdating(record)}
+              options={[
+                { label: "空", value: "" },
+                { label: "否", value: "否" },
+                { label: "是", value: "是" },
+              ]}
+              onChange={(value) => onChangeRelabel(record, value)}
+              onBlur={onCancelRelabelEdit}
+            />
+          );
+        }
+
+        return (
+          <span
+            className={
+              record.is_relabel === "是"
+                ? "inline-flex"
+                : "inline-flex cursor-pointer"
+            }
+          >
+            <Typography.Text>{record.is_relabel ?? ""}</Typography.Text>
+          </span>
+        );
+      },
+      valueEnum: {
+        是: { text: "是" },
+        否: { text: "否" },
+      },
     },
     {
       title: "是否送仓",
@@ -316,7 +398,7 @@ export function getShipmentColumns(
               ? "shipment-delivery-overdue-cell"
               : undefined,
         onDoubleClick: () => {
-          if (canEditShipmentDeliveryStatus(record)) {
+          if (!isDeliveryStatusUpdating(record)) {
             onStartDeliveryStatusEdit(record);
           }
         },
@@ -344,9 +426,9 @@ export function getShipmentColumns(
         return (
           <span
             className={
-              canEditShipmentDeliveryStatus(record)
-                ? "inline-flex cursor-pointer"
-                : "inline-flex"
+              isDeliveryStatusUpdating(record)
+                ? "inline-flex"
+                : "inline-flex cursor-pointer"
             }
           >
             <DeliveryStatusTag

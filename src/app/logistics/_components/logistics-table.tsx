@@ -12,12 +12,14 @@ import { getLogisticsProviderColumns } from "./logistics-columns";
 
 type LogisticsTableProps = {
   actionRef?: MutableRefObject<ActionType | undefined>;
+  providerName?: string;
   onCreate: () => void;
   onEdit: (record: LogisticsProviderRecord) => void;
 };
 
 export default function LogisticsTable({
   actionRef,
+  providerName,
   onCreate,
   onEdit,
 }: LogisticsTableProps) {
@@ -39,6 +41,7 @@ export default function LogisticsTable({
         showSizeChanger: true,
       }}
       dateFormatter="string"
+      params={{ provider_name: providerName }}
       request={requestLogisticsProviderRecords}
     />
   );

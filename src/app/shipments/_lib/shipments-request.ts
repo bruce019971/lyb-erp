@@ -88,6 +88,14 @@ export async function requestShipmentRecords(
     query = query.eq("delivery_status", deliveryStatus);
   }
 
+  const isRelabel =
+    typeof params.is_relabel === "string" ? params.is_relabel.trim() : "";
+  if (isRelabel === "是") {
+    query = query.eq("is_relabel", isRelabel);
+  } else if (isRelabel === "否") {
+    query = query.or("is_relabel.is.null,is_relabel.eq.否");
+  }
+
   function splitFilterText(value?: string) {
     return (value ?? "")
       .trim()
@@ -191,10 +199,53 @@ export async function requestShipmentRecords(
     };
   }
 
+  const shipmentRecords = (data ?? []) as ShipmentRecord[];
+  const relabelShipmentNos = Array.from(
+    new Set(
+      shipmentRecords
+        .filter((item) => item.is_relabel === "是")
+        .map((item) => item.shipment_no?.trim())
+        .filter((item): item is string => Boolean(item)),
+    ),
+  );
+  const relabelDeliveryTimeMap = new Map<string, string[]>();
+
+  if (relabelShipmentNos.length > 0) {
+    const { data: relabelRecords, error: relabelError } = await supabase
+      .from("relabel_records")
+      .select("original_shipment_no, delivery_time")
+      .in("original_shipment_no", relabelShipmentNos)
+      .not("delivery_time", "is", null)
+      .order("delivery_time", { ascending: true, nullsFirst: false });
+
+    if (relabelError) {
+      message.error(relabelError.message);
+    } else {
+      (relabelRecords ?? []).forEach((item) => {
+        const shipmentNo =
+          typeof item.original_shipment_no === "string"
+            ? item.original_shipment_no.trim()
+            : "";
+        const deliveryTime =
+          typeof item.delivery_time === "string" ? item.delivery_time : "";
+        if (!shipmentNo || !deliveryTime) return;
+
+        const current = relabelDeliveryTimeMap.get(shipmentNo) ?? [];
+        if (!current.includes(deliveryTime)) {
+          relabelDeliveryTimeMap.set(shipmentNo, [...current, deliveryTime]);
+        }
+      });
+    }
+  }
+
   return {
-    data: ((data ?? []) as ShipmentRecord[]).map((item) => ({
+    data: shipmentRecords.map((item) => ({
       ...item,
       delivery_status: item.delivery_status ?? "否",
+      relabel_delivery_times:
+        item.is_relabel === "是" && item.shipment_no?.trim()
+          ? (relabelDeliveryTimeMap.get(item.shipment_no.trim()) ?? [])
+          : [],
       is_delivery_completed: item.delivery_status === "是",
     })),
     success: true,
@@ -217,8 +268,14 @@ function deriveWarehouseArrivedStatus(
   return warehouseArrivedAt ? "是" : "否";
 }
 
+function compactPayload<T extends Record<string, unknown>>(payload: T) {
+  return Object.fromEntries(
+    Object.entries(payload).filter(([, value]) => value !== undefined),
+  ) as Partial<T>;
+}
+
 function buildShipmentPayload(values: ShipmentUpdateValues) {
-  return {
+  return compactPayload({
     order_store: normalizeTextValue(values.order_store),
     logistics_provider: normalizeTextValue(values.logistics_provider),
     shipment_no: normalizeTextValue(values.shipment_no),
@@ -232,9 +289,13 @@ function buildShipmentPayload(values: ShipmentUpdateValues) {
     warehouse_arrived_status: deriveWarehouseArrivedStatus(
       values.overseas_warehouse_arrived_at,
     ),
-    appointment_time: normalizeTextValue(values.appointment_time),
+    appointment_time:
+      values.appointment_time === undefined
+        ? undefined
+        : normalizeTextValue(values.appointment_time),
+    is_relabel: normalizeTextValue(values.is_relabel),
     goods_value: normalizeNumberValue(values.goods_value),
-  };
+  });
 }
 
 export async function createShipmentRecord(values: ShipmentCreateValues) {
@@ -283,15 +344,51 @@ export async function updateShipmentRecord(
   return data as ShipmentRecord;
 }
 
-export async function markShipmentDeliveryStatusAsYes(record: ShipmentRecord) {
-  if (!canEditShipmentDeliveryStatus(record)) {
-    throw new Error("只有过了约仓时间后才能标记为已送仓");
+export async function updateShipmentDeliveryStatus(
+  record: ShipmentRecord,
+  value: string,
+) {
+  if (value === "是" && !canEditShipmentDeliveryStatus(record)) {
+    throw new Error("只有过了送仓时间后才能标记为已送仓");
+  }
+
+  const normalizedValue = normalizeTextValue(value) ?? "否";
+
+  if ((record.delivery_status ?? "否") === normalizedValue) {
+    return record;
   }
 
   const { data, error } = await supabase
     .from("shipment_records")
     .update({
-      delivery_status: "是",
+      delivery_status: normalizedValue,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", record.id)
+    .select("*")
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data as ShipmentRecord;
+}
+
+export async function updateShipmentRelabelStatus(
+  record: ShipmentRecord,
+  value?: string | null,
+) {
+  const normalizedValue = normalizeTextValue(value);
+
+  if ((record.is_relabel ?? null) === normalizedValue) {
+    return record;
+  }
+
+  const { data, error } = await supabase
+    .from("shipment_records")
+    .update({
+      is_relabel: normalizedValue,
       updated_at: new Date().toISOString(),
     })
     .eq("id", record.id)
@@ -340,14 +437,25 @@ export async function deleteShipmentRecords(ids: string[]) {
 export async function requestShipmentOptions() {
   const { data, error } = await supabase
     .from("shipment_records")
-    .select("id, shipment_no, order_store")
+    .select("id, shipment_no, order_store, box_count")
     .order("created_at", { ascending: false, nullsFirst: false });
 
-  if (error) {
-    throw error;
+  if (!error) {
+    return ((data ?? []) as ShipmentOption[]).filter((item) =>
+      item.shipment_no?.trim(),
+    );
   }
 
-  return ((data ?? []) as ShipmentOption[]).filter((item) =>
+  const { data: fallbackData, error: fallbackError } = await supabase
+    .from("shipment_records")
+    .select("id, shipment_no")
+    .order("created_at", { ascending: false, nullsFirst: false });
+
+  if (fallbackError) {
+    throw fallbackError;
+  }
+
+  return ((fallbackData ?? []) as ShipmentOption[]).filter((item) =>
     item.shipment_no?.trim(),
   );
 }

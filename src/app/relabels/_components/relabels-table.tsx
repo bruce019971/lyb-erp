@@ -6,29 +6,42 @@ import { ProTable } from "@ant-design/pro-components";
 import { Button, Tooltip } from "antd";
 import type { MutableRefObject } from "react";
 
+import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
 import { requestRelabelRecords } from "../_lib/relabels-request";
-import { isRelabelAlert, type RelabelRecord } from "../_lib/relabels";
+import type { RelabelRecord } from "../_lib/relabels";
 import { getRelabelColumns } from "./relabels-columns";
 
 type RelabelsTableProps = {
   actionRef?: MutableRefObject<ActionType | undefined>;
+  originalShipmentNo?: string;
   onCreate: () => void;
   onEdit: (record: RelabelRecord) => void;
-  onChangeInstructionSubmitted: (record: RelabelRecord, value: string) => void;
+  onDelete: (record: RelabelRecord) => void;
+  onStartDeliveryStatusEdit: (record: RelabelRecord) => void;
+  onCancelDeliveryStatusEdit: () => void;
   onChangeDeliveryStatus: (record: RelabelRecord, value: string) => void;
+  isDeliveryStatusEditing: (record: RelabelRecord) => boolean;
   isStatusUpdating: (
     record: RelabelRecord,
-    field: "instruction_submitted" | "delivery_status",
+    field: "delivery_status",
   ) => boolean;
+  isDeleting: (record: RelabelRecord) => boolean;
+  logisticsOptions: LogisticsProviderOption[];
 };
 
 export default function RelabelsTable({
   actionRef,
+  originalShipmentNo,
   onCreate,
   onEdit,
-  onChangeInstructionSubmitted,
+  onDelete,
+  onStartDeliveryStatusEdit,
+  onCancelDeliveryStatusEdit,
   onChangeDeliveryStatus,
+  isDeliveryStatusEditing,
   isStatusUpdating,
+  isDeleting,
+  logisticsOptions,
 }: RelabelsTableProps) {
   return (
     <ProTable<RelabelRecord>
@@ -36,14 +49,22 @@ export default function RelabelsTable({
       rowKey="id"
       columns={getRelabelColumns(
         onEdit,
-        onChangeInstructionSubmitted,
+        onDelete,
+        onStartDeliveryStatusEdit,
+        onCancelDeliveryStatusEdit,
         onChangeDeliveryStatus,
+        isDeliveryStatusEditing,
         isStatusUpdating,
+        isDeleting,
+        logisticsOptions,
       )}
       rowClassName={(record) =>
-        isRelabelAlert(record) ? "relabel-alert-row" : ""
+        record.delivery_status === "是" ? "relabel-delivered-row" : ""
       }
-      search={false}
+      search={{
+        labelWidth: "auto",
+        defaultCollapsed: false,
+      }}
       options={{
         density: false,
         fullScreen: false,
@@ -62,12 +83,17 @@ export default function RelabelsTable({
           />
         </Tooltip>,
       ]}
-      scroll={{ x: 980 }}
+      scroll={{ x: 950 }}
       pagination={{
         defaultPageSize: 20,
         showSizeChanger: true,
       }}
       dateFormatter="string"
+      form={{
+        initialValues: {
+          original_shipment_no: originalShipmentNo,
+        },
+      }}
       request={requestRelabelRecords}
     />
   );

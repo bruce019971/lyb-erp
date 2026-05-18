@@ -5,6 +5,7 @@ import { App, ConfigProvider } from "antd";
 import zhCN from "antd/locale/zh_CN";
 import dayjs from "dayjs";
 import "dayjs/locale/zh-cn";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import ShipmentsTableSkeleton from "../../shipments/_components/shipments-table-skeleton";
@@ -16,6 +17,8 @@ import type { LogisticsProviderRecord } from "../_lib/logistics";
 dayjs.locale("zh-cn");
 
 export default function LogisticsPage() {
+  const searchParams = useSearchParams();
+  const providerName = searchParams.get("provider_name")?.trim();
   const [mounted, setMounted] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -45,6 +48,7 @@ export default function LogisticsPage() {
             {mounted ? (
               <LogisticsTable
                 actionRef={tableActionRef}
+                providerName={providerName}
                 onCreate={() => setCreateOpen(true)}
                 onEdit={(record) => {
                   setEditingRecord(record);

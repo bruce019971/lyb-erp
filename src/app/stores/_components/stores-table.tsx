@@ -12,12 +12,14 @@ import { getStoreColumns } from "./stores-columns";
 
 type StoresTableProps = {
   actionRef?: MutableRefObject<ActionType | undefined>;
+  sellerName?: string;
   onCreate: () => void;
   onEdit: (record: StoreRecord) => void;
 };
 
 export default function StoresTable({
   actionRef,
+  sellerName,
   onCreate,
   onEdit,
 }: StoresTableProps) {
@@ -26,7 +28,7 @@ export default function StoresTable({
       actionRef={actionRef}
       rowKey="id"
       columns={getStoreColumns(onEdit)}
-      scroll={{ x: 900 }}
+      scroll={{ x: 1140 }}
       search={false}
       options={{
         density: false,
@@ -44,6 +46,7 @@ export default function StoresTable({
         showSizeChanger: true,
       }}
       dateFormatter="string"
+      params={{ seller_name: sellerName }}
       request={requestStoreRecords}
     />
   );

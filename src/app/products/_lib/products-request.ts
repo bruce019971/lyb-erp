@@ -134,30 +134,55 @@ function toUniqueOptions(values: Array<string | null | undefined>) {
     }));
 }
 
+async function requestProductFieldOptions(field: keyof ProductRecord) {
+  const { data, error } = await supabase
+    .from("products")
+    .select(field)
+    .order(field, { ascending: true });
+
+  if (error) {
+    return [];
+  }
+
+  return toUniqueOptions(
+    ((data ?? []) as ProductRecord[]).map((row) => row[field] as string | null),
+  );
+}
+
 export async function requestProductFilterOptions() {
   const { data, error } = await supabase
     .from("products")
     .select("product_name, product_id, sku, store_name")
     .order("product_name", { ascending: true });
 
-  if (error) {
-    throw error;
+  if (!error) {
+    const rows = (data ?? []) as Array<{
+      product_name: string | null;
+      product_id: string | null;
+      sku: string | null;
+      store_name: string | null;
+    }>;
+
+    const options: ProductFilterOptions = {
+      productNameOptions: toUniqueOptions(rows.map((row) => row.product_name)),
+      skuOptions: toUniqueOptions(rows.map((row) => row.sku)),
+      storeNameOptions: toUniqueOptions(rows.map((row) => row.store_name)),
+    };
+
+    return options;
   }
 
-  const rows = (data ?? []) as Array<{
-    product_name: string | null;
-    product_id: string | null;
-    sku: string | null;
-    store_name: string | null;
-  }>;
+  const [productNameOptions, skuOptions, storeNameOptions] = await Promise.all([
+    requestProductFieldOptions("product_name"),
+    requestProductFieldOptions("sku"),
+    requestProductFieldOptions("store_name"),
+  ]);
 
-  const options: ProductFilterOptions = {
-    productNameOptions: toUniqueOptions(rows.map((row) => row.product_name)),
-    skuOptions: toUniqueOptions(rows.map((row) => row.sku)),
-    storeNameOptions: toUniqueOptions(rows.map((row) => row.store_name)),
+  return {
+    productNameOptions,
+    skuOptions,
+    storeNameOptions,
   };
-
-  return options;
 }
 
 export async function requestProductShipmentOptions() {

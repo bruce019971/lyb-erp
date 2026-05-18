@@ -14,6 +14,8 @@ export type ShipmentRecord = {
   overseas_warehouse_arrived_at: string | null;
   appointment_time: string | null;
   delivery_status: string | null;
+  is_relabel: string | null;
+  relabel_delivery_times?: string[];
   goods_value: number | null;
   is_delivery_completed?: boolean;
   created_at: string | null;
@@ -33,6 +35,7 @@ export type ShipmentUpdateValues = {
   overseas_warehouse_arrived_at?: string | null;
   appointment_time?: string | null;
   delivery_status?: string | null;
+  is_relabel?: string | null;
   goods_value?: number | null;
 };
 
@@ -42,6 +45,7 @@ export type ShipmentOption = {
   id: string;
   shipment_no: string | null;
   order_store: string | null;
+  box_count: number | null;
 };
 
 export const shipmentKeywordFields = [
@@ -64,21 +68,41 @@ export function formatShipmentDate(value?: string | null) {
 }
 
 export function canEditShipmentDeliveryStatus(record: ShipmentRecord) {
-  if (record.delivery_status === "是") return false;
-  if (!record.appointment_time) return false;
+  if (record.delivery_status === "是") return true;
+
+  const deliveryTimes =
+    record.is_relabel === "是" && record.relabel_delivery_times?.length
+      ? record.relabel_delivery_times
+      : record.appointment_time
+        ? [record.appointment_time]
+        : [];
+
+  if (!deliveryTimes.length) return false;
 
   const today = dayjs().startOf("day");
-  const appointmentDate = dayjs(record.appointment_time).startOf("day");
 
-  return appointmentDate.diff(today, "day") <= 0;
+  return deliveryTimes.some((value) => {
+    const deliveryDate = dayjs(value).startOf("day");
+    return deliveryDate.diff(today, "day") <= 0;
+  });
 }
 
 export function isShipmentDeliveryOverdue(record: ShipmentRecord) {
   if (record.delivery_status === "是") return false;
-  if (!record.appointment_time) return false;
+
+  const deliveryTimes =
+    record.is_relabel === "是" && record.relabel_delivery_times?.length
+      ? record.relabel_delivery_times
+      : record.appointment_time
+        ? [record.appointment_time]
+        : [];
+
+  if (!deliveryTimes.length) return false;
 
   const today = dayjs().startOf("day");
-  const appointmentDate = dayjs(record.appointment_time).startOf("day");
 
-  return appointmentDate.diff(today, "day") <= 0;
+  return deliveryTimes.some((value) => {
+    const deliveryDate = dayjs(value).startOf("day");
+    return deliveryDate.diff(today, "day") <= 0;
+  });
 }

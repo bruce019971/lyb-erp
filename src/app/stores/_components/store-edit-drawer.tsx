@@ -1,6 +1,6 @@
 "use client";
 
-import { App, Button, Drawer, Form, Input, Select, Space } from "antd";
+import { App, Button, Drawer, Form, Input, InputNumber, Select, Space } from "antd";
 import type { FormProps } from "antd";
 import { useEffect, useState } from "react";
 
@@ -14,6 +14,15 @@ type StoreEditDrawerProps = {
   onClose: () => void;
   onUpdated: () => void;
 };
+
+function toNumberInputValue(value?: number | string | null) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
 
 export default function StoreEditDrawer({
   open,
@@ -29,13 +38,21 @@ export default function StoreEditDrawer({
   useEffect(() => {
     if (!open || !record) return;
 
-    form.setFieldsValue({
-      seller_id: record.seller_id ?? "",
-      seller_name: record.seller_name ?? "",
-      seller_code:
-        record.seller_code ?? generateStoreCode(record.seller_name ?? ""),
-      seller_type: record.seller_type ?? "CBT",
-    });
+    form.setFieldValue("seller_id", record.seller_id ?? "");
+    form.setFieldValue("seller_name", record.seller_name ?? "");
+    form.setFieldValue(
+      "seller_code",
+      record.seller_code ?? generateStoreCode(record.seller_name ?? ""),
+    );
+    form.setFieldValue("seller_type", record.seller_type ?? "CBT");
+    form.setFieldValue(
+      "product_label_unit_price",
+      toNumberInputValue(record.product_label_unit_price),
+    );
+    form.setFieldValue(
+      "carton_label_unit_price",
+      toNumberInputValue(record.carton_label_unit_price),
+    );
   }, [form, open, record]);
 
   useEffect(() => {
@@ -123,6 +140,50 @@ export default function StoreEditDrawer({
               { label: "CBT", value: "CBT" },
               { label: "本土", value: "本土" },
             ]}
+          />
+        </Form.Item>
+
+        <Form.Item
+          label="产品标单价"
+          name="product_label_unit_price"
+          rules={[
+            {
+              validator: async (_, value?: number | null) => {
+                if (value === undefined || value === null) return;
+                if (!Number.isFinite(value) || value < 0) {
+                  throw new Error("产品标单价不能小于0");
+                }
+              },
+            },
+          ]}
+        >
+          <InputNumber
+            className="!w-full"
+            min={0}
+            precision={2}
+            placeholder="请输入产品标单价"
+          />
+        </Form.Item>
+
+        <Form.Item
+          label="外箱标单价"
+          name="carton_label_unit_price"
+          rules={[
+            {
+              validator: async (_, value?: number | null) => {
+                if (value === undefined || value === null) return;
+                if (!Number.isFinite(value) || value < 0) {
+                  throw new Error("外箱标单价不能小于0");
+                }
+              },
+            },
+          ]}
+        >
+          <InputNumber
+            className="!w-full"
+            min={0}
+            precision={2}
+            placeholder="请输入外箱标单价"
           />
         </Form.Item>
       </Form>

@@ -1,6 +1,6 @@
 "use client";
 
-import { App, Button, Drawer, Form, Input, Select, Space } from "antd";
+import { App, Button, Drawer, Form, Input, InputNumber, Select, Space } from "antd";
 import type { FormProps } from "antd";
 import { useEffect, useState } from "react";
 
@@ -107,6 +107,50 @@ export default function StoreCreateDrawer({
               { label: "CBT", value: "CBT" },
               { label: "本土", value: "本土" },
             ]}
+          />
+        </Form.Item>
+
+        <Form.Item
+          label="产品标单价"
+          name="product_label_unit_price"
+          rules={[
+            {
+              validator: async (_, value?: number | null) => {
+                if (value === undefined || value === null) return;
+                if (!Number.isFinite(value) || value < 0) {
+                  throw new Error("产品标单价不能小于0");
+                }
+              },
+            },
+          ]}
+        >
+          <InputNumber
+            className="!w-full"
+            min={0}
+            precision={2}
+            placeholder="请输入产品标单价"
+          />
+        </Form.Item>
+
+        <Form.Item
+          label="外箱标单价"
+          name="carton_label_unit_price"
+          rules={[
+            {
+              validator: async (_, value?: number | null) => {
+                if (value === undefined || value === null) return;
+                if (!Number.isFinite(value) || value < 0) {
+                  throw new Error("外箱标单价不能小于0");
+                }
+              },
+            },
+          ]}
+        >
+          <InputNumber
+            className="!w-full"
+            min={0}
+            precision={2}
+            placeholder="请输入外箱标单价"
           />
         </Form.Item>
       </Form>

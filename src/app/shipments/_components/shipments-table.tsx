@@ -24,8 +24,13 @@ type ShipmentsTableProps = {
   onStartDeliveryStatusEdit: (record: ShipmentRecord) => void;
   onCancelDeliveryStatusEdit: () => void;
   onChangeDeliveryStatus: (record: ShipmentRecord, value: string) => void;
+  onStartRelabelEdit: (record: ShipmentRecord) => void;
+  onCancelRelabelEdit: () => void;
+  onChangeRelabel: (record: ShipmentRecord, value: string) => void;
   isDeliveryStatusEditing: (record: ShipmentRecord) => boolean;
   isDeliveryStatusUpdating: (record: ShipmentRecord) => boolean;
+  isRelabelEditing: (record: ShipmentRecord) => boolean;
+  isRelabelUpdating: (record: ShipmentRecord) => boolean;
   isDeleting: (record: ShipmentRecord) => boolean;
   shipmentOptions: ShipmentOption[];
   storeOptions: StoreOption[];
@@ -63,8 +68,13 @@ export default function ShipmentsTable({
   onStartDeliveryStatusEdit,
   onCancelDeliveryStatusEdit,
   onChangeDeliveryStatus,
+  onStartRelabelEdit,
+  onCancelRelabelEdit,
+  onChangeRelabel,
   isDeliveryStatusEditing,
   isDeliveryStatusUpdating,
+  isRelabelEditing,
+  isRelabelUpdating,
   isDeleting,
   shipmentOptions,
   storeOptions,
@@ -79,8 +89,13 @@ export default function ShipmentsTable({
         onStartDeliveryStatusEdit,
         onCancelDeliveryStatusEdit,
         onChangeDeliveryStatus,
+        onStartRelabelEdit,
+        onCancelRelabelEdit,
+        onChangeRelabel,
         isDeliveryStatusEditing,
         isDeliveryStatusUpdating,
+        isRelabelEditing,
+        isRelabelUpdating,
         isDeleting,
         shipmentOptions,
         storeOptions,
@@ -91,12 +106,17 @@ export default function ShipmentsTable({
       isDeleting,
       isDeliveryStatusEditing,
       isDeliveryStatusUpdating,
+      isRelabelEditing,
+      isRelabelUpdating,
       logisticsOptions,
       onCancelDeliveryStatusEdit,
+      onCancelRelabelEdit,
       onChangeDeliveryStatus,
+      onChangeRelabel,
       onDelete,
       onEdit,
       onStartDeliveryStatusEdit,
+      onStartRelabelEdit,
       productOptions,
       shipmentOptions,
       storeOptions,
@@ -215,7 +235,7 @@ export default function ShipmentsTable({
         persistenceKey: COLUMNS_STATE_STORAGE_KEY,
         persistenceType: "localStorage",
       }}
-      scroll={{ x: 1700, y: "calc(100vh - 360px)" }}
+      scroll={{ x: 1800, y: "calc(100vh - 360px)" }}
       onScroll={(event) => {
         const target = event.currentTarget;
         if (

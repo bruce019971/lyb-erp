@@ -5,6 +5,8 @@ export type StoreRecord = {
   seller_code: string | null;
   seller_address: string | null;
   seller_type: string | null;
+  product_label_unit_price: number | null;
+  carton_label_unit_price: number | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -15,6 +17,8 @@ export type StoreCreateValues = {
   seller_code?: string | null;
   seller_address?: string | null;
   seller_type?: string | null;
+  product_label_unit_price?: number | null;
+  carton_label_unit_price?: number | null;
 };
 
 export type StoreUpdateValues = StoreCreateValues;
@@ -24,6 +28,8 @@ export type StoreOption = {
   seller_id: string | null;
   seller_name: string;
   seller_address: string | null;
+  product_label_unit_price: number | null;
+  carton_label_unit_price: number | null;
 };
 
 export const storeKeywordFields = [

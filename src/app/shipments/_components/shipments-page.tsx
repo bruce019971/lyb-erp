@@ -19,8 +19,9 @@ import type { StoreOption } from "../../stores/_lib/stores";
 import { requestStoreOptions } from "../../stores/_lib/stores-request";
 import {
   deleteShipmentRecord,
-  markShipmentDeliveryStatusAsYes,
   requestShipmentOptions,
+  updateShipmentDeliveryStatus,
+  updateShipmentRelabelStatus,
 } from "../_lib/shipments-request";
 import ShipmentCreateDrawer from "./shipment-create-drawer";
 import ShipmentEditDrawer from "./shipment-edit-drawer";
@@ -45,9 +46,11 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
   const [editingDeliveryStatusId, setEditingDeliveryStatusId] = useState<
     string | null
   >(null);
+  const [editingRelabelId, setEditingRelabelId] = useState<string | null>(null);
   const [updatingDeliveryStatusId, setUpdatingDeliveryStatusId] = useState<
     string | null
   >(null);
+  const [updatingRelabelId, setUpdatingRelabelId] = useState<string | null>(null);
   const [shipmentOptions, setShipmentOptions] = useState<ShipmentOption[]>([]);
   const [storeOptions, setStoreOptions] = useState<StoreOption[]>([]);
   const [productOptions, setProductOptions] = useState<ProductShipmentOption[]>(
@@ -72,35 +75,35 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
     let cancelled = false;
 
     async function loadOptions() {
-      try {
-        const [shipments, stores, products, logisticsProviders] = await Promise.all([
+      const [shipmentsResult, storesResult, productsResult, logisticsResult] =
+        await Promise.allSettled([
           requestShipmentOptions(),
           requestStoreOptions(),
           requestProductShipmentOptions(),
           requestLogisticsProviderOptions(),
         ]);
 
-        if (!cancelled) {
-          setShipmentOptions(
-            shipments.filter((item) => item.shipment_no?.trim()),
-          );
-          setStoreOptions(
-            stores.filter((item) => item.seller_name?.trim()),
-          );
-          setProductOptions(
-            products.filter((item) => item.product_name?.trim()),
-          );
-          setLogisticsOptions(
-            logisticsProviders.filter((item) => item.provider_name?.trim()),
-          );
-        }
-      } catch {
-        if (!cancelled) {
-          setShipmentOptions([]);
-          setStoreOptions([]);
-          setProductOptions([]);
-          setLogisticsOptions([]);
-        }
+      if (!cancelled) {
+        setShipmentOptions(
+          shipmentsResult.status === "fulfilled"
+            ? shipmentsResult.value.filter((item) => item.shipment_no?.trim())
+            : [],
+        );
+        setStoreOptions(
+          storesResult.status === "fulfilled"
+            ? storesResult.value.filter((item) => item.seller_name?.trim())
+            : [],
+        );
+        setProductOptions(
+          productsResult.status === "fulfilled"
+            ? productsResult.value.filter((item) => item.product_name?.trim())
+            : [],
+        );
+        setLogisticsOptions(
+          logisticsResult.status === "fulfilled"
+            ? logisticsResult.value.filter((item) => item.provider_name?.trim())
+            : [],
+        );
       }
     }
 
@@ -138,19 +141,27 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
     return updatingDeliveryStatusId === record.id;
   }
 
+  function isRelabelUpdating(record: ShipmentRecord) {
+    return updatingRelabelId === record.id;
+  }
+
+  function isRelabelEditing(record: ShipmentRecord) {
+    return editingRelabelId === record.id;
+  }
+
   async function handleChangeDeliveryStatus(
     record: ShipmentRecord,
     value: string,
   ) {
-    if (value !== "是" || record.delivery_status === "是") {
+    if ((record.delivery_status ?? "否") === value) {
       setEditingDeliveryStatusId(null);
       return;
     }
 
     try {
       setUpdatingDeliveryStatusId(record.id);
-      await markShipmentDeliveryStatusAsYes(record);
-      messageApi.success("已更新为“是”");
+      await updateShipmentDeliveryStatus(record, value);
+      messageApi.success("是否送仓已更新");
       setEditingDeliveryStatusId(null);
       tableActionRef.current?.reload();
     } catch (error) {
@@ -159,6 +170,27 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
       messageApi.error(`状态更新失败：${description}`);
     } finally {
       setUpdatingDeliveryStatusId(null);
+    }
+  }
+
+  async function handleChangeRelabel(record: ShipmentRecord, value: string) {
+    if ((record.is_relabel ?? "") === value) {
+      setEditingRelabelId(null);
+      return;
+    }
+
+    try {
+      setUpdatingRelabelId(record.id);
+      await updateShipmentRelabelStatus(record, value);
+      messageApi.success("是否换标已更新");
+      setEditingRelabelId(null);
+      tableActionRef.current?.reload();
+    } catch (error) {
+      const description =
+        error instanceof Error ? error.message : "请检查数据库权限或字段内容";
+      messageApi.error(`换标状态更新失败：${description}`);
+    } finally {
+      setUpdatingRelabelId(null);
     }
   }
 
@@ -228,8 +260,15 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
                 onChangeDeliveryStatus={(record, value) =>
                   void handleChangeDeliveryStatus(record, value)
                 }
+                onStartRelabelEdit={(record) => setEditingRelabelId(record.id)}
+                onCancelRelabelEdit={() => setEditingRelabelId(null)}
+                onChangeRelabel={(record, value) =>
+                  void handleChangeRelabel(record, value)
+                }
                 isDeliveryStatusEditing={isDeliveryStatusEditing}
                 isDeliveryStatusUpdating={isDeliveryStatusUpdating}
+                isRelabelEditing={isRelabelEditing}
+                isRelabelUpdating={isRelabelUpdating}
                 isDeleting={isDeleting}
                 shipmentOptions={shipmentOptions}
                 storeOptions={storeOptions}

@@ -81,6 +81,10 @@ function normalizeTextValue(value?: string | null) {
   return trimmed ? trimmed : null;
 }
 
+function normalizeNumberValue(value?: number | null) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 export async function createStoreRecord(values: StoreCreateValues) {
   const payload = {
     seller_id: values.seller_id.trim(),
@@ -88,6 +92,12 @@ export async function createStoreRecord(values: StoreCreateValues) {
     seller_code: generateStoreCode(values.seller_name),
     seller_address: buildStoreUrl(values.seller_id),
     seller_type: normalizeTextValue(values.seller_type) ?? "CBT",
+    product_label_unit_price: normalizeNumberValue(
+      values.product_label_unit_price,
+    ),
+    carton_label_unit_price: normalizeNumberValue(
+      values.carton_label_unit_price,
+    ),
   };
 
   const { data, error } = await supabase
@@ -110,6 +120,12 @@ export async function updateStoreRecord(id: string, values: StoreUpdateValues) {
     seller_code: generateStoreCode(values.seller_name),
     seller_address: buildStoreUrl(values.seller_id),
     seller_type: normalizeTextValue(values.seller_type) ?? "CBT",
+    product_label_unit_price: normalizeNumberValue(
+      values.product_label_unit_price,
+    ),
+    carton_label_unit_price: normalizeNumberValue(
+      values.carton_label_unit_price,
+    ),
   };
 
   const { data, error } = await supabase
@@ -129,14 +145,29 @@ export async function updateStoreRecord(id: string, values: StoreUpdateValues) {
 export async function requestStoreOptions() {
   const { data, error } = await supabase
     .from("stores")
+    .select(
+      "id, seller_id, seller_name, seller_address, product_label_unit_price, carton_label_unit_price",
+    )
+    .order("seller_name", { ascending: true });
+
+  if (!error) {
+    return ((data ?? []) as StoreOption[]).map((item) => ({
+      ...item,
+      seller_address:
+        item.seller_address?.trim() || buildStoreUrl(item.seller_id),
+    }));
+  }
+
+  const { data: fallbackData, error: fallbackError } = await supabase
+    .from("stores")
     .select("id, seller_id, seller_name, seller_address")
     .order("seller_name", { ascending: true });
 
-  if (error) {
-    throw error;
+  if (fallbackError) {
+    throw fallbackError;
   }
 
-  return ((data ?? []) as StoreOption[]).map((item) => ({
+  return ((fallbackData ?? []) as StoreOption[]).map((item) => ({
     ...item,
     seller_address:
       item.seller_address?.trim() || buildStoreUrl(item.seller_id),

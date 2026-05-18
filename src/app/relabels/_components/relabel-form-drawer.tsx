@@ -1,6 +1,16 @@
 "use client";
 
-import { App, Button, DatePicker, Drawer, Form, Input, Select, Space } from "antd";
+import {
+  App,
+  Button,
+  DatePicker,
+  Drawer,
+  Form,
+  Input,
+  InputNumber,
+  Select,
+  Space,
+} from "antd";
 import type { FormProps } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import dayjs, { type Dayjs } from "dayjs";
@@ -43,6 +53,10 @@ function serializeDate(value?: Dayjs | null) {
   return value ? value.format("YYYY-MM-DD") : null;
 }
 
+function normalizeRequiredText(value?: string | null) {
+  return value?.trim() ?? "";
+}
+
 function getErrorMessage(error: unknown) {
   if (error && typeof error === "object" && "message" in error) {
     const message = (error as { message?: unknown }).message;
@@ -66,15 +80,27 @@ export default function RelabelFormDrawer({
   const [form] = Form.useForm<RelabelFormValues>();
   const [submitting, setSubmitting] = useState(false);
   const { message } = App.useApp();
+  const [selectedOriginalShipmentNo, setSelectedOriginalShipmentNo] = useState<
+    string | undefined
+  >(undefined);
+  const selectedRelabelType = Form.useWatch("relabel_type", form);
+  const shouldShowProductCount =
+    Boolean(selectedRelabelType) && selectedRelabelType !== "外箱标";
 
   const originalShipmentOptions = useMemo(
-    () =>
-      shipmentOptions
-        .filter((item) => item.shipment_no?.trim())
-        .map((item) => ({
-          label: item.shipment_no!,
-          value: item.shipment_no!,
-        })),
+    () => {
+      const shipmentNos = new Set<string>();
+
+      shipmentOptions.forEach((item) => {
+        const shipmentNo = item.shipment_no?.trim();
+        if (shipmentNo) shipmentNos.add(shipmentNo);
+      });
+
+      return Array.from(shipmentNos).map((shipmentNo) => ({
+        label: shipmentNo,
+        value: shipmentNo,
+      }));
+    },
     [shipmentOptions],
   );
 
@@ -89,33 +115,87 @@ export default function RelabelFormDrawer({
     [storeOptions],
   );
 
+  const boxCountByShipmentNo = useMemo(() => {
+    const nextMap = new Map<string, number>();
+
+    shipmentOptions.forEach((item) => {
+      const shipmentNo = item.shipment_no?.trim();
+      const boxCount =
+        typeof item.box_count === "number" && Number.isFinite(item.box_count)
+          ? item.box_count
+          : undefined;
+
+      if (shipmentNo && boxCount !== undefined) {
+        nextMap.set(shipmentNo, boxCount);
+      }
+    });
+
+    return nextMap;
+  }, [shipmentOptions]);
+
+  const originalShipmentBoxCount = useMemo(() => {
+    const shipmentNo = selectedOriginalShipmentNo?.trim();
+    if (!shipmentNo) return null;
+
+    return boxCountByShipmentNo.get(shipmentNo) ?? null;
+  }, [boxCountByShipmentNo, selectedOriginalShipmentNo]);
+
+  function applyDefaultBoxCount(shipmentNo?: string | null) {
+    const trimmedShipmentNo = shipmentNo?.trim();
+    const nextBoxCount = trimmedShipmentNo
+      ? boxCountByShipmentNo.get(trimmedShipmentNo)
+      : undefined;
+
+    form.setFields([
+      {
+        name: "box_count",
+        value: nextBoxCount,
+      },
+    ]);
+  }
+
   useEffect(() => {
     if (!open) return;
 
     if (mode === "edit" && record) {
+      const originalShipmentNo = record.original_shipment_no ?? undefined;
+
       form.setFieldsValue({
-        original_shipment_no: record.original_shipment_no ?? undefined,
+        original_shipment_no: originalShipmentNo,
         delivery_store: record.delivery_store ?? undefined,
         delivery_shipment_no: record.delivery_shipment_no ?? undefined,
+        box_count: record.box_count ?? undefined,
+        product_count: record.product_count ?? undefined,
         relabel_type: record.relabel_type ?? undefined,
         delivery_time: toDateInputValue(record.delivery_time),
       });
+
+      if (record.box_count === null || record.box_count === undefined) {
+        applyDefaultBoxCount(originalShipmentNo);
+      }
+      setSelectedOriginalShipmentNo(originalShipmentNo);
       return;
     }
 
     form.setFieldsValue({
       delivery_store: undefined,
+      box_count: undefined,
+      product_count: undefined,
     });
-  }, [form, mode, open, record, shipmentOptions]);
+    setSelectedOriginalShipmentNo(undefined);
+  }, [boxCountByShipmentNo, form, mode, open, record]);
 
   const handleFinish: FormProps<RelabelFormValues>["onFinish"] = async (
     values,
   ) => {
     const payload: RelabelUpdateValues = {
-      original_shipment_no: values.original_shipment_no,
-      delivery_store: values.delivery_store,
-      delivery_shipment_no: values.delivery_shipment_no,
-      relabel_type: values.relabel_type,
+      original_shipment_no: normalizeRequiredText(values.original_shipment_no),
+      delivery_store: normalizeRequiredText(values.delivery_store),
+      delivery_shipment_no: normalizeRequiredText(values.delivery_shipment_no),
+      box_count: values.box_count,
+      product_count:
+        values.relabel_type === "外箱标" ? null : values.product_count,
+      relabel_type: normalizeRequiredText(values.relabel_type),
       delivery_time: serializeDate(values.delivery_time),
     };
 
@@ -183,16 +263,27 @@ export default function RelabelFormDrawer({
           >
             <Select
               showSearch
-              allowClear
               placeholder="请选择原货件号"
               optionFilterProp="label"
               options={originalShipmentOptions}
+              onChange={(value) => {
+                const shipmentNo = typeof value === "string" ? value : undefined;
+                setSelectedOriginalShipmentNo(shipmentNo);
+                applyDefaultBoxCount(shipmentNo);
+              }}
             />
           </Form.Item>
 
           <Form.Item
             label="送仓货件号"
             name="delivery_shipment_no"
+            rules={[
+              {
+                required: true,
+                whitespace: true,
+                message: "请输入送仓货件号",
+              },
+            ]}
           >
             <Input placeholder="请输入送仓货件号" />
           </Form.Item>
@@ -200,6 +291,7 @@ export default function RelabelFormDrawer({
           <Form.Item
             label="送仓店铺"
             name="delivery_store"
+            rules={[{ required: true, message: "请选择送仓店铺" }]}
           >
             <Select
               showSearch
@@ -210,16 +302,81 @@ export default function RelabelFormDrawer({
             />
           </Form.Item>
 
-          <Form.Item label="换标类型" name="relabel_type">
+          <Form.Item
+            label="外箱数"
+            name="box_count"
+            rules={[
+              { required: true, message: "请输入外箱数" },
+              {
+                validator: async (_, value?: number | null) => {
+                  if (value === undefined || value === null) return;
+                  if (!Number.isFinite(value) || value <= 0) {
+                    throw new Error("外箱数必须大于0");
+                  }
+                  if (
+                    typeof originalShipmentBoxCount === "number" &&
+                    value > originalShipmentBoxCount
+                  ) {
+                    throw new Error(
+                      `外箱数不能大于原货件箱数${originalShipmentBoxCount}`,
+                    );
+                  }
+                },
+              },
+            ]}
+          >
+            <InputNumber
+              className="!w-full"
+              min={1}
+              precision={0}
+              placeholder="请输入外箱数"
+            />
+          </Form.Item>
+
+          <Form.Item
+            label="换标类型"
+            name="relabel_type"
+            rules={[{ required: true, message: "请选择换标类型" }]}
+          >
             <Select
               allowClear
               placeholder="请选择换标类型"
+              onChange={(value) => {
+                if (value === "外箱标") {
+                  form.setFields([{ name: "product_count", value: undefined }]);
+                }
+              }}
               options={relabelTypeOptions.map((item) => ({
                 label: item,
                 value: item,
               }))}
             />
           </Form.Item>
+
+          {shouldShowProductCount ? (
+            <Form.Item
+              label="产品数"
+              name="product_count"
+              rules={[
+                { required: true, message: "请输入产品数" },
+                {
+                  validator: async (_, value?: number | null) => {
+                    if (value === undefined || value === null) return;
+                    if (!Number.isFinite(value) || value <= 0) {
+                      throw new Error("产品数必须大于0");
+                    }
+                  },
+                },
+              ]}
+            >
+              <InputNumber
+                className="!w-full"
+                min={1}
+                precision={0}
+                placeholder="请输入产品数"
+              />
+            </Form.Item>
+          ) : null}
 
           <Form.Item label="送仓时间" name="delivery_time">
             <DatePicker className="!w-full" format="YYYY/MM/DD" />

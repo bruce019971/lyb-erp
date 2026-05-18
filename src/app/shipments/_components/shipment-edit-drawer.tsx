@@ -54,12 +54,15 @@ function serializeDate(value?: Dayjs | null) {
 function serializeShipmentValues(
   values: ShipmentUpdateFormValues,
 ): ShipmentUpdateValues {
+  const appointmentTime =
+    values.is_relabel === "是" ? undefined : serializeDate(values.appointment_time);
+
   return {
     ...values,
     overseas_warehouse_arrived_at: serializeDate(
       values.overseas_warehouse_arrived_at,
     ),
-    appointment_time: serializeDate(values.appointment_time),
+    appointment_time: appointmentTime,
   };
 }
 
@@ -158,7 +161,9 @@ export default function ShipmentEditDrawer({
   const selectedLogisticsProvider = Form.useWatch("logistics_provider", form);
   const warehouseArrivedAt = Form.useWatch("overseas_warehouse_arrived_at", form);
   const appointmentTime = Form.useWatch("appointment_time", form);
+  const isRelabel = Form.useWatch("is_relabel", form);
   const normalizedStoreName = selectedStoreName?.trim();
+  const appointmentDisabled = !warehouseArrivedAt || isRelabel === "是";
   const storeSelectOptions = storeOptions.map((item) => ({
     label: item.seller_name,
     value: item.seller_name,
@@ -327,7 +332,7 @@ export default function ShipmentEditDrawer({
     ) {
       form.setFieldValue("appointment_time", undefined);
     }
-  }, [appointmentTime, form, warehouseArrivedAt]);
+  }, [appointmentTime, form, isRelabel, warehouseArrivedAt]);
 
   useEffect(() => {
     if (!open || !record) return;
@@ -345,6 +350,7 @@ export default function ShipmentEditDrawer({
         record.overseas_warehouse_arrived_at,
       ),
       appointment_time: toDateInputValue(record.appointment_time),
+      is_relabel: record.is_relabel ?? undefined,
       goods_value: record.goods_value,
     });
   }, [form, open, record]);
@@ -407,8 +413,11 @@ export default function ShipmentEditDrawer({
         <Form.Item name="pcs_per_box" hidden>
           <InputNumber />
         </Form.Item>
-        <Form.Item name="total_qty" hidden>
-          <InputNumber />
+          <Form.Item name="total_qty" hidden>
+            <InputNumber />
+          </Form.Item>
+        <Form.Item name="is_relabel" hidden>
+          <Input />
         </Form.Item>
         <div className="grid grid-cols-1 gap-x-4 md:grid-cols-2">
           <Form.Item
@@ -476,7 +485,7 @@ export default function ShipmentEditDrawer({
             name="overseas_warehouse_arrived_at"
           />
           <Form.Item
-            label="约仓时间"
+            label="送仓时间"
             name="appointment_time"
             rules={[
               {
@@ -491,7 +500,7 @@ export default function ShipmentEditDrawer({
 
                   const minDate = getAppointmentMinDate(warehouseArrivedAt);
                   if (minDate && value.startOf("day").isBefore(minDate)) {
-                    throw new Error("约仓时间至少需要晚于到仓时间一天");
+                    throw new Error("送仓时间至少需要晚于到仓时间一天");
                   }
                 },
               },
@@ -500,9 +509,13 @@ export default function ShipmentEditDrawer({
             <DatePicker
               className="!w-full"
               format="YYYY/MM/DD"
-              disabled={!warehouseArrivedAt}
+              disabled={appointmentDisabled}
               placeholder={
-                warehouseArrivedAt ? "请选择约仓时间" : "请先选择到仓时间"
+                isRelabel === "是"
+                  ? "换标货件不可编辑送仓时间"
+                  : warehouseArrivedAt
+                    ? "请选择送仓时间"
+                    : "请先选择到仓时间"
               }
               disabledDate={(current) => {
                 if (!current) return false;

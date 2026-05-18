@@ -61,6 +61,26 @@ export function getStoreColumns(
       },
     },
     {
+      title: "产品标单价",
+      dataIndex: "product_label_unit_price",
+      width: 120,
+      search: false,
+      render: (_, record) =>
+        typeof record.product_label_unit_price === "number"
+          ? record.product_label_unit_price.toFixed(2)
+          : "",
+    },
+    {
+      title: "外箱标单价",
+      dataIndex: "carton_label_unit_price",
+      width: 120,
+      search: false,
+      render: (_, record) =>
+        typeof record.carton_label_unit_price === "number"
+          ? record.carton_label_unit_price.toFixed(2)
+          : "",
+    },
+    {
       title: "操作",
       valueType: "option",
       width: 64,
