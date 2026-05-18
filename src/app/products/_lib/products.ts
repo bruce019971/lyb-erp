@@ -17,6 +17,8 @@ export type ProductRecord = {
   product_unit_price: number | null;
   carton_spec: string | null;
   pcs_per_carton: number | null;
+  customs_code: string | null;
+  product_category: string | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -56,6 +58,8 @@ export type ProductCreateValues = {
   product_unit_price?: number | null;
   carton_spec?: string | null;
   pcs_per_carton?: number | null;
+  customs_code?: string | null;
+  product_category?: string | null;
 };
 
 export type ProductUpdateValues = ProductCreateValues;

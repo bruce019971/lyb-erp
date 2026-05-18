@@ -63,6 +63,10 @@ function serializeShipmentValues(
   };
 }
 
+function getAppointmentMinDate(warehouseArrivedAt?: Dayjs | null) {
+  return warehouseArrivedAt ? warehouseArrivedAt.startOf("day").add(1, "day") : null;
+}
+
 function roundMoney(value: number) {
   return Number(value.toFixed(2));
 }
@@ -152,6 +156,8 @@ export default function ShipmentEditDrawer({
   const { message } = App.useApp();
   const selectedStoreName = Form.useWatch("order_store", form);
   const selectedLogisticsProvider = Form.useWatch("logistics_provider", form);
+  const warehouseArrivedAt = Form.useWatch("overseas_warehouse_arrived_at", form);
+  const appointmentTime = Form.useWatch("appointment_time", form);
   const normalizedStoreName = selectedStoreName?.trim();
   const storeSelectOptions = storeOptions.map((item) => ({
     label: item.seller_name,
@@ -262,6 +268,19 @@ export default function ShipmentEditDrawer({
     changedValues: Partial<ShipmentUpdateFormValues>,
     values: ShipmentUpdateFormValues,
   ) {
+    if ("overseas_warehouse_arrived_at" in changedValues) {
+      const minDate = getAppointmentMinDate(values.overseas_warehouse_arrived_at);
+
+      if (
+        !values.overseas_warehouse_arrived_at ||
+        (values.appointment_time &&
+          minDate &&
+          values.appointment_time.startOf("day").isBefore(minDate))
+      ) {
+        form.setFieldValue("appointment_time", undefined);
+      }
+    }
+
     if (
       !(
         "box_count" in changedValues ||
@@ -293,6 +312,24 @@ export default function ShipmentEditDrawer({
   }
 
   useEffect(() => {
+    const minDate = getAppointmentMinDate(warehouseArrivedAt);
+
+    if (!warehouseArrivedAt && appointmentTime) {
+      form.setFieldValue("appointment_time", undefined);
+      return;
+    }
+
+    if (
+      warehouseArrivedAt &&
+      appointmentTime &&
+      minDate &&
+      appointmentTime.startOf("day").isBefore(minDate)
+    ) {
+      form.setFieldValue("appointment_time", undefined);
+    }
+  }, [appointmentTime, form, warehouseArrivedAt]);
+
+  useEffect(() => {
     if (!open || !record) return;
 
     form.setFieldsValue({
@@ -308,10 +345,6 @@ export default function ShipmentEditDrawer({
         record.overseas_warehouse_arrived_at,
       ),
       appointment_time: toDateInputValue(record.appointment_time),
-      first_leg_unit_cost: record.first_leg_unit_cost,
-      first_leg_batch_fee: record.first_leg_batch_fee,
-      freight_unit_price: record.freight_unit_price,
-      volume: record.volume,
       goods_value: record.goods_value,
     });
   }, [form, open, record]);
@@ -369,12 +402,6 @@ export default function ShipmentEditDrawer({
         onValuesChange={handleValuesChange}
       >
         <Form.Item name="goods_value" hidden>
-          <InputNumber />
-        </Form.Item>
-        <Form.Item name="first_leg_batch_fee" hidden>
-          <InputNumber />
-        </Form.Item>
-        <Form.Item name="first_leg_unit_cost" hidden>
           <InputNumber />
         </Form.Item>
         <Form.Item name="pcs_per_box" hidden>
@@ -444,13 +471,47 @@ export default function ShipmentEditDrawer({
             />
           </Form.Item>
           <NumberField label="箱数" name="box_count" precision={0} required />
-          <NumberField label="运费单价" name="freight_unit_price" precision={2} />
-          <NumberField label="体积" name="volume" precision={3} />
           <DateField
             label="到仓时间"
             name="overseas_warehouse_arrived_at"
           />
-          <DateField label="约仓时间" name="appointment_time" />
+          <Form.Item
+            label="约仓时间"
+            name="appointment_time"
+            rules={[
+              {
+                validator: async (_, value?: Dayjs | null) => {
+                  if (!value) {
+                    return;
+                  }
+
+                  if (!warehouseArrivedAt) {
+                    throw new Error("请先选择到仓时间");
+                  }
+
+                  const minDate = getAppointmentMinDate(warehouseArrivedAt);
+                  if (minDate && value.startOf("day").isBefore(minDate)) {
+                    throw new Error("约仓时间至少需要晚于到仓时间一天");
+                  }
+                },
+              },
+            ]}
+          >
+            <DatePicker
+              className="!w-full"
+              format="YYYY/MM/DD"
+              disabled={!warehouseArrivedAt}
+              placeholder={
+                warehouseArrivedAt ? "请选择约仓时间" : "请先选择到仓时间"
+              }
+              disabledDate={(current) => {
+                if (!current) return false;
+                const minDate = getAppointmentMinDate(warehouseArrivedAt);
+                if (!minDate) return true;
+                return current.startOf("day").isBefore(minDate);
+              }}
+            />
+          </Form.Item>
         </div>
       </Form>
     </Drawer>

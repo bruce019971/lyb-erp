@@ -173,6 +173,24 @@ export async function requestProductShipmentOptions() {
   return (data ?? []) as ProductShipmentOption[];
 }
 
+export async function requestCustomsCodeByCategory(category?: string | null) {
+  const keyword = category?.trim();
+  if (!keyword) return null;
+
+  const response = await fetch(
+    `/api/customs-code?keyword=${encodeURIComponent(keyword)}`,
+  );
+  const payload = (await response.json().catch(() => null)) as
+    | { data?: { customs_code?: string | null } | null; error?: string }
+    | null;
+
+  if (!response.ok) {
+    throw new Error(payload?.error || "海关编码查询失败");
+  }
+
+  return payload?.data?.customs_code?.trim() || null;
+}
+
 function normalizeTextValue(value?: string | null) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
@@ -205,6 +223,8 @@ export async function createProductRecord(values: ProductCreateValues) {
     product_unit_price: normalizeNumberValue(values.product_unit_price),
     carton_spec: normalizeTextValue(values.carton_spec),
     pcs_per_carton: normalizeNumberValue(values.pcs_per_carton),
+    customs_code: normalizeTextValue(values.customs_code),
+    product_category: normalizeTextValue(values.product_category),
   });
 
   const { error } = await supabase.from("products").insert(payload);
@@ -234,6 +254,8 @@ export async function updateProductRecord(
     product_unit_price: normalizeNumberValue(values.product_unit_price),
     carton_spec: normalizeTextValue(values.carton_spec),
     pcs_per_carton: normalizeNumberValue(values.pcs_per_carton),
+    customs_code: normalizeTextValue(values.customs_code),
+    product_category: normalizeTextValue(values.product_category),
   };
 
   const { data, error } = await supabase
@@ -308,26 +330,14 @@ export async function uploadProductLabel(file: File) {
 export async function checkProductReferences(productName: string) {
   const references: string[] = [];
 
-  // 检查货件管理关联
   const { data: shipments } = await supabase
-    .from("shipments")
+    .from("shipment_records")
     .select("id")
     .eq("product_name", productName)
     .limit(1);
 
   if (shipments && shipments.length > 0) {
     references.push("货件管理");
-  }
-
-  // 检查运费管理关联
-  const { data: freights } = await supabase
-    .from("freights")
-    .select("id")
-    .eq("product_name", productName)
-    .limit(1);
-
-  if (freights && freights.length > 0) {
-    references.push("运费管理");
   }
 
   return references;

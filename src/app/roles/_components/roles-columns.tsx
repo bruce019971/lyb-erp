@@ -1,8 +1,9 @@
 "use client";
 
+import { DeleteOutlined, EditOutlined } from "@ant-design/icons";
 import type { ProColumns } from "@ant-design/pro-components";
 import dayjs from "dayjs";
-import { Button, Popconfirm, Tag } from "antd";
+import { Button, Popconfirm, Tag, Tooltip } from "antd";
 
 import type { RoleRecord } from "../_lib/roles";
 
@@ -57,18 +58,18 @@ export function getRoleColumns(
     {
       title: "操作",
       valueType: "option",
-      width: 120,
+      width: 84,
       fixed: "right",
       search: false,
       render: (_, record) => [
-        <Button
-          key="edit"
-          type="link"
-          size="small"
-          onClick={() => onEdit(record)}
-        >
-          编辑
-        </Button>,
+        <Tooltip key="edit" title="编辑">
+          <Button
+            type="text"
+            size="small"
+            icon={<EditOutlined />}
+            onClick={() => onEdit(record)}
+          />
+        </Tooltip>,
         <Popconfirm
           key="delete"
           title="确认删除该角色？"
@@ -77,9 +78,15 @@ export function getRoleColumns(
           okButtonProps={{ danger: true, loading: isDeleting(record) }}
           onConfirm={() => onDelete(record)}
         >
-          <Button type="link" size="small" danger loading={isDeleting(record)}>
-            删除
-          </Button>
+          <Tooltip title="删除">
+            <Button
+              type="text"
+              size="small"
+              danger
+              icon={<DeleteOutlined />}
+              loading={isDeleting(record)}
+            />
+          </Tooltip>
         </Popconfirm>,
       ],
     },

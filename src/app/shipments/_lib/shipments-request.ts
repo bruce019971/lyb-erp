@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import {
   shipmentDateFields,
   shipmentKeywordFields,
+  canEditShipmentDeliveryStatus,
   type ShipmentCreateValues,
   type ShipmentOption,
   type ShipmentRecord,
@@ -52,6 +53,11 @@ export async function requestShipmentRecords(
     query = query.in("order_store", orderStoreValues);
   }
 
+  const shipmentNoValues = normalizeMultiSelectValues(params.shipment_no);
+  if (shipmentNoValues.length > 0) {
+    query = query.in("shipment_no", shipmentNoValues);
+  }
+
   const logisticsProviderValues = normalizeMultiSelectValues(
     params.logistics_provider,
   );
@@ -72,6 +78,14 @@ export async function requestShipmentRecords(
     query = query.not("overseas_warehouse_arrived_at", "is", null);
   } else if (warehouseArrivedStatus === "否") {
     query = query.is("overseas_warehouse_arrived_at", null);
+  }
+
+  const deliveryStatus =
+    typeof params.delivery_status === "string"
+      ? params.delivery_status.trim()
+      : "";
+  if (deliveryStatus === "是" || deliveryStatus === "否") {
+    query = query.eq("delivery_status", deliveryStatus);
   }
 
   function splitFilterText(value?: string) {
@@ -178,7 +192,11 @@ export async function requestShipmentRecords(
   }
 
   return {
-    data: (data ?? []) as ShipmentRecord[],
+    data: ((data ?? []) as ShipmentRecord[]).map((item) => ({
+      ...item,
+      delivery_status: item.delivery_status ?? "否",
+      is_delivery_completed: item.delivery_status === "是",
+    })),
     success: true,
     total: count ?? 0,
   };
@@ -193,43 +211,6 @@ function normalizeNumberValue(value?: number | null) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function roundMoney(value: number) {
-  return Number(value.toFixed(2));
-}
-
-function calculateFreightBatchFee(
-  freightUnitPrice?: number | null,
-  volume?: number | null,
-) {
-  if (
-    typeof freightUnitPrice !== "number" ||
-    !Number.isFinite(freightUnitPrice) ||
-    typeof volume !== "number" ||
-    !Number.isFinite(volume)
-  ) {
-    return null;
-  }
-
-  return roundMoney(freightUnitPrice * volume);
-}
-
-function calculateFreightUnitCost(
-  batchFee?: number | null,
-  totalQty?: number | null,
-) {
-  if (
-    typeof batchFee !== "number" ||
-    !Number.isFinite(batchFee) ||
-    typeof totalQty !== "number" ||
-    !Number.isFinite(totalQty) ||
-    totalQty <= 0
-  ) {
-    return null;
-  }
-
-  return roundMoney(batchFee / totalQty);
-}
-
 function deriveWarehouseArrivedStatus(
   warehouseArrivedAt?: string | null,
 ) {
@@ -237,16 +218,6 @@ function deriveWarehouseArrivedStatus(
 }
 
 function buildShipmentPayload(values: ShipmentUpdateValues) {
-  const freightUnitPrice = normalizeNumberValue(values.freight_unit_price);
-  const volume = normalizeNumberValue(values.volume);
-  const totalQty = normalizeNumberValue(values.total_qty);
-  const existingBatchFee = normalizeNumberValue(values.first_leg_batch_fee);
-  const existingUnitCost = normalizeNumberValue(values.first_leg_unit_cost);
-  const firstLegBatchFee =
-    calculateFreightBatchFee(freightUnitPrice, volume) ?? existingBatchFee;
-  const firstLegUnitCost =
-    calculateFreightUnitCost(firstLegBatchFee, totalQty) ?? existingUnitCost;
-
   return {
     order_store: normalizeTextValue(values.order_store),
     logistics_provider: normalizeTextValue(values.logistics_provider),
@@ -255,7 +226,6 @@ function buildShipmentPayload(values: ShipmentUpdateValues) {
     product_name: normalizeTextValue(values.product_name),
     box_count: normalizeNumberValue(values.box_count),
     pcs_per_box: normalizeNumberValue(values.pcs_per_box),
-    total_qty: normalizeNumberValue(values.total_qty),
     overseas_warehouse_arrived_at: normalizeTextValue(
       values.overseas_warehouse_arrived_at,
     ),
@@ -263,31 +233,31 @@ function buildShipmentPayload(values: ShipmentUpdateValues) {
       values.overseas_warehouse_arrived_at,
     ),
     appointment_time: normalizeTextValue(values.appointment_time),
-    first_leg_unit_cost: firstLegUnitCost,
-    first_leg_batch_fee: firstLegBatchFee,
     goods_value: normalizeNumberValue(values.goods_value),
-    freight_unit_price: freightUnitPrice,
-    volume,
   };
 }
 
 export async function createShipmentRecord(values: ShipmentCreateValues) {
-  const payload = {
-    ...buildShipmentPayload(values),
-    updated_at: null,
-  };
+  const response = await fetch("/api/shipments", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      ...buildShipmentPayload(values),
+      updated_at: null,
+    }),
+  });
 
-  const { data, error } = await supabase
-    .from("shipment_records")
-    .insert(payload)
-    .select("*")
-    .single();
+  const payload = (await response.json().catch(() => null)) as
+    | { data?: ShipmentRecord; error?: string }
+    | null;
 
-  if (error) {
-    throw error;
+  if (!response.ok || !payload?.data) {
+    throw new Error(payload?.error || "新增失败");
   }
 
-  return data as ShipmentRecord;
+  return payload.data;
 }
 
 export async function updateShipmentRecord(
@@ -311,6 +281,60 @@ export async function updateShipmentRecord(
   }
 
   return data as ShipmentRecord;
+}
+
+export async function markShipmentDeliveryStatusAsYes(record: ShipmentRecord) {
+  if (!canEditShipmentDeliveryStatus(record)) {
+    throw new Error("只有过了约仓时间后才能标记为已送仓");
+  }
+
+  const { data, error } = await supabase
+    .from("shipment_records")
+    .update({
+      delivery_status: "是",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", record.id)
+    .select("*")
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data as ShipmentRecord;
+}
+
+export async function deleteShipmentRecord(id: string) {
+  const response = await fetch(`/api/shipments/${id}`, {
+    method: "DELETE",
+  });
+
+  const payload = (await response.json().catch(() => null)) as
+    | { error?: string }
+    | null;
+
+  if (!response.ok) {
+    throw new Error(payload?.error || "删除失败");
+  }
+}
+
+export async function deleteShipmentRecords(ids: string[]) {
+  const response = await fetch("/api/shipments/batch-delete", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ ids }),
+  });
+
+  const payload = (await response.json().catch(() => null)) as
+    | { error?: string }
+    | null;
+
+  if (!response.ok) {
+    throw new Error(payload?.error || "批量删除失败");
+  }
 }
 
 export async function requestShipmentOptions() {

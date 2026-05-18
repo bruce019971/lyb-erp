@@ -1,5 +1,6 @@
+import { EditOutlined } from "@ant-design/icons";
 import type { ProColumns } from "@ant-design/pro-components";
-import { Button, Typography } from "antd";
+import { Button, Tooltip, Typography } from "antd";
 
 import type { StoreRecord } from "../_lib/stores";
 
@@ -62,12 +63,17 @@ export function getStoreColumns(
     {
       title: "操作",
       valueType: "option",
-      width: 96,
+      width: 64,
       fixed: "right",
       render: (_, record) => (
-        <Button type="link" size="small" onClick={() => onEdit(record)}>
-          编辑
-        </Button>
+        <Tooltip title="编辑">
+          <Button
+            type="text"
+            size="small"
+            icon={<EditOutlined />}
+            onClick={() => onEdit(record)}
+          />
+        </Tooltip>
       ),
     },
   ];

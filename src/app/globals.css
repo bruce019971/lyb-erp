@@ -64,6 +64,45 @@ body {
   background: #ffe4e1 !important;
 }
 
+.shipment-delivered-row > td {
+  background: #f8fafc !important;
+  color: #94a3b8 !important;
+}
+
+.shipment-delivered-row:hover > td {
+  background: #f1f5f9 !important;
+  color: #94a3b8 !important;
+}
+
+.shipment-delivered-row .ant-typography,
+.shipment-delivered-row .ant-typography-copy,
+.shipment-delivered-row .ant-btn,
+.shipment-delivered-row .ant-btn-link,
+.shipment-delivered-row .ant-select-selection-item,
+.shipment-delivered-row a {
+  color: #94a3b8 !important;
+}
+
+td.shipment-delivery-overdue-cell,
+.shipment-delivered-row > td.shipment-delivery-overdue-cell {
+  background: #fff1f0 !important;
+}
+
+td.shipment-delivery-overdue-cell:hover,
+.shipment-delivered-row:hover > td.shipment-delivery-overdue-cell {
+  background: #ffe4e1 !important;
+}
+
+td.shipment-delivery-done-cell,
+.shipment-delivered-row > td.shipment-delivery-done-cell {
+  background: #f6ffed !important;
+}
+
+td.shipment-delivery-done-cell:hover,
+.shipment-delivered-row:hover > td.shipment-delivery-done-cell {
+  background: #eaffd0 !important;
+}
+
 .role-status-group .ant-radio-button-wrapper {
   min-width: 148px;
   height: 56px;

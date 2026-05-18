@@ -18,6 +18,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ProductCreateValues, ProductRecord } from "../_lib/products";
 import {
   createProductRecord,
+  requestCustomsCodeByCategory,
   updateProductRecord,
   uploadProductImage,
   uploadProductLabel,
@@ -34,6 +35,17 @@ type ProductFormDrawerProps = {
   onClose: () => void;
   onSaved: () => void;
 };
+
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error && typeof error === "object" && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) {
+      return message;
+    }
+  }
+
+  return fallback;
+}
 
 function buildInitialValues(record?: ProductRecord): ProductCreateValues {
   return {
@@ -52,6 +64,8 @@ function buildInitialValues(record?: ProductRecord): ProductCreateValues {
     product_unit_price: record?.product_unit_price ?? undefined,
     carton_spec: record?.carton_spec ?? undefined,
     pcs_per_carton: record?.pcs_per_carton ?? undefined,
+    customs_code: record?.customs_code ?? undefined,
+    product_category: record?.product_category ?? undefined,
   };
 }
 
@@ -147,8 +161,7 @@ export default function ProductFormDrawer({
         }
       } catch (error) {
         if (!cancelled) {
-          const description =
-            error instanceof Error ? error.message : "请检查店铺数据读取权限";
+          const description = getErrorMessage(error, "请检查店铺数据读取权限");
           message.error(`店铺列表加载失败：${description}`);
         }
       } finally {
@@ -170,6 +183,9 @@ export default function ProductFormDrawer({
       setSubmitting(true);
       const nextValues = {
         ...values,
+        customs_code: await requestCustomsCodeByCategory(
+          values.product_category,
+        ),
         product_image_url:
           imageUrlRef.current !== undefined
             ? imageUrlRef.current
@@ -197,8 +213,7 @@ export default function ProductFormDrawer({
       setLabelFileListOverride(null);
       onSaved();
     } catch (error) {
-      const description =
-        error instanceof Error ? error.message : "请检查数据库权限或字段内容";
+      const description = getErrorMessage(error, "请检查数据库权限或字段内容");
       message.error(
         `${mode === "edit" ? "产品修改" : "产品新增"}失败：${description}`,
       );
@@ -242,8 +257,7 @@ export default function ProductFormDrawer({
         ]);
         onSuccess?.({ url: imageUrl });
       } catch (error) {
-        const description =
-          error instanceof Error ? error.message : "请检查图片存储权限";
+        const description = getErrorMessage(error, "请检查图片存储权限");
         message.error(`图片上传失败：${description}`);
         setImageFileListOverride(buildInitialImageFileList(record));
         imageUrlRef.current = record?.product_image_url ?? undefined;
@@ -282,8 +296,7 @@ export default function ProductFormDrawer({
         ]);
         onSuccess?.({ url: labelUrl });
       } catch (error) {
-        const description =
-          error instanceof Error ? error.message : "请检查标签存储权限";
+        const description = getErrorMessage(error, "请检查标签存储权限");
         message.error(`标签上传失败：${description}`);
         setLabelFileListOverride(buildInitialLabelFileList(record));
         labelUrlRef.current = record?.product_label_url ?? undefined;
@@ -403,13 +416,17 @@ export default function ProductFormDrawer({
             <Input placeholder="请输入ML Code" />
           </Form.Item>
 
-          <Form.Item label="装箱数量(pcs/箱)" name="pcs_per_carton">
+          <Form.Item label="装箱数" name="pcs_per_carton">
             <InputNumber
               className="!w-full"
               min={0}
               precision={0}
               placeholder="请输入装箱数量"
             />
+          </Form.Item>
+
+          <Form.Item label="产品类别" name="product_category">
+            <Input placeholder="请输入产品类别" />
           </Form.Item>
 
           <Form.Item label="产品链接" name="product_url" className="col-span-2">

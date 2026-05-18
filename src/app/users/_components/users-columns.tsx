@@ -1,8 +1,9 @@
 "use client";
 
+import { DeleteOutlined, EditOutlined } from "@ant-design/icons";
 import type { ProColumns } from "@ant-design/pro-components";
 import dayjs from "dayjs";
-import { Button, Tag } from "antd";
+import { Button, Tag, Tooltip } from "antd";
 
 import type { UserRecord } from "../_lib/users";
 
@@ -69,28 +70,28 @@ export function getUserColumns(
     {
       title: "操作",
       valueType: "option",
-      width: 120,
+      width: 84,
       fixed: "right",
       search: false,
       render: (_, record) => [
-        <Button
-          key="edit"
-          type="link"
-          size="small"
-          onClick={() => onEdit(record)}
-        >
-          编辑
-        </Button>,
-        <Button
-          key="delete"
-          type="link"
-          size="small"
-          danger
-          loading={isDeleting(record)}
-          onClick={() => onDelete(record)}
-        >
-          删除
-        </Button>,
+        <Tooltip key="edit" title="编辑">
+          <Button
+            type="text"
+            size="small"
+            icon={<EditOutlined />}
+            onClick={() => onEdit(record)}
+          />
+        </Tooltip>,
+        <Tooltip key="delete" title="删除">
+          <Button
+            type="text"
+            size="small"
+            danger
+            icon={<DeleteOutlined />}
+            loading={isDeleting(record)}
+            onClick={() => onDelete(record)}
+          />
+        </Tooltip>,
       ],
     },
   ];

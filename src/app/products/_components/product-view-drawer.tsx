@@ -161,8 +161,13 @@ export default function ProductViewDrawer({
             },
             {
               key: "pcs_per_carton",
-              label: "装箱数量(pcs/箱）",
+              label: "装箱数",
               children: record?.pcs_per_carton ?? <EmptyText />,
+            },
+            {
+              key: "product_category",
+              label: "产品类别",
+              children: renderText(record?.product_category),
             },
             {
               key: "product_parameters",

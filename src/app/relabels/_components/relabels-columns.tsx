@@ -1,5 +1,6 @@
+import { EditOutlined } from "@ant-design/icons";
 import type { ProColumns } from "@ant-design/pro-components";
-import { Button, Select, Tag, Typography } from "antd";
+import { Button, Select, Tag, Tooltip, Typography } from "antd";
 
 import {
   canEditRelabelDeliveryStatus,
@@ -151,13 +152,18 @@ export function getRelabelColumns(
     {
       title: "操作",
       valueType: "option",
-      width: 96,
+      width: 64,
       fixed: "right",
       search: false,
       render: (_, record) => (
-        <Button type="link" size="small" onClick={() => onEdit(record)}>
-          编辑
-        </Button>
+        <Tooltip title="编辑">
+          <Button
+            type="text"
+            size="small"
+            icon={<EditOutlined />}
+            onClick={() => onEdit(record)}
+          />
+        </Tooltip>
       ),
     },
   ];

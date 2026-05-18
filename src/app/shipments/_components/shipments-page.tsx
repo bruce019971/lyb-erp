@@ -1,19 +1,27 @@
 "use client";
 
 import type { ActionType } from "@ant-design/pro-components";
-import { App as AntApp, ConfigProvider } from "antd";
+import { ExclamationCircleFilled } from "@ant-design/icons";
+import type { FormInstance } from "antd";
+import { App as AntApp, ConfigProvider, Modal, message } from "antd";
 import zhCN from "antd/locale/zh_CN";
 import dayjs from "dayjs";
 import "dayjs/locale/zh-cn";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-import type { ShipmentRecord } from "../_lib/shipments";
+import type { ShipmentOption, ShipmentRecord } from "../_lib/shipments";
 import type { ProductShipmentOption } from "../../products/_lib/products";
 import { requestProductShipmentOptions } from "../../products/_lib/products-request";
 import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
 import { requestLogisticsProviderOptions } from "../../logistics/_lib/logistics-request";
 import type { StoreOption } from "../../stores/_lib/stores";
 import { requestStoreOptions } from "../../stores/_lib/stores-request";
+import {
+  deleteShipmentRecord,
+  markShipmentDeliveryStatusAsYes,
+  requestShipmentOptions,
+} from "../_lib/shipments-request";
 import ShipmentCreateDrawer from "./shipment-create-drawer";
 import ShipmentEditDrawer from "./shipment-edit-drawer";
 import ShipmentsTable from "./shipments-table";
@@ -26,12 +34,21 @@ type ShipmentsPageProps = {
 dayjs.locale("zh-cn");
 
 export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) {
+  const searchParams = useSearchParams();
   const [mounted, setMounted] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<
     ShipmentRecord | undefined
   >(undefined);
+  const [deletingShipmentId, setDeletingShipmentId] = useState<string | null>(null);
+  const [editingDeliveryStatusId, setEditingDeliveryStatusId] = useState<
+    string | null
+  >(null);
+  const [updatingDeliveryStatusId, setUpdatingDeliveryStatusId] = useState<
+    string | null
+  >(null);
+  const [shipmentOptions, setShipmentOptions] = useState<ShipmentOption[]>([]);
   const [storeOptions, setStoreOptions] = useState<StoreOption[]>([]);
   const [productOptions, setProductOptions] = useState<ProductShipmentOption[]>(
     [],
@@ -39,7 +56,10 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
   const [logisticsOptions, setLogisticsOptions] = useState<
     LogisticsProviderOption[]
   >([]);
+  const [messageApi, contextHolder] = message.useMessage();
+  const [modalApi, modalContextHolder] = Modal.useModal();
   const tableActionRef = useRef<ActionType>(undefined);
+  const searchFormRef = useRef<FormInstance>(undefined);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setMounted(true), 0);
@@ -53,13 +73,17 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
 
     async function loadOptions() {
       try {
-        const [stores, products, logisticsProviders] = await Promise.all([
+        const [shipments, stores, products, logisticsProviders] = await Promise.all([
+          requestShipmentOptions(),
           requestStoreOptions(),
           requestProductShipmentOptions(),
           requestLogisticsProviderOptions(),
         ]);
 
         if (!cancelled) {
+          setShipmentOptions(
+            shipments.filter((item) => item.shipment_no?.trim()),
+          );
           setStoreOptions(
             stores.filter((item) => item.seller_name?.trim()),
           );
@@ -72,6 +96,7 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
         }
       } catch {
         if (!cancelled) {
+          setShipmentOptions([]);
           setStoreOptions([]);
           setProductOptions([]);
           setLogisticsOptions([]);
@@ -86,6 +111,83 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
     };
   }, [mounted]);
 
+  useEffect(() => {
+    if (!mounted) return;
+
+    const shipmentNo = searchParams.get("shipment_no")?.trim();
+
+    if (!shipmentNo) {
+      return;
+    }
+
+    searchFormRef.current?.setFieldsValue({
+      shipment_no: [shipmentNo],
+    });
+    searchFormRef.current?.submit?.();
+  }, [mounted, searchParams]);
+
+  function isDeleting(record: ShipmentRecord) {
+    return deletingShipmentId === record.id;
+  }
+
+  function isDeliveryStatusEditing(record: ShipmentRecord) {
+    return editingDeliveryStatusId === record.id;
+  }
+
+  function isDeliveryStatusUpdating(record: ShipmentRecord) {
+    return updatingDeliveryStatusId === record.id;
+  }
+
+  async function handleChangeDeliveryStatus(
+    record: ShipmentRecord,
+    value: string,
+  ) {
+    if (value !== "是" || record.delivery_status === "是") {
+      setEditingDeliveryStatusId(null);
+      return;
+    }
+
+    try {
+      setUpdatingDeliveryStatusId(record.id);
+      await markShipmentDeliveryStatusAsYes(record);
+      messageApi.success("已更新为“是”");
+      setEditingDeliveryStatusId(null);
+      tableActionRef.current?.reload();
+    } catch (error) {
+      const description =
+        error instanceof Error ? error.message : "请检查数据库权限或记录状态";
+      messageApi.error(`状态更新失败：${description}`);
+    } finally {
+      setUpdatingDeliveryStatusId(null);
+    }
+  }
+
+  function handleDelete(record: ShipmentRecord) {
+    modalApi.confirm({
+      title: "提示",
+      icon: <ExclamationCircleFilled className="!text-amber-500" />,
+      content: "此操作将永久删除该货件，是否继续？",
+      okText: "确定",
+      cancelText: "取消",
+      centered: true,
+      onOk: async () => {
+        try {
+          setDeletingShipmentId(record.id);
+          await deleteShipmentRecord(record.id);
+          messageApi.success("货件删除成功");
+          tableActionRef.current?.reload();
+        } catch (error) {
+          const description =
+            error instanceof Error ? error.message : "请检查数据库权限或字段内容";
+          messageApi.error(`货件删除失败：${description}`);
+          throw error;
+        } finally {
+          setDeletingShipmentId(null);
+        }
+      },
+    });
+  }
+
   return (
     <ConfigProvider
       locale={zhCN}
@@ -97,6 +199,8 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
       }}
     >
       <AntApp>
+        {contextHolder}
+        {modalContextHolder}
         <main
           className={
             embedded
@@ -108,11 +212,26 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
             {mounted ? (
               <ShipmentsTable
                 actionRef={tableActionRef}
+                formRef={searchFormRef}
                 onCreate={() => setCreateOpen(true)}
                 onEdit={(record) => {
                   setEditingRecord(record);
                   setEditOpen(true);
                 }}
+                onDelete={(record) => void handleDelete(record)}
+                onStartDeliveryStatusEdit={(record) =>
+                  setEditingDeliveryStatusId(record.id)
+                }
+                onCancelDeliveryStatusEdit={() =>
+                  setEditingDeliveryStatusId(null)
+                }
+                onChangeDeliveryStatus={(record, value) =>
+                  void handleChangeDeliveryStatus(record, value)
+                }
+                isDeliveryStatusEditing={isDeliveryStatusEditing}
+                isDeliveryStatusUpdating={isDeliveryStatusUpdating}
+                isDeleting={isDeleting}
+                shipmentOptions={shipmentOptions}
                 storeOptions={storeOptions}
                 productOptions={productOptions}
                 logisticsOptions={logisticsOptions}

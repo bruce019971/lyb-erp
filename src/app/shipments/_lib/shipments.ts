@@ -1,3 +1,5 @@
+import dayjs from "dayjs";
+
 export type ShipmentRecord = {
   id: string;
   order_store: string | null;
@@ -11,11 +13,9 @@ export type ShipmentRecord = {
   warehouse_arrived_status: string | null;
   overseas_warehouse_arrived_at: string | null;
   appointment_time: string | null;
-  first_leg_unit_cost: number | null;
-  first_leg_batch_fee: number | null;
+  delivery_status: string | null;
   goods_value: number | null;
-  freight_unit_price: number | null;
-  volume: number | null;
+  is_delivery_completed?: boolean;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -32,11 +32,8 @@ export type ShipmentUpdateValues = {
   warehouse_arrived_status?: string | null;
   overseas_warehouse_arrived_at?: string | null;
   appointment_time?: string | null;
-  first_leg_unit_cost?: number | null;
-  first_leg_batch_fee?: number | null;
+  delivery_status?: string | null;
   goods_value?: number | null;
-  freight_unit_price?: number | null;
-  volume?: number | null;
 };
 
 export type ShipmentCreateValues = ShipmentUpdateValues;
@@ -64,4 +61,24 @@ export const shipmentDateFields = [
 export function formatShipmentDate(value?: string | null) {
   if (!value) return "";
   return value.slice(0, 10);
+}
+
+export function canEditShipmentDeliveryStatus(record: ShipmentRecord) {
+  if (record.delivery_status === "是") return false;
+  if (!record.appointment_time) return false;
+
+  const today = dayjs().startOf("day");
+  const appointmentDate = dayjs(record.appointment_time).startOf("day");
+
+  return appointmentDate.diff(today, "day") <= 0;
+}
+
+export function isShipmentDeliveryOverdue(record: ShipmentRecord) {
+  if (record.delivery_status === "是") return false;
+  if (!record.appointment_time) return false;
+
+  const today = dayjs().startOf("day");
+  const appointmentDate = dayjs(record.appointment_time).startOf("day");
+
+  return appointmentDate.diff(today, "day") <= 0;
 }

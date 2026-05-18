@@ -3,28 +3,38 @@
 import { PlusOutlined } from "@ant-design/icons";
 import type { ActionType } from "@ant-design/pro-components";
 import { ProTable } from "@ant-design/pro-components";
+import type { FormInstance } from "antd";
 import { Button, Spin, Tooltip } from "antd";
 import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { requestShipmentRecords } from "../_lib/shipments-request";
 import { getShipmentColumns } from "./shipments-columns";
-import type { ShipmentRecord } from "../_lib/shipments";
+import type { ShipmentOption, ShipmentRecord } from "../_lib/shipments";
 import type { ProductShipmentOption } from "../../products/_lib/products";
 import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
 import type { StoreOption } from "../../stores/_lib/stores";
 
 type ShipmentsTableProps = {
   actionRef?: MutableRefObject<ActionType | undefined>;
+  formRef?: MutableRefObject<FormInstance | undefined>;
   onCreate: () => void;
   onEdit: (record: ShipmentRecord) => void;
+  onDelete: (record: ShipmentRecord) => void;
+  onStartDeliveryStatusEdit: (record: ShipmentRecord) => void;
+  onCancelDeliveryStatusEdit: () => void;
+  onChangeDeliveryStatus: (record: ShipmentRecord, value: string) => void;
+  isDeliveryStatusEditing: (record: ShipmentRecord) => boolean;
+  isDeliveryStatusUpdating: (record: ShipmentRecord) => boolean;
+  isDeleting: (record: ShipmentRecord) => boolean;
+  shipmentOptions: ShipmentOption[];
   storeOptions: StoreOption[];
   productOptions: ProductShipmentOption[];
   logisticsOptions: LogisticsProviderOption[];
 };
 
 const STORAGE_PREFIX = "mercado-inbound-planning:shipments";
-const COLUMNS_STATE_STORAGE_KEY = `${STORAGE_PREFIX}:columns:v1`;
+const COLUMNS_STATE_STORAGE_KEY = `${STORAGE_PREFIX}:columns:v2`;
 const PAGE_SIZE = 40;
 
 function mergeShipmentsById(
@@ -46,16 +56,51 @@ function mergeShipmentsById(
 
 export default function ShipmentsTable({
   actionRef,
+  formRef,
   onCreate,
   onEdit,
+  onDelete,
+  onStartDeliveryStatusEdit,
+  onCancelDeliveryStatusEdit,
+  onChangeDeliveryStatus,
+  isDeliveryStatusEditing,
+  isDeliveryStatusUpdating,
+  isDeleting,
+  shipmentOptions,
   storeOptions,
   productOptions,
   logisticsOptions,
 }: ShipmentsTableProps) {
   const columns = useMemo(
     () =>
-      getShipmentColumns(onEdit, storeOptions, productOptions, logisticsOptions),
-    [logisticsOptions, onEdit, productOptions, storeOptions],
+      getShipmentColumns(
+        onEdit,
+        onDelete,
+        onStartDeliveryStatusEdit,
+        onCancelDeliveryStatusEdit,
+        onChangeDeliveryStatus,
+        isDeliveryStatusEditing,
+        isDeliveryStatusUpdating,
+        isDeleting,
+        shipmentOptions,
+        storeOptions,
+        productOptions,
+        logisticsOptions,
+      ),
+    [
+      isDeleting,
+      isDeliveryStatusEditing,
+      isDeliveryStatusUpdating,
+      logisticsOptions,
+      onCancelDeliveryStatusEdit,
+      onChangeDeliveryStatus,
+      onDelete,
+      onEdit,
+      onStartDeliveryStatusEdit,
+      productOptions,
+      shipmentOptions,
+      storeOptions,
+    ],
   );
   const searchParamsRef = useRef<Record<string, unknown>>({});
   const loadingRef = useRef(true);
@@ -155,11 +200,17 @@ export default function ShipmentsTable({
 
   return (
     <ProTable<ShipmentRecord>
+      formRef={formRef}
       rowKey="id"
       size="small"
       columns={columns}
       dataSource={dataSource}
       loading={loading}
+      rowClassName={(record) =>
+        record.is_delivery_completed ? "shipment-delivered-row" : ""
+      }
+      tableAlertRender={false}
+      tableAlertOptionRender={false}
       columnsState={{
         persistenceKey: COLUMNS_STATE_STORAGE_KEY,
         persistenceType: "localStorage",

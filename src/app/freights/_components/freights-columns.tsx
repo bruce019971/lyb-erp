@@ -1,11 +1,14 @@
+import { EditOutlined } from "@ant-design/icons";
 import type { ProColumns } from "@ant-design/pro-components";
-import { Button, Tag, Typography } from "antd";
+import { Button, Tag, Tooltip, Typography } from "antd";
 
 import type { FreightRecord } from "../_lib/freights";
+import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
+import type { ShipmentOption } from "../../shipments/_lib/shipments";
 
 function PaymentTag({ value }: { value?: string | null }) {
   if (value === "是") {
-    return <Tag className="border-emerald-200 bg-emerald-50 text-emerald-700">是</Tag>;
+    return <Tag className="border-[#b7eb8f] bg-[#f6ffed] text-[#389e0d]">是</Tag>;
   }
 
   if (value === "否") {
@@ -15,21 +18,66 @@ function PaymentTag({ value }: { value?: string | null }) {
   return <span />;
 }
 
+function openShipmentPage(shipmentNo?: string | null) {
+  const trimmedShipmentNo = shipmentNo?.trim();
+  const params = new URLSearchParams();
+
+  if (trimmedShipmentNo) {
+    params.set("shipment_no", trimmedShipmentNo);
+  }
+
+  const href = params.size ? `/shipments?${params.toString()}` : "/shipments";
+  window.history.pushState(null, "", href);
+}
+
 export function getFreightColumns(
   onEdit: (record: FreightRecord) => void,
+  shipmentOptions: ShipmentOption[],
+  logisticsOptions: LogisticsProviderOption[],
 ): ProColumns<FreightRecord>[] {
+  const shipmentSelectOptions = Array.from(
+    new Set(
+      shipmentOptions
+        .map((item) => item.shipment_no?.trim())
+        .filter((item): item is string => Boolean(item)),
+    ),
+  ).map((item) => ({
+    label: item,
+    value: item,
+  }));
+  const logisticsSelectOptions = Array.from(
+    new Set(
+      logisticsOptions
+        .map((item) => item.provider_name?.trim())
+        .filter((item): item is string => Boolean(item)),
+    ),
+  ).map((item) => ({
+    label: item,
+    value: item,
+  }));
+
   return [
     {
       title: "货件号",
       dataIndex: "shipment_no",
       width: 180,
       fixed: "left",
+      valueType: "select",
+      fieldProps: {
+        mode: "multiple",
+        showSearch: true,
+        optionFilterProp: "label",
+        placeholder: "请选择货件号",
+        options: shipmentSelectOptions,
+      },
       render: (_, record) => (
         <Typography.Text
           className="whitespace-nowrap"
           copyable={record.shipment_no ? { text: record.shipment_no } : false}
         >
-          {record.shipment_no ?? ""}
+          <Typography.Link onClick={() => openShipmentPage(record.shipment_no)}>
+            {record.shipment_no ?? ""}
+          </Typography.Link>
         </Typography.Text>
       ),
     },
@@ -38,12 +86,14 @@ export function getFreightColumns(
       dataIndex: "logistics_provider",
       width: 160,
       ellipsis: true,
-    },
-    {
-      title: "产品名称",
-      dataIndex: "product_name",
-      width: 200,
-      ellipsis: true,
+      valueType: "select",
+      fieldProps: {
+        mode: "multiple",
+        showSearch: true,
+        optionFilterProp: "label",
+        placeholder: "请选择物流商",
+        options: logisticsSelectOptions,
+      },
     },
     {
       title: "运费单价",
@@ -86,13 +136,18 @@ export function getFreightColumns(
     {
       title: "操作",
       valueType: "option",
-      width: 96,
+      width: 64,
       fixed: "right",
       search: false,
       render: (_, record) => (
-        <Button type="link" size="small" onClick={() => onEdit(record)}>
-          编辑
-        </Button>
+        <Tooltip title="编辑">
+          <Button
+            type="text"
+            size="small"
+            icon={<EditOutlined />}
+            onClick={() => onEdit(record)}
+          />
+        </Tooltip>
       ),
     },
   ];

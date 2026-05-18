@@ -3,6 +3,7 @@
 import { DownloadOutlined, PlusOutlined } from "@ant-design/icons";
 import type { ActionType } from "@ant-design/pro-components";
 import { ProTable } from "@ant-design/pro-components";
+import type { FormInstance } from "antd";
 import { App, Button, Tooltip, Typography } from "antd";
 import type { Key, MutableRefObject } from "react";
 import { useState } from "react";
@@ -13,6 +14,7 @@ import { getProductColumns } from "./products-columns";
 
 type ProductsTableProps = {
   actionRef?: MutableRefObject<ActionType | undefined>;
+  formRef?: MutableRefObject<FormInstance | undefined>;
   onCreate: () => void;
   onView: (record: ProductRecord) => void;
   onEdit: (record: ProductRecord) => void;
@@ -23,6 +25,7 @@ type ProductsTableProps = {
 
 export default function ProductsTable({
   actionRef,
+  formRef,
   onCreate,
   onView,
   onEdit,
@@ -107,6 +110,7 @@ export default function ProductsTable({
   return (
     <ProTable<ProductRecord>
       actionRef={actionRef}
+      formRef={formRef}
       rowKey="id"
       rowSelection={{
         type: "radio",

@@ -7,6 +7,10 @@ import dayjs from "dayjs";
 import "dayjs/locale/zh-cn";
 import { useEffect, useRef, useState } from "react";
 
+import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
+import { requestLogisticsProviderOptions } from "../../logistics/_lib/logistics-request";
+import type { ShipmentOption } from "../../shipments/_lib/shipments";
+import { requestShipmentOptions } from "../../shipments/_lib/shipments-request";
 import ShipmentsTableSkeleton from "../../shipments/_components/shipments-table-skeleton";
 import type { FreightRecord } from "../_lib/freights";
 import FreightsEditDrawer from "./freights-edit-drawer";
@@ -20,12 +24,49 @@ export default function FreightsPage() {
   const [editingRecord, setEditingRecord] = useState<FreightRecord | undefined>(
     undefined,
   );
+  const [shipmentOptions, setShipmentOptions] = useState<ShipmentOption[]>([]);
+  const [logisticsOptions, setLogisticsOptions] = useState<
+    LogisticsProviderOption[]
+  >([]);
   const tableActionRef = useRef<ActionType>(undefined);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setMounted(true), 0);
     return () => window.clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+
+    let cancelled = false;
+
+    async function loadOptions() {
+      try {
+        const [shipments, logisticsProviders] = await Promise.all([
+          requestShipmentOptions(),
+          requestLogisticsProviderOptions(),
+        ]);
+
+        if (!cancelled) {
+          setShipmentOptions(shipments.filter((item) => item.shipment_no?.trim()));
+          setLogisticsOptions(
+            logisticsProviders.filter((item) => item.provider_name?.trim()),
+          );
+        }
+      } catch {
+        if (!cancelled) {
+          setShipmentOptions([]);
+          setLogisticsOptions([]);
+        }
+      }
+    }
+
+    void loadOptions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [mounted]);
 
   return (
     <ConfigProvider
@@ -38,11 +79,13 @@ export default function FreightsPage() {
       }}
     >
       <App>
-        <main className="h-full overflow-auto bg-slate-100 px-6 py-6">
-          <section className="mx-auto flex max-w-[1600px] flex-col gap-4">
+        <main className="h-full overflow-hidden bg-slate-100 px-6 py-6">
+          <section className="mx-auto flex h-full min-h-0 max-w-[1600px] flex-col gap-4">
             {mounted ? (
               <FreightsTable
                 actionRef={tableActionRef}
+                shipmentOptions={shipmentOptions}
+                logisticsOptions={logisticsOptions}
                 onEdit={(record) => {
                   setEditingRecord(record);
                   setEditOpen(true);

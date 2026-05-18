@@ -1,6 +1,6 @@
 "use client";
 
-import { App, Button, Drawer, Form, Input, InputNumber, Select, Space } from "antd";
+import { App, Button, Drawer, Form, InputNumber, Select, Space } from "antd";
 import type { FormProps } from "antd";
 import { useEffect, useState } from "react";
 
@@ -52,7 +52,7 @@ export default function FreightsEditDrawer({
 
     try {
       setSubmitting(true);
-      await updateFreightRecord(record.id, record, values);
+      await updateFreightRecord(record.id, values);
       message.success("运费信息修改成功");
       onUpdated();
     } catch (error) {
@@ -123,10 +123,6 @@ export default function FreightsEditDrawer({
               { label: "是", value: "是" },
             ]}
           />
-        </Form.Item>
-
-        <Form.Item label="产品总数">
-          <Input value={record?.total_qty ?? ""} readOnly disabled />
         </Form.Item>
       </Form>
     </Drawer>

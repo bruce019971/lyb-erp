@@ -1,5 +1,6 @@
+import { DeleteOutlined, EditOutlined, EyeOutlined } from "@ant-design/icons";
 import type { ProColumns } from "@ant-design/pro-components";
-import { Button, Image, Typography } from "antd";
+import { Button, Image, Tooltip, Typography } from "antd";
 
 import type { ProductFilterOption, ProductRecord } from "../_lib/products";
 
@@ -96,6 +97,7 @@ export function getProductColumns(
     {
       title: "产品ID/SKU",
       dataIndex: "product_id",
+      hideInTable: true,
       width: 200,
       search: false,
       render: (_, record) => (
@@ -124,7 +126,7 @@ export function getProductColumns(
     {
       title: "ML Code",
       dataIndex: "ml_code",
-      width: 110,
+      width: 150,
       search: false,
       copyable: true,
     },
@@ -156,6 +158,20 @@ export function getProductColumns(
       valueType: "digit",
       width: 100,
       search: false,
+    },
+    {
+      title: "海关编码",
+      dataIndex: "customs_code",
+      width: 120,
+      search: false,
+      copyable: true,
+    },
+    {
+      title: "产品类别",
+      dataIndex: "product_category",
+      width: 120,
+      search: false,
+      ellipsis: true,
     },
     {
       title: "产品单价",
@@ -201,25 +217,36 @@ export function getProductColumns(
     {
       title: "操作",
       valueType: "option",
-      width: 180,
+      width: 120,
       fixed: "right",
       render: (_, record) => (
-        <>
-          <Button type="link" size="small" onClick={() => onView(record)}>
-            查看
-          </Button>
-          <Button type="link" size="small" onClick={() => onEdit(record)}>
-            编辑
-          </Button>
-          <Button
-            type="link"
-            size="small"
-            danger
-            onClick={() => onDelete(record)}
-          >
-            删除
-          </Button>
-        </>
+        <div className="flex items-center gap-1">
+          <Tooltip title="查看">
+            <Button
+              type="text"
+              size="small"
+              icon={<EyeOutlined />}
+              onClick={() => onView(record)}
+            />
+          </Tooltip>
+          <Tooltip title="编辑">
+            <Button
+              type="text"
+              size="small"
+              icon={<EditOutlined />}
+              onClick={() => onEdit(record)}
+            />
+          </Tooltip>
+          <Tooltip title="删除">
+            <Button
+              type="text"
+              size="small"
+              danger
+              icon={<DeleteOutlined />}
+              onClick={() => onDelete(record)}
+            />
+          </Tooltip>
+        </div>
       ),
     },
   ];
