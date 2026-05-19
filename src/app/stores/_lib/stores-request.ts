@@ -81,23 +81,14 @@ function normalizeTextValue(value?: string | null) {
   return trimmed ? trimmed : null;
 }
 
-function normalizeNumberValue(value?: number | null) {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
 export async function createStoreRecord(values: StoreCreateValues) {
   const payload = {
     seller_id: values.seller_id.trim(),
     seller_name: values.seller_name.trim(),
+    seller_alias: values.seller_alias.trim(),
     seller_code: generateStoreCode(values.seller_name),
     seller_address: buildStoreUrl(values.seller_id),
     seller_type: normalizeTextValue(values.seller_type) ?? "CBT",
-    product_label_unit_price: normalizeNumberValue(
-      values.product_label_unit_price,
-    ),
-    carton_label_unit_price: normalizeNumberValue(
-      values.carton_label_unit_price,
-    ),
   };
 
   const { data, error } = await supabase
@@ -117,15 +108,10 @@ export async function updateStoreRecord(id: string, values: StoreUpdateValues) {
   const payload = {
     seller_id: values.seller_id.trim(),
     seller_name: values.seller_name.trim(),
+    seller_alias: values.seller_alias.trim(),
     seller_code: generateStoreCode(values.seller_name),
     seller_address: buildStoreUrl(values.seller_id),
     seller_type: normalizeTextValue(values.seller_type) ?? "CBT",
-    product_label_unit_price: normalizeNumberValue(
-      values.product_label_unit_price,
-    ),
-    carton_label_unit_price: normalizeNumberValue(
-      values.carton_label_unit_price,
-    ),
   };
 
   const { data, error } = await supabase
@@ -146,7 +132,7 @@ export async function requestStoreOptions() {
   const { data, error } = await supabase
     .from("stores")
     .select(
-      "id, seller_id, seller_name, seller_address, product_label_unit_price, carton_label_unit_price",
+      "id, seller_id, seller_name, seller_alias, seller_code, seller_address, seller_type",
     )
     .order("seller_name", { ascending: true });
 
@@ -160,7 +146,7 @@ export async function requestStoreOptions() {
 
   const { data: fallbackData, error: fallbackError } = await supabase
     .from("stores")
-    .select("id, seller_id, seller_name, seller_address")
+    .select("id, seller_id, seller_name, seller_code, seller_address, seller_type")
     .order("seller_name", { ascending: true });
 
   if (fallbackError) {

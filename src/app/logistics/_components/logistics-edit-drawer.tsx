@@ -1,6 +1,6 @@
 "use client";
 
-import { App, Button, Drawer, Form, Input, Space } from "antd";
+import { App, Button, Drawer, Form, Input, InputNumber, Space } from "antd";
 import type { FormProps } from "antd";
 import { useEffect, useState } from "react";
 
@@ -28,6 +28,15 @@ function getErrorMessage(error: unknown) {
   return "请检查数据库权限或字段内容";
 }
 
+function toNumberInputValue(value?: number | string | null) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
 export default function LogisticsEditDrawer({
   open,
   record,
@@ -46,6 +55,12 @@ export default function LogisticsEditDrawer({
       system_url: record.system_url ?? "",
       username: record.username ?? "",
       password: record.password ?? "",
+      product_label_unit_price: toNumberInputValue(
+        record.product_label_unit_price,
+      ),
+      carton_label_unit_price: toNumberInputValue(
+        record.carton_label_unit_price,
+      ),
     });
   }, [form, open, record]);
 
@@ -118,6 +133,50 @@ export default function LogisticsEditDrawer({
 
         <Form.Item label="密码" name="password">
           <Input.Password placeholder="请输入密码" maxLength={200} />
+        </Form.Item>
+
+        <Form.Item
+          label="产品标单价"
+          name="product_label_unit_price"
+          rules={[
+            {
+              validator: async (_, value?: number | null) => {
+                if (value === undefined || value === null) return;
+                if (!Number.isFinite(value) || value < 0) {
+                  throw new Error("产品标单价不能小于0");
+                }
+              },
+            },
+          ]}
+        >
+          <InputNumber
+            className="!w-full"
+            min={0}
+            precision={2}
+            placeholder="请输入产品标单价"
+          />
+        </Form.Item>
+
+        <Form.Item
+          label="外箱标单价"
+          name="carton_label_unit_price"
+          rules={[
+            {
+              validator: async (_, value?: number | null) => {
+                if (value === undefined || value === null) return;
+                if (!Number.isFinite(value) || value < 0) {
+                  throw new Error("外箱标单价不能小于0");
+                }
+              },
+            },
+          ]}
+        >
+          <InputNumber
+            className="!w-full"
+            min={0}
+            precision={2}
+            placeholder="请输入外箱标单价"
+          />
         </Form.Item>
       </Form>
     </Drawer>

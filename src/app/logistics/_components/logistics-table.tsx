@@ -28,7 +28,7 @@ export default function LogisticsTable({
       actionRef={actionRef}
       rowKey="id"
       columns={getLogisticsProviderColumns(onEdit)}
-      scroll={{ x: 620 }}
+      scroll={{ x: 860 }}
       search={false}
       options={false}
       toolBarRender={() => [

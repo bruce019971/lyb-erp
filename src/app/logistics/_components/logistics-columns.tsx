@@ -22,7 +22,7 @@ export function getLogisticsProviderColumns(
     {
       title: "物流商",
       dataIndex: "provider_name",
-      width: 320,
+      width: 260,
       ellipsis: true,
       render: (_, record) => {
         const href = getSystemHref(record.system_url);
@@ -39,6 +39,26 @@ export function getLogisticsProviderColumns(
           <EmptyText />
         );
       },
+    },
+    {
+      title: "产品标单价",
+      dataIndex: "product_label_unit_price",
+      width: 120,
+      search: false,
+      render: (_, record) =>
+        typeof record.product_label_unit_price === "number"
+          ? record.product_label_unit_price.toFixed(2)
+          : "",
+    },
+    {
+      title: "外箱标单价",
+      dataIndex: "carton_label_unit_price",
+      width: 120,
+      search: false,
+      render: (_, record) =>
+        typeof record.carton_label_unit_price === "number"
+          ? record.carton_label_unit_price.toFixed(2)
+          : "",
     },
     {
       title: "操作",

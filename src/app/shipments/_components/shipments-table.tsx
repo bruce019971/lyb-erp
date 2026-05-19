@@ -1,10 +1,10 @@
 "use client";
 
-import { PlusOutlined } from "@ant-design/icons";
+import { DownloadOutlined, PlusOutlined } from "@ant-design/icons";
 import type { ActionType } from "@ant-design/pro-components";
 import { ProTable } from "@ant-design/pro-components";
 import type { FormInstance } from "antd";
-import { Button, Spin, Tooltip } from "antd";
+import { App, Button, Spin, Tooltip } from "antd";
 import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -14,6 +14,7 @@ import type { ShipmentOption, ShipmentRecord } from "../_lib/shipments";
 import type { ProductShipmentOption } from "../../products/_lib/products";
 import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
 import type { StoreOption } from "../../stores/_lib/stores";
+import { downloadShipmentCartonLabel } from "../_lib/carton-label";
 
 type ShipmentsTableProps = {
   actionRef?: MutableRefObject<ActionType | undefined>;
@@ -81,6 +82,19 @@ export default function ShipmentsTable({
   productOptions,
   logisticsOptions,
 }: ShipmentsTableProps) {
+  const { message } = App.useApp();
+  const handleDownloadCartonLabel = useCallback(
+    async (record: ShipmentRecord) => {
+      try {
+        await downloadShipmentCartonLabel(record, storeOptions);
+      } catch (error) {
+        message.error(
+          error instanceof Error ? error.message : "外箱标签下载失败",
+        );
+      }
+    },
+    [message, storeOptions],
+  );
   const columns = useMemo(
     () =>
       getShipmentColumns(
@@ -132,6 +146,8 @@ export default function ShipmentsTable({
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedShipment, setSelectedShipment] =
+    useState<ShipmentRecord | null>(null);
 
   const loadPage = useCallback(
     async (
@@ -164,6 +180,9 @@ export default function ShipmentsTable({
         setDataSource((current) =>
           append ? mergeShipmentsById(current, nextData) : nextData,
         );
+        if (!append) {
+          setSelectedShipment(null);
+        }
         currentPageRef.current = page;
         setCurrentPage(page);
         hasMoreRef.current = nextData.length >= PAGE_SIZE;
@@ -226,6 +245,18 @@ export default function ShipmentsTable({
       columns={columns}
       dataSource={dataSource}
       loading={loading}
+      rowSelection={{
+        type: "radio",
+        selectedRowKeys: selectedShipment ? [selectedShipment.id] : [],
+        onChange: (_, rows) => {
+          setSelectedShipment(rows[0] ?? null);
+        },
+      }}
+      onRow={(record) => ({
+        onClick: () => {
+          setSelectedShipment(record);
+        },
+      })}
       rowClassName={(record) =>
         record.is_delivery_completed ? "shipment-delivered-row" : ""
       }
@@ -263,11 +294,27 @@ export default function ShipmentsTable({
         reload: false,
         setting: true,
       }}
-      toolBarRender={() => [
-        <Tooltip key="create" title="新增货件">
-          <Button type="text" icon={<PlusOutlined />} onClick={onCreate} />
-        </Tooltip>,
-      ]}
+      toolBarRender={() => {
+        const actions = [
+          <Tooltip key="create" title="新增货件">
+            <Button type="text" icon={<PlusOutlined />} onClick={onCreate} />
+          </Tooltip>,
+        ];
+
+        if (selectedShipment) {
+          actions.push(
+            <Tooltip key="download-carton-label" title="下载外箱标签">
+              <Button
+                type="text"
+                icon={<DownloadOutlined />}
+                onClick={() => handleDownloadCartonLabel(selectedShipment)}
+              />
+            </Tooltip>,
+          );
+        }
+
+        return actions;
+      }}
       pagination={false}
       dateFormatter="string"
       tableRender={(_, dom) => (

@@ -1,6 +1,6 @@
 "use client";
 
-import { App, Button, Drawer, Form, Input, Space } from "antd";
+import { App, Button, Drawer, Form, Input, InputNumber, Space } from "antd";
 import type { FormProps } from "antd";
 import { useState } from "react";
 
@@ -91,6 +91,50 @@ export default function LogisticsCreateDrawer({
 
         <Form.Item label="密码" name="password">
           <Input.Password placeholder="请输入密码" maxLength={200} />
+        </Form.Item>
+
+        <Form.Item
+          label="产品标单价"
+          name="product_label_unit_price"
+          rules={[
+            {
+              validator: async (_, value?: number | null) => {
+                if (value === undefined || value === null) return;
+                if (!Number.isFinite(value) || value < 0) {
+                  throw new Error("产品标单价不能小于0");
+                }
+              },
+            },
+          ]}
+        >
+          <InputNumber
+            className="!w-full"
+            min={0}
+            precision={2}
+            placeholder="请输入产品标单价"
+          />
+        </Form.Item>
+
+        <Form.Item
+          label="外箱标单价"
+          name="carton_label_unit_price"
+          rules={[
+            {
+              validator: async (_, value?: number | null) => {
+                if (value === undefined || value === null) return;
+                if (!Number.isFinite(value) || value < 0) {
+                  throw new Error("外箱标单价不能小于0");
+                }
+              },
+            },
+          ]}
+        >
+          <InputNumber
+            className="!w-full"
+            min={0}
+            precision={2}
+            placeholder="请输入外箱标单价"
+          />
         </Form.Item>
       </Form>
     </Drawer>

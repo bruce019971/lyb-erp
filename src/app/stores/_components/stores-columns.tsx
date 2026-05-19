@@ -22,23 +22,34 @@ export function getStoreColumns(
       copyable: true,
     },
     {
-      title: "店铺名称",
+      title: "店铺名称/别名",
       dataIndex: "seller_name",
       width: 240,
       ellipsis: true,
       render: (_, record) => {
         const href = getStoreHref(record.seller_address);
-
-        return record.seller_name ? (
+        const sellerNameNode = record.seller_name ? (
           href ? (
             <Typography.Link href={href} target="_blank">
               {record.seller_name}
             </Typography.Link>
           ) : (
-            record.seller_name
+            <Typography.Text>{record.seller_name}</Typography.Text>
           )
         ) : (
           "-"
+        );
+
+        return (
+          <div className="flex min-w-0 flex-col gap-1">
+            <div className="truncate">{sellerNameNode}</div>
+            <Typography.Text
+              className="whitespace-nowrap"
+              type={record.seller_alias ? undefined : "secondary"}
+            >
+              {record.seller_alias || "-"}
+            </Typography.Text>
+          </div>
         );
       },
     },
@@ -59,26 +70,6 @@ export function getStoreColumns(
         CBT: { text: "CBT" },
         本土: { text: "本土" },
       },
-    },
-    {
-      title: "产品标单价",
-      dataIndex: "product_label_unit_price",
-      width: 120,
-      search: false,
-      render: (_, record) =>
-        typeof record.product_label_unit_price === "number"
-          ? record.product_label_unit_price.toFixed(2)
-          : "",
-    },
-    {
-      title: "外箱标单价",
-      dataIndex: "carton_label_unit_price",
-      width: 120,
-      search: false,
-      render: (_, record) =>
-        typeof record.carton_label_unit_price === "number"
-          ? record.carton_label_unit_price.toFixed(2)
-          : "",
     },
     {
       title: "操作",

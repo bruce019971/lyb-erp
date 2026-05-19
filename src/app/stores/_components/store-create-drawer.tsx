@@ -1,6 +1,6 @@
 "use client";
 
-import { App, Button, Drawer, Form, Input, InputNumber, Select, Space } from "antd";
+import { App, Button, Drawer, Form, Input, Select, Space } from "antd";
 import type { FormProps } from "antd";
 import { useEffect, useState } from "react";
 
@@ -97,6 +97,16 @@ export default function StoreCreateDrawer({
           <Input placeholder="请输入店铺名称" maxLength={200} showCount />
         </Form.Item>
 
+        <Form.Item
+          label="别名"
+          name="seller_alias"
+          rules={[
+            { required: true, whitespace: true, message: "请输入别名" },
+          ]}
+        >
+          <Input placeholder="请输入别名" maxLength={200} showCount />
+        </Form.Item>
+
         <Form.Item label="店铺Code" name="seller_code">
           <Input placeholder="根据店铺名称自动生成" readOnly disabled />
         </Form.Item>
@@ -110,49 +120,6 @@ export default function StoreCreateDrawer({
           />
         </Form.Item>
 
-        <Form.Item
-          label="产品标单价"
-          name="product_label_unit_price"
-          rules={[
-            {
-              validator: async (_, value?: number | null) => {
-                if (value === undefined || value === null) return;
-                if (!Number.isFinite(value) || value < 0) {
-                  throw new Error("产品标单价不能小于0");
-                }
-              },
-            },
-          ]}
-        >
-          <InputNumber
-            className="!w-full"
-            min={0}
-            precision={2}
-            placeholder="请输入产品标单价"
-          />
-        </Form.Item>
-
-        <Form.Item
-          label="外箱标单价"
-          name="carton_label_unit_price"
-          rules={[
-            {
-              validator: async (_, value?: number | null) => {
-                if (value === undefined || value === null) return;
-                if (!Number.isFinite(value) || value < 0) {
-                  throw new Error("外箱标单价不能小于0");
-                }
-              },
-            },
-          ]}
-        >
-          <InputNumber
-            className="!w-full"
-            min={0}
-            precision={2}
-            placeholder="请输入外箱标单价"
-          />
-        </Form.Item>
       </Form>
     </Drawer>
   );

@@ -72,25 +72,37 @@ export function getProductColumns(
         ),
     },
     {
-      title: "产品名称",
+      title: "产品名称/ML Code",
       dataIndex: "product_name",
-      width: 160,
+      width: 190,
       fixed: "left",
       ellipsis: true,
       search: false,
       render: (_, record) => {
         const href = record.product_url?.trim();
-
-        return record.product_name ? (
+        const productNameNode = record.product_name ? (
           href ? (
             <Typography.Link href={href} target="_blank">
               {record.product_name}
             </Typography.Link>
           ) : (
-            record.product_name
+            <Typography.Text>{record.product_name}</Typography.Text>
           )
         ) : (
           <EmptyText />
+        );
+
+        return (
+          <div className="flex min-w-0 flex-col gap-1">
+            <div className="truncate">{productNameNode}</div>
+            <Typography.Text
+              className="whitespace-nowrap"
+              copyable={record.ml_code ? { text: record.ml_code } : false}
+              type={record.ml_code ? undefined : "secondary"}
+            >
+              {record.ml_code || "-"}
+            </Typography.Text>
+          </div>
         );
       },
     },
@@ -122,13 +134,6 @@ export function getProductColumns(
           </div>
         </div>
       ),
-    },
-    {
-      title: "ML Code",
-      dataIndex: "ml_code",
-      width: 150,
-      search: false,
-      copyable: true,
     },
     {
       title: "所在店铺",
@@ -164,7 +169,6 @@ export function getProductColumns(
       dataIndex: "customs_code",
       width: 120,
       search: false,
-      copyable: true,
     },
     {
       title: "产品类别",
@@ -192,6 +196,11 @@ export function getProductColumns(
       dataIndex: "color_box_size",
       width: 110,
       search: false,
+      render: (_, record) => (
+        <Typography.Text className="whitespace-nowrap">
+          {record.color_box_size ?? ""}
+        </Typography.Text>
+      ),
     },
     {
       title: "箱规尺寸(cm)",

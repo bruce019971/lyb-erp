@@ -72,6 +72,10 @@ function normalizeTextValue(value?: string | null) {
   return trimmed ? trimmed : null;
 }
 
+function normalizeNumberValue(value?: number | null) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 export async function createLogisticsProviderRecord(
   values: LogisticsProviderCreateValues,
 ) {
@@ -80,6 +84,12 @@ export async function createLogisticsProviderRecord(
     system_url: normalizeTextValue(values.system_url),
     username: normalizeTextValue(values.username),
     password: normalizeTextValue(values.password),
+    product_label_unit_price: normalizeNumberValue(
+      values.product_label_unit_price,
+    ),
+    carton_label_unit_price: normalizeNumberValue(
+      values.carton_label_unit_price,
+    ),
   };
 
   const { data, error } = await supabase
@@ -104,6 +114,12 @@ export async function updateLogisticsProviderRecord(
     system_url: normalizeTextValue(values.system_url),
     username: normalizeTextValue(values.username),
     password: normalizeTextValue(values.password),
+    product_label_unit_price: normalizeNumberValue(
+      values.product_label_unit_price,
+    ),
+    carton_label_unit_price: normalizeNumberValue(
+      values.carton_label_unit_price,
+    ),
   };
 
   const { data, error } = await supabase
@@ -123,12 +139,23 @@ export async function updateLogisticsProviderRecord(
 export async function requestLogisticsProviderOptions() {
   const { data, error } = await supabase
     .from("logistics_providers")
+    .select(
+      "id, provider_name, system_url, product_label_unit_price, carton_label_unit_price",
+    )
+    .order("provider_name", { ascending: true });
+
+  if (!error) {
+    return (data ?? []) as LogisticsProviderOption[];
+  }
+
+  const { data: fallbackData, error: fallbackError } = await supabase
+    .from("logistics_providers")
     .select("id, provider_name, system_url")
     .order("provider_name", { ascending: true });
 
-  if (error) {
-    throw error;
+  if (fallbackError) {
+    throw fallbackError;
   }
 
-  return (data ?? []) as LogisticsProviderOption[];
+  return (fallbackData ?? []) as LogisticsProviderOption[];
 }

@@ -221,6 +221,11 @@ function normalizeTextValue(value?: string | null) {
   return trimmed ? trimmed : null;
 }
 
+function normalizeSizeTextValue(value?: string | null) {
+  const normalized = normalizeTextValue(value)?.replace(/\s*cm\s*$/i, "").trim();
+  return normalized || null;
+}
+
 function normalizeNumberValue(value?: number | null) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
@@ -243,10 +248,10 @@ export async function createProductRecord(values: ProductCreateValues) {
     product_label_url: normalizeTextValue(values.product_label_url),
     product_parameters: normalizeTextValue(values.product_parameters),
     packing_list: normalizeTextValue(values.packing_list),
-    color_box_size: normalizeTextValue(values.color_box_size),
+    color_box_size: normalizeSizeTextValue(values.color_box_size),
     single_gross_weight: normalizeNumberValue(values.single_gross_weight),
     product_unit_price: normalizeNumberValue(values.product_unit_price),
-    carton_spec: normalizeTextValue(values.carton_spec),
+    carton_spec: normalizeSizeTextValue(values.carton_spec),
     pcs_per_carton: normalizeNumberValue(values.pcs_per_carton),
     customs_code: normalizeTextValue(values.customs_code),
     product_category: normalizeTextValue(values.product_category),
@@ -274,10 +279,10 @@ export async function updateProductRecord(
     product_label_url: normalizeTextValue(values.product_label_url),
     product_parameters: normalizeTextValue(values.product_parameters),
     packing_list: normalizeTextValue(values.packing_list),
-    color_box_size: normalizeTextValue(values.color_box_size),
+    color_box_size: normalizeSizeTextValue(values.color_box_size),
     single_gross_weight: normalizeNumberValue(values.single_gross_weight),
     product_unit_price: normalizeNumberValue(values.product_unit_price),
-    carton_spec: normalizeTextValue(values.carton_spec),
+    carton_spec: normalizeSizeTextValue(values.carton_spec),
     pcs_per_carton: normalizeNumberValue(values.pcs_per_carton),
     customs_code: normalizeTextValue(values.customs_code),
     product_category: normalizeTextValue(values.product_category),

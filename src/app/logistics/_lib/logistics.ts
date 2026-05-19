@@ -4,6 +4,8 @@ export type LogisticsProviderRecord = {
   system_url: string | null;
   username: string | null;
   password: string | null;
+  product_label_unit_price: number | null;
+  carton_label_unit_price: number | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -13,6 +15,8 @@ export type LogisticsProviderCreateValues = {
   system_url?: string | null;
   username?: string | null;
   password?: string | null;
+  product_label_unit_price?: number | null;
+  carton_label_unit_price?: number | null;
 };
 
 export type LogisticsProviderUpdateValues = LogisticsProviderCreateValues;
@@ -21,6 +25,8 @@ export type LogisticsProviderOption = {
   id: string;
   provider_name: string | null;
   system_url: string | null;
+  product_label_unit_price?: number | null;
+  carton_label_unit_price?: number | null;
 };
 
 export const logisticsKeywordFields = [

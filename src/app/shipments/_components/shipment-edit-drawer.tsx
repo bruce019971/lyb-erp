@@ -456,11 +456,11 @@ export default function ShipmentEditDrawer({
             />
           </Form.Item>
           <TextField
-            label="物流编号"
+            label="运单编号"
             name="tracking_no"
             disabled={!selectedLogisticsProvider}
             placeholder={
-              selectedLogisticsProvider ? "请输入物流编号" : "请先选择物流商"
+              selectedLogisticsProvider ? "请输入运单编号" : "请先选择物流商"
             }
             required
           />

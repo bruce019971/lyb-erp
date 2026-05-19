@@ -40,15 +40,6 @@ function openProductPage(
   window.history.pushState(null, "", href);
 }
 
-function openRelabelPage(shipmentNo?: string | null) {
-  const trimmedShipmentNo = shipmentNo?.trim();
-  if (!trimmedShipmentNo) return;
-
-  const params = new URLSearchParams();
-  params.set("original_shipment_no", trimmedShipmentNo);
-  window.history.pushState(null, "", `/relabels?${params.toString()}`);
-}
-
 function openStorePage(storeName?: string | null) {
   const trimmedStoreName = storeName?.trim();
   if (!trimmedStoreName) return;
@@ -155,31 +146,37 @@ export function getShipmentColumns(
       },
     },
     {
-      title: "货件号",
+      title: "货件号/运单编号",
       dataIndex: "shipment_no",
-      width: 84,
+      width: 116,
       fixed: "left",
       search: false,
       render: (_, record) => {
         const shipmentNo = record.shipment_no?.trim();
+        const trackingNo = record.tracking_no?.trim();
         const copyable = shipmentNo ? { text: shipmentNo } : false;
-
-        if (shipmentNo && record.is_relabel === "是") {
-          return (
-            <Typography.Link
-              className="whitespace-nowrap"
-              copyable={copyable}
-              onClick={() => openRelabelPage(shipmentNo)}
-            >
-              {shipmentNo}
-            </Typography.Link>
-          );
-        }
+        const shipmentNoNode = shipmentNo ? (
+          <Typography.Text
+            className="whitespace-nowrap"
+            copyable={copyable}
+          >
+            {shipmentNo}
+          </Typography.Text>
+        ) : (
+          <Typography.Text className="whitespace-nowrap">-</Typography.Text>
+        );
 
         return (
-          <Typography.Text className="whitespace-nowrap" copyable={copyable}>
-            {shipmentNo || "-"}
-          </Typography.Text>
+          <div className="flex min-w-0 flex-col gap-1">
+            {shipmentNoNode}
+            <Typography.Text
+              className="whitespace-nowrap"
+              copyable={trackingNo ? { text: trackingNo } : false}
+              type={trackingNo ? undefined : "secondary"}
+            >
+              {trackingNo || "-"}
+            </Typography.Text>
+          </div>
         );
       },
     },
@@ -315,7 +312,7 @@ export function getShipmentColumns(
       title: "送仓时间",
       dataIndex: "appointment_time",
       valueType: "dateRange",
-      width: 120,
+      width: 88,
       hideInSearch: true,
       render: (_, record) => {
         if (record.is_relabel === "是") {
@@ -340,7 +337,7 @@ export function getShipmentColumns(
     {
       title: "是否换标",
       dataIndex: "is_relabel",
-      width: 96,
+      width: 78,
       onCell: (record) => ({
         onDoubleClick: () => {
           if (!isRelabelUpdating(record)) {
@@ -355,7 +352,7 @@ export function getShipmentColumns(
               autoFocus
               size="small"
               value={record.is_relabel ?? ""}
-              className="w-[88px]"
+              className="w-[70px]"
               loading={isRelabelUpdating(record)}
               disabled={isRelabelUpdating(record)}
               options={[
@@ -389,7 +386,7 @@ export function getShipmentColumns(
     {
       title: "是否送仓",
       dataIndex: "delivery_status",
-      width: 104,
+      width: 78,
       onCell: (record) => ({
         className:
           record.delivery_status === "是"
@@ -410,7 +407,7 @@ export function getShipmentColumns(
               autoFocus
               size="small"
               value={record.delivery_status ?? "否"}
-              className="w-[88px]"
+              className="w-[70px]"
               loading={isDeliveryStatusUpdating(record)}
               disabled={isDeliveryStatusUpdating(record)}
               options={[
