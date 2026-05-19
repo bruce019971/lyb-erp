@@ -2,13 +2,14 @@
 
 import { App, Button, Drawer, Form, Input, InputNumber, Space } from "antd";
 import type { FormProps } from "antd";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type {
   LogisticsProviderRecord,
   LogisticsProviderUpdateValues,
 } from "../_lib/logistics";
 import { updateLogisticsProviderRecord } from "../_lib/logistics-request";
+import LogisticsInvoiceTemplateUpload from "./logistics-invoice-template-upload";
 
 type LogisticsEditDrawerProps = {
   open: boolean;
@@ -45,7 +46,20 @@ export default function LogisticsEditDrawer({
 }: LogisticsEditDrawerProps) {
   const [form] = Form.useForm<LogisticsProviderUpdateValues>();
   const [submitting, setSubmitting] = useState(false);
+  const [invoiceTemplateUploading, setInvoiceTemplateUploading] = useState(false);
+  const [invoiceTemplateUrlOverride, setInvoiceTemplateUrlOverride] = useState<
+    string | null | undefined
+  >(undefined);
+  const invoiceTemplateUrlRef = useRef<string | null | undefined>(
+    record?.invoice_template_url ?? undefined,
+  );
   const { message } = App.useApp();
+  const providerName = Form.useWatch("provider_name", form);
+
+  function handleInvoiceTemplateUrlChange(url: string | null) {
+    invoiceTemplateUrlRef.current = url;
+    setInvoiceTemplateUrlOverride(url);
+  }
 
   useEffect(() => {
     if (!open || !record) return;
@@ -62,6 +76,7 @@ export default function LogisticsEditDrawer({
         record.carton_label_unit_price,
       ),
     });
+    invoiceTemplateUrlRef.current = record.invoice_template_url ?? undefined;
   }, [form, open, record]);
 
   const handleFinish: FormProps<LogisticsProviderUpdateValues>["onFinish"] =
@@ -70,7 +85,13 @@ export default function LogisticsEditDrawer({
 
       try {
         setSubmitting(true);
-        await updateLogisticsProviderRecord(record.id, values);
+        await updateLogisticsProviderRecord(record.id, {
+          ...values,
+          invoice_template_url:
+            invoiceTemplateUrlRef.current !== undefined
+              ? invoiceTemplateUrlRef.current
+              : values.invoice_template_url,
+        });
         message.success("物流商修改成功");
         onUpdated();
       } catch (error) {
@@ -81,6 +102,14 @@ export default function LogisticsEditDrawer({
       }
     };
 
+  function handleClose() {
+    form.resetFields();
+    invoiceTemplateUrlRef.current = record?.invoice_template_url ?? undefined;
+    setInvoiceTemplateUrlOverride(undefined);
+    setInvoiceTemplateUploading(false);
+    onClose();
+  }
+
   return (
     <Drawer
       title="编辑物流商"
@@ -88,14 +117,15 @@ export default function LogisticsEditDrawer({
       open={open}
       forceRender
       destroyOnHidden
-      onClose={onClose}
+      onClose={handleClose}
       footer={
         <div className="flex justify-end">
           <Space>
-            <Button onClick={onClose}>取消</Button>
+            <Button onClick={handleClose}>取消</Button>
             <Button
               type="primary"
-              loading={submitting}
+              loading={submitting || invoiceTemplateUploading}
+              disabled={invoiceTemplateUploading}
               onClick={() => {
                 form.submit();
               }}
@@ -133,6 +163,21 @@ export default function LogisticsEditDrawer({
 
         <Form.Item label="密码" name="password">
           <Input.Password placeholder="请输入密码" maxLength={200} />
+        </Form.Item>
+
+        <Form.Item label="发票模板">
+          <LogisticsInvoiceTemplateUpload
+            key={record?.id ?? "new"}
+            fileUrl={
+              invoiceTemplateUrlOverride !== undefined
+                ? invoiceTemplateUrlOverride
+                : record?.invoice_template_url
+            }
+            providerName={providerName}
+            uploading={invoiceTemplateUploading}
+            onUploadingChange={setInvoiceTemplateUploading}
+            onUrlChange={handleInvoiceTemplateUrlChange}
+          />
         </Form.Item>
 
         <Form.Item

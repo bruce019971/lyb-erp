@@ -50,7 +50,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 function buildInitialValues(record?: ProductRecord): ProductCreateValues {
   return {
     product_name: record?.product_name ?? "",
-    product_url: record?.product_url ?? undefined,
+    product_english_name: record?.product_english_name ?? undefined,
     product_id: record?.product_id ?? undefined,
     sku: record?.sku ?? undefined,
     ml_code: record?.ml_code ?? undefined,
@@ -66,6 +66,9 @@ function buildInitialValues(record?: ProductRecord): ProductCreateValues {
     pcs_per_carton: record?.pcs_per_carton ?? undefined,
     customs_code: record?.customs_code ?? undefined,
     product_category: record?.product_category ?? undefined,
+    product_usage: record?.product_usage ?? undefined,
+    product_attribute: record?.product_attribute ?? undefined,
+    product_material: record?.product_material ?? undefined,
   };
 }
 
@@ -77,6 +80,41 @@ function getFileNameFromUrl(url: string, fallbackName: string) {
   } catch {
     return fallbackName;
   }
+}
+
+function safeFilePart(value?: string | null) {
+  return value?.trim().replace(/[\\/:*?"<>|]+/g, "_") || "";
+}
+
+function getStoreCodeByName(
+  storeName: string | null | undefined,
+  storeOptions: StoreOption[],
+  record?: ProductRecord,
+) {
+  const normalizedStoreName = storeName?.trim();
+  if (!normalizedStoreName) return "";
+
+  const store = storeOptions.find(
+    (item) => item.seller_name?.trim() === normalizedStoreName,
+  );
+
+  return store?.seller_code?.trim() || record?.store_code?.trim() || "";
+}
+
+function getProductLabelDisplayName({
+  productName,
+  mlCode,
+  storeCode,
+}: {
+  productName?: string | null;
+  mlCode?: string | null;
+  storeCode?: string | null;
+}) {
+  const normalizedProductName = safeFilePart(productName) || "产品";
+  const normalizedMlCode = safeFilePart(mlCode) || "MLCode";
+  const normalizedStoreCode = safeFilePart(storeCode) || "StoreCode";
+
+  return `${normalizedProductName}产品标签_${normalizedMlCode}_${normalizedStoreCode}`;
 }
 
 function buildInitialImageFileList(record?: ProductRecord): UploadFile[] {
@@ -92,13 +130,16 @@ function buildInitialImageFileList(record?: ProductRecord): UploadFile[] {
   ];
 }
 
-function buildInitialLabelFileList(record?: ProductRecord): UploadFile[] {
+function buildInitialLabelFileList(
+  record: ProductRecord | undefined,
+  labelName: string,
+): UploadFile[] {
   if (!record?.product_label_url) return [];
 
   return [
     {
       uid: `${record.id}-label`,
-      name: getFileNameFromUrl(record.product_label_url, "product-label"),
+      name: labelName,
       status: "done",
       url: record.product_label_url,
     },
@@ -137,10 +178,24 @@ export default function ProductFormDrawer({
     UploadFile[] | null
   >(null);
   const { message } = App.useApp();
+  const currentProductName = Form.useWatch("product_name", form);
+  const currentMlCode = Form.useWatch("ml_code", form);
+  const currentStoreName = Form.useWatch("store_name", form);
+  const currentStoreCode = getStoreCodeByName(
+    currentStoreName,
+    storeOptions,
+    record,
+  );
+  const productLabelDisplayName = getProductLabelDisplayName({
+    productName: currentProductName,
+    mlCode: currentMlCode,
+    storeCode: currentStoreCode,
+  });
   const imageFileList =
     imageFileListOverride ?? buildInitialImageFileList(record);
   const labelFileList =
-    labelFileListOverride ?? buildInitialLabelFileList(record);
+    labelFileListOverride ??
+    buildInitialLabelFileList(record, productLabelDisplayName);
   const currentImageUrl =
     imageUrlOverride ?? record?.product_image_url ?? undefined;
   const currentLabelUrl =
@@ -289,7 +344,7 @@ export default function ProductFormDrawer({
         setLabelFileListOverride([
           {
             uid: crypto.randomUUID(),
-            name: (file as File).name,
+            name: productLabelDisplayName,
             status: "done",
             url: labelUrl,
           },
@@ -298,7 +353,9 @@ export default function ProductFormDrawer({
       } catch (error) {
         const description = getErrorMessage(error, "请检查标签存储权限");
         message.error(`标签上传失败：${description}`);
-        setLabelFileListOverride(buildInitialLabelFileList(record));
+        setLabelFileListOverride(
+          buildInitialLabelFileList(record, productLabelDisplayName),
+        );
         labelUrlRef.current = record?.product_label_url ?? undefined;
         setLabelUrlOverride(record?.product_label_url ?? undefined);
         onError?.(error as Error);
@@ -359,6 +416,21 @@ export default function ProductFormDrawer({
             ]}
           >
             <Input placeholder="请输入产品名称" maxLength={200} showCount />
+          </Form.Item>
+
+          <Form.Item label="英文名" name="product_english_name">
+            <Input placeholder="请输入产品英文名" maxLength={200} showCount />
+          </Form.Item>
+
+          <Form.Item label="产品属性" name="product_attribute">
+            <Select
+              allowClear
+              placeholder="请选择产品属性"
+              options={[
+                { label: "普货", value: "普货" },
+                { label: "纺织品", value: "纺织品" },
+              ]}
+            />
           </Form.Item>
 
           <Form.Item
@@ -429,8 +501,12 @@ export default function ProductFormDrawer({
             <Input placeholder="请输入产品类别" />
           </Form.Item>
 
-          <Form.Item label="产品链接" name="product_url" className="col-span-2">
-            <Input placeholder="请输入产品链接" />
+          <Form.Item label="用途" name="product_usage" className="col-span-2">
+            <Input placeholder="请输入产品用途" />
+          </Form.Item>
+
+          <Form.Item label="材质" name="product_material" className="col-span-2">
+            <Input placeholder="请输入产品材质" />
           </Form.Item>
 
           <Form.Item label="彩盒尺寸" name="color_box_size">

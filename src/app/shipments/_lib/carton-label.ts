@@ -1,72 +1,72 @@
 import type { ShipmentRecord } from "./shipments";
 import type { StoreOption } from "../../stores/_lib/stores";
 
+type ShipmentFileNameRecord = {
+  order_store?: string | null;
+  shipment_no?: string | null;
+  product_name?: string | null;
+  box_count?: number | null;
+};
+
 function safeFilePart(value?: string | null) {
   return value?.trim().replace(/[\\/:*?"<>|]+/g, "_") || "";
 }
 
 export function getShipmentCartonLabelFileName(record: ShipmentRecord) {
-  const productName = record.product_name?.trim();
-  if (!productName) {
-    throw new Error("当前货件缺少产品名称");
-  }
-
-  const shipmentNo = record.shipment_no?.trim();
-  if (!shipmentNo) {
-    throw new Error("当前货件缺少货件号");
-  }
+  const productName = record.product_name?.trim() || "货件";
+  const shipmentNo = record.shipment_no?.trim() || "未命名";
 
   const boxCount =
     typeof record.box_count === "number" && Number.isFinite(record.box_count)
       ? String(record.box_count)
       : "";
-  if (!boxCount) {
-    throw new Error("当前货件缺少箱数");
-  }
+  const boxCountSuffix = boxCount ? `(${boxCount})` : "";
 
   return `${safeFilePart(productName)}外箱标签-${safeFilePart(
     shipmentNo,
-  )}(${boxCount}).pdf`;
+  )}${boxCountSuffix}.pdf`;
+}
+
+function getShipmentStoreCode(
+  record: ShipmentFileNameRecord,
+  storeOptions: StoreOption[],
+) {
+  const storeName = record.order_store?.trim();
+  const store = storeName
+    ? storeOptions.find((item) => item.seller_name?.trim() === storeName)
+    : undefined;
+
+  return safeFilePart(store?.seller_code) || "StoreCode";
+}
+
+export function getShipmentCartonLabelDownloadFileName(
+  record: ShipmentRecord,
+  storeOptions: StoreOption[],
+) {
+  const productName = safeFilePart(record.product_name) || "货件";
+  const shipmentNo = safeFilePart(record.shipment_no) || "未命名";
+  const boxCount =
+    typeof record.box_count === "number" && Number.isFinite(record.box_count)
+      ? String(record.box_count)
+      : "";
+  const storeCode = getShipmentStoreCode(record, storeOptions);
+
+  return `${productName}外箱标签_${shipmentNo}(${boxCount})_${storeCode}.pdf`;
 }
 
 export async function downloadShipmentCartonLabel(
   record: ShipmentRecord,
   storeOptions: StoreOption[],
 ) {
-  const fileName = getShipmentCartonLabelFileName(record);
-
-  const storeName = record.order_store?.trim();
-  const store = storeName
-    ? storeOptions.find((item) => item.seller_name?.trim() === storeName)
-    : undefined;
-  const storeAlias = store?.seller_alias?.trim();
-  const storeId = store?.seller_id?.trim();
-
-  if (!storeAlias || !storeId) {
-    throw new Error("当前货件缺少店铺别名或店铺ID");
+  const fileName = getShipmentCartonLabelDownloadFileName(record, storeOptions);
+  const cartonLabelUrl = record.carton_label_url?.trim();
+  if (!cartonLabelUrl) {
+    throw new Error("当前货件未生成外箱标签");
   }
 
-  const shipmentNo = record.shipment_no!.trim();
-  const boxCount = String(record.box_count);
-
-  const response = await fetch("/api/shipments/carton-label", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      shipmentNo,
-      boxCount,
-      storeId,
-      storeAlias,
-    }),
-  });
-
+  const response = await fetch(cartonLabelUrl);
   if (!response.ok) {
-    const result = (await response.json().catch(() => null)) as
-      | { error?: string }
-      | null;
-    throw new Error(result?.error || "外箱标签下载失败");
+    throw new Error("外箱标签文件读取失败");
   }
 
   const labelBlob = await response.blob();
@@ -75,6 +75,53 @@ export async function downloadShipmentCartonLabel(
 
   link.href = objectUrl;
   link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(objectUrl);
+}
+
+function getUrlSuffix(url: string) {
+  return url.split(".").pop()?.split("?")[0]?.split("#")[0] ?? "";
+}
+
+export function getShipmentLogisticsBoxMarkFileName(
+  record: ShipmentFileNameRecord,
+  storeOptions: StoreOption[],
+) {
+  const productName = safeFilePart(record.product_name) || "货件";
+  const shipmentNo = safeFilePart(record.shipment_no) || "未命名";
+  const boxCount =
+    typeof record.box_count === "number" && Number.isFinite(record.box_count)
+      ? String(record.box_count)
+      : "";
+  const storeCode = getShipmentStoreCode(record, storeOptions);
+
+  return `${productName}物流箱唛_${shipmentNo}(${boxCount})_${storeCode}`;
+}
+
+export async function downloadShipmentLogisticsBoxMark(
+  record: ShipmentRecord,
+  storeOptions: StoreOption[],
+) {
+  const url = record.logistics_box_mark_url?.trim();
+  if (!url) {
+    throw new Error("当前货件未填写物流箱唛 URL");
+  }
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error("物流箱唛文件读取失败");
+  }
+
+  const blob = await response.blob();
+  const objectUrl = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const suffix = getUrlSuffix(url) || "pdf";
+  const filenameBase = getShipmentLogisticsBoxMarkFileName(record, storeOptions);
+
+  link.href = objectUrl;
+  link.download = suffix ? `${filenameBase}.${suffix}` : filenameBase;
   document.body.appendChild(link);
   link.click();
   link.remove();

@@ -84,6 +84,7 @@ export async function createLogisticsProviderRecord(
     system_url: normalizeTextValue(values.system_url),
     username: normalizeTextValue(values.username),
     password: normalizeTextValue(values.password),
+    invoice_template_url: normalizeTextValue(values.invoice_template_url),
     product_label_unit_price: normalizeNumberValue(
       values.product_label_unit_price,
     ),
@@ -114,6 +115,7 @@ export async function updateLogisticsProviderRecord(
     system_url: normalizeTextValue(values.system_url),
     username: normalizeTextValue(values.username),
     password: normalizeTextValue(values.password),
+    invoice_template_url: normalizeTextValue(values.invoice_template_url),
     product_label_unit_price: normalizeNumberValue(
       values.product_label_unit_price,
     ),
@@ -140,7 +142,7 @@ export async function requestLogisticsProviderOptions() {
   const { data, error } = await supabase
     .from("logistics_providers")
     .select(
-      "id, provider_name, system_url, product_label_unit_price, carton_label_unit_price",
+      "id, provider_name, system_url, username, password, invoice_template_url, product_label_unit_price, carton_label_unit_price",
     )
     .order("provider_name", { ascending: true });
 
@@ -150,7 +152,7 @@ export async function requestLogisticsProviderOptions() {
 
   const { data: fallbackData, error: fallbackError } = await supabase
     .from("logistics_providers")
-    .select("id, provider_name, system_url")
+    .select("id, provider_name, system_url, username, password, invoice_template_url")
     .order("provider_name", { ascending: true });
 
   if (fallbackError) {
@@ -158,4 +160,45 @@ export async function requestLogisticsProviderOptions() {
   }
 
   return (fallbackData ?? []) as LogisticsProviderOption[];
+}
+
+function getLogisticsAssetPath(prefix: string, file: File) {
+  const extension = file.name.includes(".")
+    ? file.name.split(".").pop()?.toLowerCase()
+    : undefined;
+  const suffix = extension ? `.${extension}` : "";
+  const randomId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  return `${prefix}/${randomId}${suffix}`;
+}
+
+export async function uploadLogisticsInvoiceTemplate(file: File) {
+  const filePath = getLogisticsAssetPath("logistics-invoice-templates", file);
+  const storageResponse = await fetch("/api/logistics/invoice-template-storage", {
+    method: "POST",
+  });
+
+  if (!storageResponse.ok) {
+    const payload = (await storageResponse.json().catch(() => null)) as
+      | { error?: string }
+      | null;
+    throw new Error(payload?.error || "发票模板存储配置更新失败");
+  }
+
+  const { error } = await supabase.storage
+    .from("product-images")
+    .upload(filePath, file, {
+      cacheControl: "3600",
+      upsert: false,
+      contentType: file.type || undefined,
+    });
+
+  if (error) {
+    throw error;
+  }
+
+  const { data } = supabase.storage
+    .from("product-images")
+    .getPublicUrl(filePath);
+
+  return data.publicUrl;
 }

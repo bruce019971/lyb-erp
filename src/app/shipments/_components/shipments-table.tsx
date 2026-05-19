@@ -1,25 +1,35 @@
 "use client";
 
-import { DownloadOutlined, PlusOutlined } from "@ant-design/icons";
+import { FileSyncOutlined, PlusOutlined } from "@ant-design/icons";
 import type { ActionType } from "@ant-design/pro-components";
 import { ProTable } from "@ant-design/pro-components";
 import type { FormInstance } from "antd";
 import { App, Button, Spin, Tooltip } from "antd";
+import type { Key } from "react";
 import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { requestShipmentRecords } from "../_lib/shipments-request";
+import {
+  batchGenerateShipmentCartonLabels,
+  requestShipmentRecords,
+} from "../_lib/shipments-request";
 import { getShipmentColumns } from "./shipments-columns";
 import type { ShipmentOption, ShipmentRecord } from "../_lib/shipments";
 import type { ProductShipmentOption } from "../../products/_lib/products";
 import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
 import type { StoreOption } from "../../stores/_lib/stores";
-import { downloadShipmentCartonLabel } from "../_lib/carton-label";
+import {
+  downloadShipmentCartonLabel,
+  downloadShipmentLogisticsBoxMark,
+} from "../_lib/carton-label";
 
 type ShipmentsTableProps = {
   actionRef?: MutableRefObject<ActionType | undefined>;
   formRef?: MutableRefObject<FormInstance | undefined>;
   onCreate: () => void;
+  onBatchCartonLabels: () => void;
+  onSelectedShipmentNosChange: (shipmentNos: string[]) => void;
+  onGenerateLogisticsBoxMark: (record: ShipmentRecord) => void;
   onEdit: (record: ShipmentRecord) => void;
   onDelete: (record: ShipmentRecord) => void;
   onStartDeliveryStatusEdit: (record: ShipmentRecord) => void;
@@ -33,6 +43,10 @@ type ShipmentsTableProps = {
   isRelabelEditing: (record: ShipmentRecord) => boolean;
   isRelabelUpdating: (record: ShipmentRecord) => boolean;
   isDeleting: (record: ShipmentRecord) => boolean;
+  isGeneratingCartonLabel: (record: ShipmentRecord) => boolean;
+  isGeneratingLogisticsBoxMark: (record: ShipmentRecord) => boolean;
+  onStartGenerateCartonLabel: (record: ShipmentRecord) => void;
+  onFinishGenerateCartonLabel: () => void;
   shipmentOptions: ShipmentOption[];
   storeOptions: StoreOption[];
   productOptions: ProductShipmentOption[];
@@ -64,6 +78,9 @@ export default function ShipmentsTable({
   actionRef,
   formRef,
   onCreate,
+  onBatchCartonLabels,
+  onSelectedShipmentNosChange,
+  onGenerateLogisticsBoxMark,
   onEdit,
   onDelete,
   onStartDeliveryStatusEdit,
@@ -77,6 +94,10 @@ export default function ShipmentsTable({
   isRelabelEditing,
   isRelabelUpdating,
   isDeleting,
+  isGeneratingCartonLabel,
+  isGeneratingLogisticsBoxMark,
+  onStartGenerateCartonLabel,
+  onFinishGenerateCartonLabel,
   shipmentOptions,
   storeOptions,
   productOptions,
@@ -95,46 +116,17 @@ export default function ShipmentsTable({
     },
     [message, storeOptions],
   );
-  const columns = useMemo(
-    () =>
-      getShipmentColumns(
-        onEdit,
-        onDelete,
-        onStartDeliveryStatusEdit,
-        onCancelDeliveryStatusEdit,
-        onChangeDeliveryStatus,
-        onStartRelabelEdit,
-        onCancelRelabelEdit,
-        onChangeRelabel,
-        isDeliveryStatusEditing,
-        isDeliveryStatusUpdating,
-        isRelabelEditing,
-        isRelabelUpdating,
-        isDeleting,
-        shipmentOptions,
-        storeOptions,
-        productOptions,
-        logisticsOptions,
-      ),
-    [
-      isDeleting,
-      isDeliveryStatusEditing,
-      isDeliveryStatusUpdating,
-      isRelabelEditing,
-      isRelabelUpdating,
-      logisticsOptions,
-      onCancelDeliveryStatusEdit,
-      onCancelRelabelEdit,
-      onChangeDeliveryStatus,
-      onChangeRelabel,
-      onDelete,
-      onEdit,
-      onStartDeliveryStatusEdit,
-      onStartRelabelEdit,
-      productOptions,
-      shipmentOptions,
-      storeOptions,
-    ],
+  const handleDownloadLogisticsBoxMark = useCallback(
+    async (record: ShipmentRecord) => {
+      try {
+        await downloadShipmentLogisticsBoxMark(record, storeOptions);
+      } catch (error) {
+        message.error(
+          error instanceof Error ? error.message : "物流箱唛下载失败",
+        );
+      }
+    },
+    [message, storeOptions],
   );
   const searchParamsRef = useRef<Record<string, unknown>>({});
   const loadingRef = useRef(true);
@@ -146,8 +138,8 @@ export default function ShipmentsTable({
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
-  const [selectedShipment, setSelectedShipment] =
-    useState<ShipmentRecord | null>(null);
+  const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
+  const [reloadRequest, setReloadRequest] = useState(0);
 
   const loadPage = useCallback(
     async (
@@ -181,7 +173,8 @@ export default function ShipmentsTable({
           append ? mergeShipmentsById(current, nextData) : nextData,
         );
         if (!append) {
-          setSelectedShipment(null);
+          setSelectedRowKeys([]);
+          onSelectedShipmentNosChange([]);
         }
         currentPageRef.current = page;
         setCurrentPage(page);
@@ -194,12 +187,101 @@ export default function ShipmentsTable({
         setLoadingMore(false);
       }
     },
-    [],
+    [onSelectedShipmentNosChange],
   );
 
   const reloadFirstPage = useCallback(async () => {
     await loadPage(1, searchParamsRef.current, { append: false });
   }, [loadPage]);
+
+  const handleGenerateCartonLabel = useCallback(
+    async (record: ShipmentRecord) => {
+      const shipmentNo = record.shipment_no?.trim();
+
+      if (!shipmentNo) {
+        message.error("当前货件缺少货件号");
+        return;
+      }
+
+      try {
+        onStartGenerateCartonLabel(record);
+        const result = await batchGenerateShipmentCartonLabels([shipmentNo]);
+        const failedItem = result.results.find((item) => !item.success);
+
+        if (failedItem) {
+          throw new Error(failedItem.error || "外箱标签生成失败");
+        }
+
+        message.success("外箱标签生成成功");
+        setReloadRequest((value) => value + 1);
+      } catch (error) {
+        message.error(
+          error instanceof Error ? error.message : "外箱标签生成失败",
+        );
+      } finally {
+        onFinishGenerateCartonLabel();
+      }
+    },
+    [
+      message,
+      onFinishGenerateCartonLabel,
+      onStartGenerateCartonLabel,
+    ],
+  );
+
+  const columns = useMemo(
+    () =>
+      getShipmentColumns(
+        onEdit,
+        handleDownloadCartonLabel,
+        handleDownloadLogisticsBoxMark,
+        handleGenerateCartonLabel,
+        onGenerateLogisticsBoxMark,
+        onDelete,
+        onStartDeliveryStatusEdit,
+        onCancelDeliveryStatusEdit,
+        onChangeDeliveryStatus,
+        onStartRelabelEdit,
+        onCancelRelabelEdit,
+        onChangeRelabel,
+        isDeliveryStatusEditing,
+        isDeliveryStatusUpdating,
+        isRelabelEditing,
+        isRelabelUpdating,
+        isDeleting,
+        isGeneratingCartonLabel,
+        isGeneratingLogisticsBoxMark,
+        shipmentOptions,
+        storeOptions,
+        productOptions,
+        logisticsOptions,
+      ),
+    [
+      isDeleting,
+      isDeliveryStatusEditing,
+      isDeliveryStatusUpdating,
+      isRelabelEditing,
+      isRelabelUpdating,
+      logisticsOptions,
+      handleDownloadCartonLabel,
+      handleDownloadLogisticsBoxMark,
+      handleGenerateCartonLabel,
+      isGeneratingCartonLabel,
+      isGeneratingLogisticsBoxMark,
+      onCancelDeliveryStatusEdit,
+      onCancelRelabelEdit,
+      onChangeDeliveryStatus,
+      onChangeRelabel,
+      onDelete,
+      onEdit,
+      onGenerateLogisticsBoxMark,
+      onStartDeliveryStatusEdit,
+      onStartRelabelEdit,
+      productOptions,
+      shipmentOptions,
+      storeOptions,
+    ],
+  );
 
   const loadNextPage = useCallback(async () => {
     if (
@@ -218,6 +300,12 @@ export default function ShipmentsTable({
   useEffect(() => {
     void reloadFirstPage();
   }, [reloadFirstPage]);
+
+  useEffect(() => {
+    if (reloadRequest === 0) return;
+
+    void reloadFirstPage();
+  }, [reloadFirstPage, reloadRequest]);
 
   useEffect(() => {
     if (!actionRef) return;
@@ -246,17 +334,18 @@ export default function ShipmentsTable({
       dataSource={dataSource}
       loading={loading}
       rowSelection={{
-        type: "radio",
-        selectedRowKeys: selectedShipment ? [selectedShipment.id] : [],
-        onChange: (_, rows) => {
-          setSelectedShipment(rows[0] ?? null);
+        type: "checkbox",
+        selectedRowKeys,
+        preserveSelectedRowKeys: true,
+        onChange: (keys, rows) => {
+          setSelectedRowKeys(keys);
+          onSelectedShipmentNosChange(
+            rows
+              .map((item) => item.shipment_no?.trim())
+              .filter((item): item is string => Boolean(item)),
+          );
         },
       }}
-      onRow={(record) => ({
-        onClick: () => {
-          setSelectedShipment(record);
-        },
-      })}
       rowClassName={(record) =>
         record.is_delivery_completed ? "shipment-delivered-row" : ""
       }
@@ -299,19 +388,14 @@ export default function ShipmentsTable({
           <Tooltip key="create" title="新增货件">
             <Button type="text" icon={<PlusOutlined />} onClick={onCreate} />
           </Tooltip>,
+          <Tooltip key="batch-carton-labels" title="批量生成外箱标签">
+            <Button
+              type="text"
+              icon={<FileSyncOutlined />}
+              onClick={onBatchCartonLabels}
+            />
+          </Tooltip>,
         ];
-
-        if (selectedShipment) {
-          actions.push(
-            <Tooltip key="download-carton-label" title="下载外箱标签">
-              <Button
-                type="text"
-                icon={<DownloadOutlined />}
-                onClick={() => handleDownloadCartonLabel(selectedShipment)}
-              />
-            </Tooltip>,
-          );
-        }
 
         return actions;
       }}

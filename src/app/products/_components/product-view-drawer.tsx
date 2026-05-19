@@ -12,6 +12,7 @@ import {
 } from "antd";
 
 import type { ProductRecord } from "../_lib/products";
+import { getMercadoLibreProductUrl } from "../_lib/products";
 
 type ProductViewDrawerProps = {
   open: boolean;
@@ -23,19 +24,12 @@ function EmptyText() {
   return <Typography.Text type="secondary">-</Typography.Text>;
 }
 
-function getExternalHref(value?: string | null) {
-  const trimmed = value?.trim();
-  if (!trimmed) return undefined;
-  if (/^https?:\/\//i.test(trimmed)) return trimmed;
-  return `https://${trimmed}`;
-}
-
 function renderText(value?: string | null) {
   return value?.trim() ? value : <EmptyText />;
 }
 
-function renderLink(value?: string | null) {
-  const href = getExternalHref(value);
+function renderProductIdLink(value?: string | null) {
+  const href = getMercadoLibreProductUrl(value);
   return href ? (
     <Typography.Link href={href} target="_blank">
       {value}
@@ -117,21 +111,21 @@ export default function ProductViewDrawer({
               span: 2,
             },
             {
+              key: "product_english_name",
+              label: "英文名",
+              children: renderText(record?.product_english_name),
+              span: 2,
+            },
+            {
               key: "store_name",
               label: "所在店铺",
               children: renderText(record?.store_name),
               span: 2,
             },
             {
-              key: "product_url",
-              label: "产品链接",
-              children: renderLink(record?.product_url),
-              span: 2,
-            },
-            {
               key: "product_id",
               label: "产品ID",
-              children: renderText(record?.product_id),
+              children: renderProductIdLink(record?.product_id),
             },
             { key: "sku", label: "SKU", children: renderText(record?.sku) },
             {
@@ -168,6 +162,23 @@ export default function ProductViewDrawer({
               key: "product_category",
               label: "产品类别",
               children: renderText(record?.product_category),
+            },
+            {
+              key: "product_attribute",
+              label: "产品属性",
+              children: renderText(record?.product_attribute),
+            },
+            {
+              key: "product_usage",
+              label: "用途",
+              children: renderText(record?.product_usage),
+              span: 2,
+            },
+            {
+              key: "product_material",
+              label: "材质",
+              children: renderText(record?.product_material),
+              span: 2,
             },
             {
               key: "product_parameters",

@@ -239,7 +239,7 @@ function compactPayload<T extends Record<string, unknown>>(payload: T) {
 export async function createProductRecord(values: ProductCreateValues) {
   const payload = compactPayload({
     product_name: values.product_name.trim(),
-    product_url: normalizeTextValue(values.product_url),
+    product_english_name: normalizeTextValue(values.product_english_name),
     product_id: normalizeTextValue(values.product_id),
     sku: normalizeTextValue(values.sku),
     ml_code: normalizeTextValue(values.ml_code),
@@ -255,6 +255,9 @@ export async function createProductRecord(values: ProductCreateValues) {
     pcs_per_carton: normalizeNumberValue(values.pcs_per_carton),
     customs_code: normalizeTextValue(values.customs_code),
     product_category: normalizeTextValue(values.product_category),
+    product_usage: normalizeTextValue(values.product_usage),
+    product_attribute: normalizeTextValue(values.product_attribute),
+    product_material: normalizeTextValue(values.product_material),
   });
 
   const { error } = await supabase.from("products").insert(payload);
@@ -270,7 +273,7 @@ export async function updateProductRecord(
 ) {
   const payload = {
     product_name: values.product_name.trim(),
-    product_url: normalizeTextValue(values.product_url),
+    product_english_name: normalizeTextValue(values.product_english_name),
     product_id: normalizeTextValue(values.product_id),
     sku: normalizeTextValue(values.sku),
     ml_code: normalizeTextValue(values.ml_code),
@@ -286,6 +289,9 @@ export async function updateProductRecord(
     pcs_per_carton: normalizeNumberValue(values.pcs_per_carton),
     customs_code: normalizeTextValue(values.customs_code),
     product_category: normalizeTextValue(values.product_category),
+    product_usage: normalizeTextValue(values.product_usage),
+    product_attribute: normalizeTextValue(values.product_attribute),
+    product_material: normalizeTextValue(values.product_material),
   };
 
   const { data, error } = await supabase

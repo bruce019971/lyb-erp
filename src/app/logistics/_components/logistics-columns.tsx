@@ -15,6 +15,10 @@ function getSystemHref(value?: string | null) {
   return `https://${trimmed}`;
 }
 
+function getInvoiceTemplateName(providerName?: string | null) {
+  return `${providerName?.trim() || "物流商"}下单发票模板`;
+}
+
 export function getLogisticsProviderColumns(
   onEdit: (record: LogisticsProviderRecord) => void,
 ): ProColumns<LogisticsProviderRecord>[] {
@@ -39,6 +43,23 @@ export function getLogisticsProviderColumns(
           <EmptyText />
         );
       },
+    },
+    {
+      title: "发票模板",
+      dataIndex: "invoice_template_url",
+      width: 120,
+      search: false,
+      render: (_, record) =>
+        record.invoice_template_url?.trim() ? (
+          <Typography.Link
+            href={record.invoice_template_url.trim()}
+            target="_blank"
+          >
+            {getInvoiceTemplateName(record.provider_name)}
+          </Typography.Link>
+        ) : (
+          <EmptyText />
+        ),
     },
     {
       title: "产品标单价",

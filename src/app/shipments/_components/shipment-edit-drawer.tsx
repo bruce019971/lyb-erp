@@ -12,11 +12,12 @@ import {
   Space,
 } from "antd";
 import type { FormProps } from "antd";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import dayjs, { type Dayjs } from "dayjs";
 
 import type { ShipmentRecord, ShipmentUpdateValues } from "../_lib/shipments";
 import { updateShipmentRecord } from "../_lib/shipments-request";
+import ShipmentLogisticsBoxMarkUpload from "./shipment-logistics-box-mark-upload";
 import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
 import type { ProductShipmentOption } from "../../products/_lib/products";
 import type { StoreOption } from "../../stores/_lib/stores";
@@ -156,13 +157,22 @@ export default function ShipmentEditDrawer({
 }: ShipmentEditDrawerProps) {
   const [form] = Form.useForm<ShipmentUpdateFormValues>();
   const [submitting, setSubmitting] = useState(false);
+  const [boxMarkUploading, setBoxMarkUploading] = useState(false);
+  const logisticsBoxMarkUrlRef = useRef<string | null | undefined>(
+    record?.logistics_box_mark_url ?? undefined,
+  );
   const { message } = App.useApp();
   const selectedStoreName = Form.useWatch("order_store", form);
   const selectedLogisticsProvider = Form.useWatch("logistics_provider", form);
+  const shipmentNo = Form.useWatch("shipment_no", form);
+  const productName = Form.useWatch("product_name", form);
+  const boxCount = Form.useWatch("box_count", form);
+  const logisticsBoxMarkUrl = Form.useWatch("logistics_box_mark_url", form);
   const warehouseArrivedAt = Form.useWatch("overseas_warehouse_arrived_at", form);
   const appointmentTime = Form.useWatch("appointment_time", form);
   const isRelabel = Form.useWatch("is_relabel", form);
   const normalizedStoreName = selectedStoreName?.trim();
+  const isRishenghuiProvider = selectedLogisticsProvider?.trim() === "日升辉";
   const appointmentDisabled = !warehouseArrivedAt || isRelabel === "是";
   const storeSelectOptions = storeOptions.map((item) => ({
     label: item.seller_name,
@@ -269,6 +279,11 @@ export default function ShipmentEditDrawer({
     form.setFieldValue("tracking_no", undefined);
   }
 
+  function handleLogisticsBoxMarkUrlChange(url: string | null) {
+    logisticsBoxMarkUrlRef.current = url;
+    form.setFieldValue("logistics_box_mark_url", url ?? undefined);
+  }
+
   function handleValuesChange(
     changedValues: Partial<ShipmentUpdateFormValues>,
     values: ShipmentUpdateFormValues,
@@ -342,6 +357,7 @@ export default function ShipmentEditDrawer({
       logistics_provider: record.logistics_provider ?? undefined,
       shipment_no: record.shipment_no ?? "",
       tracking_no: record.tracking_no ?? "",
+      logistics_box_mark_url: record.logistics_box_mark_url ?? undefined,
       product_name: record.product_name ?? "",
       box_count: record.box_count,
       pcs_per_box: record.pcs_per_box,
@@ -353,6 +369,7 @@ export default function ShipmentEditDrawer({
       is_relabel: record.is_relabel ?? undefined,
       goods_value: record.goods_value,
     });
+    logisticsBoxMarkUrlRef.current = record.logistics_box_mark_url ?? undefined;
   }, [form, open, record]);
 
   const handleFinish: FormProps<ShipmentUpdateFormValues>["onFinish"] = async (
@@ -362,9 +379,16 @@ export default function ShipmentEditDrawer({
 
     try {
       setSubmitting(true);
+      const nextValues = {
+        ...values,
+        logistics_box_mark_url:
+          logisticsBoxMarkUrlRef.current !== undefined
+            ? logisticsBoxMarkUrlRef.current
+            : values.logistics_box_mark_url,
+      };
       await updateShipmentRecord(
         record.id,
-        serializeShipmentValues(applyCalculatedGoodsValue(values)),
+        serializeShipmentValues(applyCalculatedGoodsValue(nextValues)),
       );
       message.success("货件修改成功");
       onUpdated();
@@ -375,6 +399,13 @@ export default function ShipmentEditDrawer({
     }
   };
 
+  function handleClose() {
+    form.resetFields();
+    logisticsBoxMarkUrlRef.current = record?.logistics_box_mark_url ?? undefined;
+    setBoxMarkUploading(false);
+    onClose();
+  }
+
   return (
     <Drawer
       title="编辑货件"
@@ -382,14 +413,15 @@ export default function ShipmentEditDrawer({
       open={open}
       forceRender
       destroyOnHidden
-      onClose={onClose}
+      onClose={handleClose}
       footer={
         <div className="flex justify-end">
           <Space>
-            <Button onClick={onClose}>取消</Button>
+            <Button onClick={handleClose}>取消</Button>
             <Button
               type="primary"
-              loading={submitting}
+              loading={submitting || boxMarkUploading}
+              disabled={boxMarkUploading}
               onClick={() => {
                 form.submit();
               }}
@@ -402,7 +434,11 @@ export default function ShipmentEditDrawer({
     >
       <Form<ShipmentUpdateFormValues>
         form={form}
-        layout="vertical"
+        layout="horizontal"
+        labelAlign="right"
+        labelCol={{ flex: "92px" }}
+        labelWrap
+        wrapperCol={{ flex: "1 1 0" }}
         onFinish={handleFinish}
         onFinishFailed={() => message.error("请先检查表单内容")}
         onValuesChange={handleValuesChange}
@@ -417,6 +453,9 @@ export default function ShipmentEditDrawer({
             <InputNumber />
           </Form.Item>
         <Form.Item name="is_relabel" hidden>
+          <Input />
+        </Form.Item>
+        <Form.Item name="logistics_box_mark_url" hidden>
           <Input />
         </Form.Item>
         <div className="grid grid-cols-1 gap-x-4 md:grid-cols-2">
@@ -442,10 +481,22 @@ export default function ShipmentEditDrawer({
             required
           />
           <Form.Item
-            label="物流商"
-            name="logistics_provider"
-            rules={[{ required: true, message: "请选择物流商" }]}
+            label="产品名称"
+            name="product_name"
+            rules={[{ required: true, message: "请选择产品" }]}
           >
+            <Select
+              showSearch
+              allowClear
+              disabled={!selectedStoreName}
+              placeholder="请选择产品"
+              options={productSelectOptions}
+              optionFilterProp="label"
+              onChange={applyProductSelection}
+            />
+          </Form.Item>
+          <NumberField label="箱数" name="box_count" precision={0} required />
+          <Form.Item label="物流商" name="logistics_provider">
             <Select
               showSearch
               allowClear
@@ -462,24 +513,25 @@ export default function ShipmentEditDrawer({
             placeholder={
               selectedLogisticsProvider ? "请输入运单编号" : "请先选择物流商"
             }
-            required
           />
-          <Form.Item
-            label="产品名称"
-            name="product_name"
-            rules={[{ required: true, message: "请选择产品" }]}
-          >
-            <Select
-              showSearch
-              allowClear
-              disabled={!selectedStoreName}
-              placeholder="请选择产品"
-              options={productSelectOptions}
-              optionFilterProp="label"
-              onChange={applyProductSelection}
-            />
-          </Form.Item>
-          <NumberField label="箱数" name="box_count" precision={0} required />
+          {!isRishenghuiProvider ? (
+            <Form.Item label="物流箱唛">
+              <ShipmentLogisticsBoxMarkUpload
+                fileUrl={logisticsBoxMarkUrl}
+                record={{
+                  id: record?.id ?? "new",
+                  order_store: selectedStoreName,
+                  shipment_no: shipmentNo,
+                  product_name: productName,
+                  box_count: boxCount,
+                }}
+                storeOptions={storeOptions}
+                uploading={boxMarkUploading}
+                onUploadingChange={setBoxMarkUploading}
+                onUrlChange={handleLogisticsBoxMarkUrlChange}
+              />
+            </Form.Item>
+          ) : null}
           <DateField
             label="到仓时间"
             name="overseas_warehouse_arrived_at"

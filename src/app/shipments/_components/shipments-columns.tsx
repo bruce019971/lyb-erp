@@ -1,9 +1,13 @@
-import { DeleteOutlined, EditOutlined } from "@ant-design/icons";
+import {
+  DeleteOutlined,
+  EditOutlined,
+  FileSyncOutlined,
+  QrcodeOutlined,
+} from "@ant-design/icons";
 import type { ProColumns } from "@ant-design/pro-components";
 import { Button, Select, Tooltip, Typography } from "antd";
 
 import {
-  canEditShipmentDeliveryStatus,
   formatShipmentDate,
   isShipmentDeliveryOverdue,
   type ShipmentRecord,
@@ -60,6 +64,10 @@ function openLogisticsPage(providerName?: string | null) {
 
 export function getShipmentColumns(
   onEdit: (record: ShipmentRecord) => void,
+  onDownloadCartonLabel: (record: ShipmentRecord) => void,
+  onDownloadLogisticsBoxMark: (record: ShipmentRecord) => void,
+  onGenerateCartonLabel: (record: ShipmentRecord) => void,
+  onGenerateLogisticsBoxMark: (record: ShipmentRecord) => void,
   onDelete: (record: ShipmentRecord) => void,
   onStartDeliveryStatusEdit: (record: ShipmentRecord) => void,
   onCancelDeliveryStatusEdit: () => void,
@@ -72,6 +80,8 @@ export function getShipmentColumns(
   isRelabelEditing: (record: ShipmentRecord) => boolean,
   isRelabelUpdating: (record: ShipmentRecord) => boolean,
   isDeleting: (record: ShipmentRecord) => boolean,
+  isGeneratingCartonLabel: (record: ShipmentRecord) => boolean,
+  isGeneratingLogisticsBoxMark: (record: ShipmentRecord) => boolean,
   shipmentOptions: ShipmentOption[],
   storeOptions: StoreOption[],
   productOptions: ProductShipmentOption[],
@@ -148,34 +158,60 @@ export function getShipmentColumns(
     {
       title: "货件号/运单编号",
       dataIndex: "shipment_no",
-      width: 116,
+      width: 170,
       fixed: "left",
       search: false,
       render: (_, record) => {
         const shipmentNo = record.shipment_no?.trim();
         const trackingNo = record.tracking_no?.trim();
-        const copyable = shipmentNo ? { text: shipmentNo } : false;
-        const shipmentNoNode = shipmentNo ? (
+        const cartonLabelUrl = record.carton_label_url?.trim();
+        const logisticsBoxMarkUrl = record.logistics_box_mark_url?.trim();
+        const shipmentNoNode = shipmentNo && cartonLabelUrl ? (
+          <Typography.Link
+            className="whitespace-nowrap"
+            copyable={{ text: shipmentNo }}
+            onClick={(event) => {
+              event.stopPropagation();
+              onDownloadCartonLabel(record);
+            }}
+          >
+            {shipmentNo}
+          </Typography.Link>
+        ) : shipmentNo ? (
           <Typography.Text
             className="whitespace-nowrap"
-            copyable={copyable}
+            copyable={{ text: shipmentNo }}
           >
             {shipmentNo}
           </Typography.Text>
         ) : (
           <Typography.Text className="whitespace-nowrap">-</Typography.Text>
         );
+        const trackingNoNode = trackingNo && logisticsBoxMarkUrl ? (
+          <Typography.Link
+            className="whitespace-nowrap"
+            copyable={{ text: trackingNo }}
+            onClick={(event) => {
+              event.stopPropagation();
+              onDownloadLogisticsBoxMark(record);
+            }}
+          >
+            {trackingNo}
+          </Typography.Link>
+        ) : (
+          <Typography.Text
+            className="whitespace-nowrap"
+            copyable={trackingNo ? { text: trackingNo } : false}
+            type={trackingNo ? undefined : "secondary"}
+          >
+            {trackingNo || "-"}
+          </Typography.Text>
+        );
 
         return (
-          <div className="flex min-w-0 flex-col gap-1">
+          <div className="flex min-w-[150px] flex-col gap-1 whitespace-nowrap">
             {shipmentNoNode}
-            <Typography.Text
-              className="whitespace-nowrap"
-              copyable={trackingNo ? { text: trackingNo } : false}
-              type={trackingNo ? undefined : "secondary"}
-            >
-              {trackingNo || "-"}
-            </Typography.Text>
+            {trackingNoNode}
           </div>
         );
       },
@@ -457,29 +493,55 @@ export function getShipmentColumns(
     {
       title: "操作",
       valueType: "option",
-      width: 84,
+      width: 150,
       fixed: "right",
       search: false,
-      render: (_, record) => [
-        <Tooltip key="edit" title="编辑">
-          <Button
-            type="text"
-            size="small"
-            icon={<EditOutlined />}
-            onClick={() => onEdit(record)}
-          />
-        </Tooltip>,
-        <Tooltip key="delete" title="删除">
-          <Button
-            type="text"
-            size="small"
-            danger
-            icon={<DeleteOutlined />}
-            loading={isDeleting(record)}
-            onClick={() => onDelete(record)}
-          />
-        </Tooltip>,
-      ],
+      render: (_, record) => {
+        const hasTrackingNo = Boolean(record.tracking_no?.trim());
+
+        return [
+          <Tooltip key="generate-carton-label" title="生成外箱标签">
+            <Button
+              type="text"
+              size="small"
+              icon={<FileSyncOutlined />}
+              loading={isGeneratingCartonLabel(record)}
+              onClick={() => onGenerateCartonLabel(record)}
+            />
+          </Tooltip>,
+          <Tooltip
+            key="generate-logistics-box-mark"
+            title={hasTrackingNo ? "生成物流箱唛" : "请先填写运单编号"}
+          >
+            <Button
+              type="text"
+              size="small"
+              icon={<QrcodeOutlined />}
+              loading={isGeneratingLogisticsBoxMark(record)}
+              disabled={!hasTrackingNo}
+              onClick={() => onGenerateLogisticsBoxMark(record)}
+            />
+          </Tooltip>,
+          <Tooltip key="edit" title="编辑">
+            <Button
+              type="text"
+              size="small"
+              icon={<EditOutlined />}
+              onClick={() => onEdit(record)}
+            />
+          </Tooltip>,
+          <Tooltip key="delete" title="删除">
+            <Button
+              type="text"
+              size="small"
+              danger
+              icon={<DeleteOutlined />}
+              loading={isDeleting(record)}
+              onClick={() => onDelete(record)}
+            />
+          </Tooltip>,
+        ];
+      },
     },
   ];
 }

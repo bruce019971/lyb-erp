@@ -280,6 +280,8 @@ function buildShipmentPayload(values: ShipmentUpdateValues) {
     logistics_provider: normalizeTextValue(values.logistics_provider),
     shipment_no: normalizeTextValue(values.shipment_no),
     tracking_no: normalizeTextValue(values.tracking_no),
+    carton_label_url: normalizeTextValue(values.carton_label_url),
+    logistics_box_mark_url: normalizeTextValue(values.logistics_box_mark_url),
     product_name: normalizeTextValue(values.product_name),
     box_count: normalizeNumberValue(values.box_count),
     pcs_per_box: normalizeNumberValue(values.pcs_per_box),
@@ -432,6 +434,99 @@ export async function deleteShipmentRecords(ids: string[]) {
   if (!response.ok) {
     throw new Error(payload?.error || "批量删除失败");
   }
+}
+
+export type ShipmentBatchCartonLabelResult = {
+  shipmentNo: string;
+  success: boolean;
+  url?: string;
+  error?: string;
+};
+
+export type ShipmentBatchCartonLabelResponse = {
+  total: number;
+  successCount: number;
+  failureCount: number;
+  results: ShipmentBatchCartonLabelResult[];
+};
+
+export async function batchGenerateShipmentCartonLabels(
+  shipmentNos: string[],
+) {
+  const response = await fetch("/api/shipments/batch-carton-labels", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ shipmentNos }),
+  });
+
+  const payload = (await response.json().catch(() => null)) as
+    | { data?: ShipmentBatchCartonLabelResponse; error?: string }
+    | null;
+
+  if (!response.ok || !payload?.data) {
+    throw new Error(payload?.error || "外箱标签批量处理失败");
+  }
+
+  return payload.data;
+}
+
+export async function generateShipmentLogisticsBoxMark(values: {
+  shipmentId: string;
+  username: string;
+  password: string;
+  code: string;
+  uuid: string;
+}) {
+  const response = await fetch("/api/shipments/logistics-box-mark", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(values),
+  });
+
+  const payload = (await response.json().catch(() => null)) as
+    | { data?: ShipmentRecord; fileurl?: string; error?: string }
+    | null;
+
+  if (!response.ok || !payload?.data) {
+    throw new Error(payload?.error || "物流箱唛生成失败");
+  }
+
+  return payload.data;
+}
+
+function getShipmentAssetPath(prefix: string, file: File) {
+  const extension = file.name.includes(".")
+    ? file.name.split(".").pop()?.toLowerCase()
+    : undefined;
+  const suffix = extension ? `.${extension}` : "";
+  const randomId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  return `${prefix}/${randomId}${suffix}`;
+}
+
+export async function uploadShipmentLogisticsBoxMark(file: File) {
+  const filePath = getShipmentAssetPath("shipment-logistics-box-marks", file);
+
+  const { error } = await supabase.storage
+    .from("product-images")
+    .upload(filePath, file, {
+      cacheControl: "3600",
+      upsert: false,
+      contentType: file.type || undefined,
+    });
+
+  if (error) {
+    throw error;
+  }
+
+  const { data } = supabase.storage
+    .from("product-images")
+    .getPublicUrl(filePath);
+
+  return data.publicUrl;
 }
 
 export async function requestShipmentOptions() {

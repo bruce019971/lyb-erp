@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 
 import { APP_SESSION_COOKIE, verifySessionToken } from "@/lib/app-session";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { fetchShipmentCartonLabel } from "../_carton-label";
 
 type OperatorRow = {
   id: string;
@@ -77,47 +78,14 @@ export async function POST(request: Request) {
     const storeId = getRequiredText(body.storeId, "缺少店铺ID");
     const storeAlias = getRequiredText(body.storeAlias, "缺少店铺别名");
 
-    const response = await fetch("https://melinet.cn/api/download-shipment-label", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        status: {
-          isId: true,
-          isNew: false,
-        },
-        data: {
-          id: shipmentNo,
-          warehouseNumber: "",
-          warehouseName: "",
-          nb: boxCount,
-          shopId: storeId,
-          shopName: storeAlias,
-        },
-      }),
+    const { buffer, contentType } = await fetchShipmentCartonLabel({
+      shipmentNo,
+      boxCount,
+      storeId,
+      storeAlias,
     });
 
-    const contentType = response.headers.get("content-type") ?? "application/pdf";
-
-    if (!response.ok) {
-      let message = "外箱标签下载失败";
-      if (contentType.includes("application/json")) {
-        const result = (await response.json().catch(() => null)) as
-          | { error?: string; message?: string }
-          | null;
-        message = result?.error || result?.message || message;
-      } else {
-        const text = await response.text().catch(() => "");
-        message = text.trim() || message;
-      }
-
-      throw new Error(message);
-    }
-
-    const labelBuffer = await response.arrayBuffer();
-
-    return new Response(labelBuffer, {
+    return new Response(buffer, {
       headers: {
         "content-type": contentType,
       },

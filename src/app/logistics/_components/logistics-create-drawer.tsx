@@ -2,10 +2,11 @@
 
 import { App, Button, Drawer, Form, Input, InputNumber, Space } from "antd";
 import type { FormProps } from "antd";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import type { LogisticsProviderCreateValues } from "../_lib/logistics";
 import { createLogisticsProviderRecord } from "../_lib/logistics-request";
+import LogisticsInvoiceTemplateUpload from "./logistics-invoice-template-upload";
 
 type LogisticsCreateDrawerProps = {
   open: boolean;
@@ -20,15 +21,34 @@ export default function LogisticsCreateDrawer({
 }: LogisticsCreateDrawerProps) {
   const [form] = Form.useForm<LogisticsProviderCreateValues>();
   const [submitting, setSubmitting] = useState(false);
+  const [invoiceTemplateUploading, setInvoiceTemplateUploading] = useState(false);
+  const [invoiceTemplateUrl, setInvoiceTemplateUrl] = useState<
+    string | null | undefined
+  >(undefined);
+  const invoiceTemplateUrlRef = useRef<string | null | undefined>(undefined);
   const { message } = App.useApp();
+  const providerName = Form.useWatch("provider_name", form);
+
+  function handleInvoiceTemplateUrlChange(url: string | null) {
+    invoiceTemplateUrlRef.current = url;
+    setInvoiceTemplateUrl(url ?? undefined);
+  }
 
   const handleFinish: FormProps<LogisticsProviderCreateValues>["onFinish"] =
     async (values) => {
       try {
         setSubmitting(true);
-        await createLogisticsProviderRecord(values);
+        await createLogisticsProviderRecord({
+          ...values,
+          invoice_template_url:
+            invoiceTemplateUrlRef.current !== undefined
+              ? invoiceTemplateUrlRef.current
+              : values.invoice_template_url,
+        });
         message.success("物流商新增成功");
         form.resetFields();
+        invoiceTemplateUrlRef.current = undefined;
+        setInvoiceTemplateUrl(undefined);
         onCreated();
       } catch (error) {
         const description =
@@ -39,6 +59,14 @@ export default function LogisticsCreateDrawer({
       }
     };
 
+  function handleClose() {
+    form.resetFields();
+    invoiceTemplateUrlRef.current = undefined;
+    setInvoiceTemplateUrl(undefined);
+    setInvoiceTemplateUploading(false);
+    onClose();
+  }
+
   return (
     <Drawer
       title="新增物流商"
@@ -46,14 +74,15 @@ export default function LogisticsCreateDrawer({
       open={open}
       forceRender
       destroyOnHidden
-      onClose={onClose}
+      onClose={handleClose}
       footer={
         <div className="flex justify-end">
           <Space>
-            <Button onClick={onClose}>取消</Button>
+            <Button onClick={handleClose}>取消</Button>
             <Button
               type="primary"
-              loading={submitting}
+              loading={submitting || invoiceTemplateUploading}
+              disabled={invoiceTemplateUploading}
               onClick={() => {
                 form.submit();
               }}
@@ -91,6 +120,16 @@ export default function LogisticsCreateDrawer({
 
         <Form.Item label="密码" name="password">
           <Input.Password placeholder="请输入密码" maxLength={200} />
+        </Form.Item>
+
+        <Form.Item label="发票模板">
+          <LogisticsInvoiceTemplateUpload
+            fileUrl={invoiceTemplateUrl}
+            providerName={providerName}
+            uploading={invoiceTemplateUploading}
+            onUploadingChange={setInvoiceTemplateUploading}
+            onUrlChange={handleInvoiceTemplateUrlChange}
+          />
         </Form.Item>
 
         <Form.Item

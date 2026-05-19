@@ -19,12 +19,15 @@ import type { StoreOption } from "../../stores/_lib/stores";
 import { requestStoreOptions } from "../../stores/_lib/stores-request";
 import {
   deleteShipmentRecord,
+  generateShipmentLogisticsBoxMark,
   requestShipmentOptions,
   updateShipmentDeliveryStatus,
   updateShipmentRelabelStatus,
 } from "../_lib/shipments-request";
 import ShipmentCreateDrawer from "./shipment-create-drawer";
 import ShipmentEditDrawer from "./shipment-edit-drawer";
+import ShipmentBatchCartonLabelModal from "./shipment-batch-carton-label-modal";
+import ShipmentLogisticsBoxMarkModal from "./shipment-logistics-box-mark-modal";
 import ShipmentsTable from "./shipments-table";
 import ShipmentsTableSkeleton from "./shipments-table-skeleton";
 
@@ -38,8 +41,14 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
   const searchParams = useSearchParams();
   const [mounted, setMounted] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [batchCartonLabelOpen, setBatchCartonLabelOpen] = useState(false);
+  const [selectedShipmentNos, setSelectedShipmentNos] = useState<string[]>([]);
   const [editOpen, setEditOpen] = useState(false);
+  const [logisticsBoxMarkOpen, setLogisticsBoxMarkOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<
+    ShipmentRecord | undefined
+  >(undefined);
+  const [logisticsBoxMarkRecord, setLogisticsBoxMarkRecord] = useState<
     ShipmentRecord | undefined
   >(undefined);
   const [deletingShipmentId, setDeletingShipmentId] = useState<string | null>(null);
@@ -51,6 +60,11 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
     string | null
   >(null);
   const [updatingRelabelId, setUpdatingRelabelId] = useState<string | null>(null);
+  const [generatingCartonLabelId, setGeneratingCartonLabelId] = useState<
+    string | null
+  >(null);
+  const [generatingLogisticsBoxMarkId, setGeneratingLogisticsBoxMarkId] =
+    useState<string | null>(null);
   const [shipmentOptions, setShipmentOptions] = useState<ShipmentOption[]>([]);
   const [storeOptions, setStoreOptions] = useState<StoreOption[]>([]);
   const [productOptions, setProductOptions] = useState<ProductShipmentOption[]>(
@@ -149,6 +163,14 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
     return editingRelabelId === record.id;
   }
 
+  function isGeneratingCartonLabel(record: ShipmentRecord) {
+    return generatingCartonLabelId === record.id;
+  }
+
+  function isGeneratingLogisticsBoxMark(record: ShipmentRecord) {
+    return generatingLogisticsBoxMarkId === record.id;
+  }
+
   async function handleChangeDeliveryStatus(
     record: ShipmentRecord,
     value: string,
@@ -220,6 +242,33 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
     });
   }
 
+  async function handleGenerateLogisticsBoxMark(values: {
+    record: ShipmentRecord;
+    username: string;
+    password: string;
+    code: string;
+    uuid: string;
+  }) {
+    try {
+      setGeneratingLogisticsBoxMarkId(values.record.id);
+      await generateShipmentLogisticsBoxMark({
+        shipmentId: values.record.id,
+        username: values.username,
+        password: values.password,
+        code: values.code,
+        uuid: values.uuid,
+      });
+      messageApi.success("物流箱唛生成成功");
+      tableActionRef.current?.reload();
+    } catch (error) {
+      messageApi.error(
+        error instanceof Error ? error.message : "物流箱唛生成失败",
+      );
+    } finally {
+      setGeneratingLogisticsBoxMarkId(null);
+    }
+  }
+
   return (
     <ConfigProvider
       locale={zhCN}
@@ -246,6 +295,12 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
                 actionRef={tableActionRef}
                 formRef={searchFormRef}
                 onCreate={() => setCreateOpen(true)}
+                onBatchCartonLabels={() => setBatchCartonLabelOpen(true)}
+                onSelectedShipmentNosChange={setSelectedShipmentNos}
+                onGenerateLogisticsBoxMark={(record) => {
+                  setLogisticsBoxMarkRecord(record);
+                  setLogisticsBoxMarkOpen(true);
+                }}
                 onEdit={(record) => {
                   setEditingRecord(record);
                   setEditOpen(true);
@@ -270,6 +325,14 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
                 isRelabelEditing={isRelabelEditing}
                 isRelabelUpdating={isRelabelUpdating}
                 isDeleting={isDeleting}
+                isGeneratingCartonLabel={isGeneratingCartonLabel}
+                isGeneratingLogisticsBoxMark={isGeneratingLogisticsBoxMark}
+                onStartGenerateCartonLabel={(record) =>
+                  setGeneratingCartonLabelId(record.id)
+                }
+                onFinishGenerateCartonLabel={() =>
+                  setGeneratingCartonLabelId(null)
+                }
                 shipmentOptions={shipmentOptions}
                 storeOptions={storeOptions}
                 productOptions={productOptions}
@@ -280,6 +343,38 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
             )}
           </section>
         </main>
+        {mounted ? (
+          <ShipmentLogisticsBoxMarkModal
+            key={
+              logisticsBoxMarkRecord
+                ? `logistics-box-mark-${logisticsBoxMarkRecord.id}`
+                : "logistics-box-mark-closed"
+            }
+            open={logisticsBoxMarkOpen}
+            record={logisticsBoxMarkRecord}
+            logisticsOptions={logisticsOptions}
+            onClose={() => {
+              setLogisticsBoxMarkOpen(false);
+              setLogisticsBoxMarkRecord(undefined);
+            }}
+            onGenerate={(values) => void handleGenerateLogisticsBoxMark(values)}
+          />
+        ) : null}
+        {mounted ? (
+          <ShipmentBatchCartonLabelModal
+            key={
+              batchCartonLabelOpen
+                ? `batch-carton-label-${selectedShipmentNos.join("|")}`
+                : "batch-carton-label-closed"
+            }
+            open={batchCartonLabelOpen}
+            initialShipmentNos={selectedShipmentNos}
+            onClose={() => setBatchCartonLabelOpen(false)}
+            onFinished={() => {
+              tableActionRef.current?.reload();
+            }}
+          />
+        ) : null}
         {mounted ? (
           <ShipmentCreateDrawer
             open={createOpen}

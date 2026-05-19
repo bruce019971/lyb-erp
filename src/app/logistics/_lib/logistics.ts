@@ -4,6 +4,7 @@ export type LogisticsProviderRecord = {
   system_url: string | null;
   username: string | null;
   password: string | null;
+  invoice_template_url: string | null;
   product_label_unit_price: number | null;
   carton_label_unit_price: number | null;
   created_at: string | null;
@@ -15,6 +16,7 @@ export type LogisticsProviderCreateValues = {
   system_url?: string | null;
   username?: string | null;
   password?: string | null;
+  invoice_template_url?: string | null;
   product_label_unit_price?: number | null;
   carton_label_unit_price?: number | null;
 };
@@ -25,6 +27,9 @@ export type LogisticsProviderOption = {
   id: string;
   provider_name: string | null;
   system_url: string | null;
+  username?: string | null;
+  password?: string | null;
+  invoice_template_url?: string | null;
   product_label_unit_price?: number | null;
   carton_label_unit_price?: number | null;
 };

@@ -1,7 +1,7 @@
 export type ProductRecord = {
   id: string;
   product_name: string | null;
-  product_url: string | null;
+  product_english_name: string | null;
   product_id: string | null;
   sku: string | null;
   ml_code: string | null;
@@ -19,6 +19,9 @@ export type ProductRecord = {
   pcs_per_carton: number | null;
   customs_code: string | null;
   product_category: string | null;
+  product_usage: string | null;
+  product_attribute: string | null;
+  product_material: string | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -44,7 +47,7 @@ export type ProductFilterOptions = {
 
 export type ProductCreateValues = {
   product_name: string;
-  product_url?: string | null;
+  product_english_name?: string | null;
   product_id?: string | null;
   sku?: string | null;
   ml_code?: string | null;
@@ -60,12 +63,25 @@ export type ProductCreateValues = {
   pcs_per_carton?: number | null;
   customs_code?: string | null;
   product_category?: string | null;
+  product_usage?: string | null;
+  product_attribute?: string | null;
+  product_material?: string | null;
 };
 
 export type ProductUpdateValues = ProductCreateValues;
 
 export const productKeywordFields = [
   "product_name",
+  "product_english_name",
   "sku",
   "store_name",
 ] as const satisfies ReadonlyArray<keyof ProductRecord>;
+
+export function getMercadoLibreProductUrl(productId?: string | null) {
+  const normalizedProductId = productId?.trim();
+  return normalizedProductId
+    ? `https://articulo.mercadolibre.com.mx/MLM-${encodeURIComponent(
+        normalizedProductId,
+      )}`
+    : undefined;
+}

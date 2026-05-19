@@ -2,7 +2,11 @@ import { DeleteOutlined, EditOutlined, EyeOutlined } from "@ant-design/icons";
 import type { ProColumns } from "@ant-design/pro-components";
 import { Button, Image, Tooltip, Typography } from "antd";
 
-import type { ProductFilterOption, ProductRecord } from "../_lib/products";
+import {
+  getMercadoLibreProductUrl,
+  type ProductFilterOption,
+  type ProductRecord,
+} from "../_lib/products";
 
 function EmptyText() {
   return <Typography.Text type="secondary">-</Typography.Text>;
@@ -72,14 +76,14 @@ export function getProductColumns(
         ),
     },
     {
-      title: "产品名称/ML Code",
+      title: "产品名称/英文名/ML Code",
       dataIndex: "product_name",
-      width: 190,
+      width: 220,
       fixed: "left",
       ellipsis: true,
       search: false,
       render: (_, record) => {
-        const href = record.product_url?.trim();
+        const href = getMercadoLibreProductUrl(record.product_id);
         const productNameNode = record.product_name ? (
           href ? (
             <Typography.Link href={href} target="_blank">
@@ -95,6 +99,12 @@ export function getProductColumns(
         return (
           <div className="flex min-w-0 flex-col gap-1">
             <div className="truncate">{productNameNode}</div>
+            <Typography.Text
+              className="truncate"
+              type={record.product_english_name ? undefined : "secondary"}
+            >
+              {record.product_english_name || "-"}
+            </Typography.Text>
             <Typography.Text
               className="whitespace-nowrap"
               copyable={record.ml_code ? { text: record.ml_code } : false}
@@ -112,28 +122,38 @@ export function getProductColumns(
       hideInTable: true,
       width: 200,
       search: false,
-      render: (_, record) => (
-        <div className="flex min-w-0 flex-col gap-1">
-          <div className="flex items-center gap-2 whitespace-nowrap">
-            <Typography.Text type="secondary">ID:</Typography.Text>
-            <Typography.Text
-              className="whitespace-nowrap"
-              copyable={record.product_id ? { text: record.product_id } : false}
-            >
-              {record.product_id ?? "-"}
-            </Typography.Text>
+      render: (_, record) => {
+        const productHref = getMercadoLibreProductUrl(record.product_id);
+
+        return (
+          <div className="flex min-w-0 flex-col gap-1">
+            <div className="flex items-center gap-2 whitespace-nowrap">
+              <Typography.Text type="secondary">ID:</Typography.Text>
+              {record.product_id && productHref ? (
+                <Typography.Link
+                  className="whitespace-nowrap"
+                  copyable={{ text: record.product_id }}
+                  href={productHref}
+                  target="_blank"
+                >
+                  {record.product_id}
+                </Typography.Link>
+              ) : (
+                <Typography.Text type="secondary">-</Typography.Text>
+              )}
+            </div>
+            <div className="flex items-center gap-2 whitespace-nowrap">
+              <Typography.Text type="secondary">SKU:</Typography.Text>
+              <Typography.Text
+                className="whitespace-nowrap"
+                copyable={record.sku ? { text: record.sku } : false}
+              >
+                {record.sku ?? "-"}
+              </Typography.Text>
+            </div>
           </div>
-          <div className="flex items-center gap-2 whitespace-nowrap">
-            <Typography.Text type="secondary">SKU:</Typography.Text>
-            <Typography.Text
-              className="whitespace-nowrap"
-              copyable={record.sku ? { text: record.sku } : false}
-            >
-              {record.sku ?? "-"}
-            </Typography.Text>
-          </div>
-        </div>
-      ),
+        );
+      },
     },
     {
       title: "所在店铺",
@@ -156,6 +176,33 @@ export function getProductColumns(
           <EmptyText />
         );
       },
+    },
+    {
+      title: "产品属性",
+      dataIndex: "product_attribute",
+      width: 90,
+      valueType: "select",
+      fieldProps: {
+        options: [
+          { label: "普货", value: "普货" },
+          { label: "纺织品", value: "纺织品" },
+        ],
+      },
+      render: (_, record) => record.product_attribute || <EmptyText />,
+    },
+    {
+      title: "用途",
+      dataIndex: "product_usage",
+      width: 140,
+      search: false,
+      ellipsis: true,
+    },
+    {
+      title: "材质",
+      dataIndex: "product_material",
+      width: 120,
+      search: false,
+      ellipsis: true,
     },
     {
       title: "装箱数量(pcs)",

@@ -6,6 +6,8 @@ export type ShipmentRecord = {
   logistics_provider: string | null;
   shipment_no: string | null;
   tracking_no: string | null;
+  carton_label_url: string | null;
+  logistics_box_mark_url: string | null;
   product_name: string | null;
   box_count: number | null;
   pcs_per_box: number | null;
@@ -27,6 +29,8 @@ export type ShipmentUpdateValues = {
   logistics_provider?: string | null;
   shipment_no?: string | null;
   tracking_no?: string | null;
+  carton_label_url?: string | null;
+  logistics_box_mark_url?: string | null;
   product_name?: string | null;
   box_count?: number | null;
   pcs_per_box?: number | null;
