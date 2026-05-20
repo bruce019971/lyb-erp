@@ -8,6 +8,9 @@ export const RISHENGHUI_AUTH_CODE_URL = `${RISHENGHUI_API_BASE}/cms/user/auth-co
 export const RISHENGHUI_VALID_CODE_URL = `${RISHENGHUI_API_BASE}/cms/user/valid-code`;
 export const RISHENGHUI_LOGIN_URL = `${RISHENGHUI_API_BASE}/cms/user/login`;
 export const RISHENGHUI_PRINT_MAITOU_URL = `${RISHENGHUI_API_BASE}/cms/order/print-maitou`;
+export const RISHENGHUI_FILE_UPLOAD_URL = `${RISHENGHUI_API_BASE}/cms/file/upload`;
+export const RISHENGHUI_COMMON_IMPORT_URL = `${RISHENGHUI_API_BASE}/cms/common/import`;
+export const RISHENGHUI_TPL_LIST_VALUES_URL = `${RISHENGHUI_API_BASE}/cms/tpl/list/values`;
 
 type OperatorRow = {
   id: string;

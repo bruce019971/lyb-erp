@@ -76,7 +76,7 @@ export function getProductColumns(
         ),
     },
     {
-      title: "产品名称/英文名/ML Code",
+      title: "产品名称/ML Code",
       dataIndex: "product_name",
       width: 220,
       fixed: "left",
@@ -99,12 +99,6 @@ export function getProductColumns(
         return (
           <div className="flex min-w-0 flex-col gap-1">
             <div className="truncate">{productNameNode}</div>
-            <Typography.Text
-              className="truncate"
-              type={record.product_english_name ? undefined : "secondary"}
-            >
-              {record.product_english_name || "-"}
-            </Typography.Text>
             <Typography.Text
               className="whitespace-nowrap"
               copyable={record.ml_code ? { text: record.ml_code } : false}
@@ -223,6 +217,15 @@ export function getProductColumns(
       width: 120,
       search: false,
       ellipsis: true,
+    },
+    {
+      title: "英文名",
+      dataIndex: "product_english_name",
+      width: 160,
+      search: false,
+      ellipsis: true,
+      render: (_, record) =>
+        record.product_english_name ? record.product_english_name : <EmptyText />,
     },
     {
       title: "产品单价",

@@ -2,6 +2,7 @@ import {
   DeleteOutlined,
   EditOutlined,
   FileSyncOutlined,
+  ShoppingCartOutlined,
   QrcodeOutlined,
 } from "@ant-design/icons";
 import type { ProColumns } from "@ant-design/pro-components";
@@ -44,30 +45,13 @@ function openProductPage(
   window.history.pushState(null, "", href);
 }
 
-function openStorePage(storeName?: string | null) {
-  const trimmedStoreName = storeName?.trim();
-  if (!trimmedStoreName) return;
-
-  const params = new URLSearchParams();
-  params.set("seller_name", trimmedStoreName);
-  window.history.pushState(null, "", `/stores?${params.toString()}`);
-}
-
-function openLogisticsPage(providerName?: string | null) {
-  const trimmedProviderName = providerName?.trim();
-  if (!trimmedProviderName) return;
-
-  const params = new URLSearchParams();
-  params.set("provider_name", trimmedProviderName);
-  window.history.pushState(null, "", `/logistics?${params.toString()}`);
-}
-
 export function getShipmentColumns(
   onEdit: (record: ShipmentRecord) => void,
   onDownloadCartonLabel: (record: ShipmentRecord) => void,
   onDownloadLogisticsBoxMark: (record: ShipmentRecord) => void,
   onGenerateCartonLabel: (record: ShipmentRecord) => void,
   onGenerateLogisticsBoxMark: (record: ShipmentRecord) => void,
+  onRishenghuiOrder: (record: ShipmentRecord) => void,
   onDelete: (record: ShipmentRecord) => void,
   onStartDeliveryStatusEdit: (record: ShipmentRecord) => void,
   onCancelDeliveryStatusEdit: () => void,
@@ -267,13 +251,7 @@ export function getShipmentColumns(
           record.order_store?.trim() ||
           (productName ? productStoreMap.get(productName)?.trim() : undefined);
 
-        return storeName ? (
-          <Typography.Link onClick={() => openStorePage(storeName)}>
-            {storeName}
-          </Typography.Link>
-        ) : (
-          "-"
-        );
+        return storeName ? <Typography.Text>{storeName}</Typography.Text> : "-";
       },
     },
     {
@@ -293,9 +271,7 @@ export function getShipmentColumns(
         const providerName = record.logistics_provider?.trim();
 
         return providerName ? (
-          <Typography.Link onClick={() => openLogisticsPage(providerName)}>
-            {providerName}
-          </Typography.Link>
+          <Typography.Text>{providerName}</Typography.Text>
         ) : (
           "-"
         );
@@ -498,6 +474,10 @@ export function getShipmentColumns(
       search: false,
       render: (_, record) => {
         const hasTrackingNo = Boolean(record.tracking_no?.trim());
+        const hasLogisticsBoxMarkUrl = Boolean(
+          record.logistics_box_mark_url?.trim(),
+        );
+        const isRishenghui = record.logistics_provider?.trim() === "日升辉";
 
         return [
           <Tooltip key="generate-carton-label" title="生成外箱标签">
@@ -509,19 +489,27 @@ export function getShipmentColumns(
               onClick={() => onGenerateCartonLabel(record)}
             />
           </Tooltip>,
-          <Tooltip
-            key="generate-logistics-box-mark"
-            title={hasTrackingNo ? "生成物流箱唛" : "请先填写运单编号"}
-          >
-            <Button
-              type="text"
-              size="small"
-              icon={<QrcodeOutlined />}
-              loading={isGeneratingLogisticsBoxMark(record)}
-              disabled={!hasTrackingNo}
-              onClick={() => onGenerateLogisticsBoxMark(record)}
-            />
-          </Tooltip>,
+          isRishenghui && !hasTrackingNo ? (
+            <Tooltip key="rishenghui-order" title="物流下单">
+              <Button
+                type="text"
+                size="small"
+                icon={<ShoppingCartOutlined />}
+                onClick={() => onRishenghuiOrder(record)}
+              />
+            </Tooltip>
+          ) : null,
+          hasTrackingNo && !hasLogisticsBoxMarkUrl ? (
+            <Tooltip key="generate-logistics-box-mark" title="生成物流箱唛">
+              <Button
+                type="text"
+                size="small"
+                icon={<QrcodeOutlined />}
+                loading={isGeneratingLogisticsBoxMark(record)}
+                onClick={() => onGenerateLogisticsBoxMark(record)}
+              />
+            </Tooltip>
+          ) : null,
           <Tooltip key="edit" title="编辑">
             <Button
               type="text"

@@ -106,14 +106,31 @@ async function fetchSupabaseJson(url, serviceRoleKey, init = {}) {
   return payload;
 }
 
-async function fetchAllProducts(supabaseUrl, serviceRoleKey) {
+function parseMlCodeFilter() {
+  const argument = process.argv.find(
+    (item) => item.startsWith("--ml-code=") || item.startsWith("--ml-codes="),
+  );
+  const value = argument?.split("=").slice(1).join("=").trim();
+
+  return value
+    ? value
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean)
+    : [];
+}
+
+async function fetchAllProducts(supabaseUrl, serviceRoleKey, mlCodes = []) {
   const pageSize = 1000;
   let offset = 0;
   const products = [];
 
   while (true) {
     const url = new URL("/rest/v1/products", supabaseUrl);
-    url.searchParams.set("select", "id,product_name,product_category");
+    url.searchParams.set("select", "id,product_name,ml_code,product_category");
+    if (mlCodes.length) {
+      url.searchParams.set("ml_code", `in.(${mlCodes.join(",")})`);
+    }
     url.searchParams.set("order", "created_at.desc.nullslast");
     url.searchParams.set("limit", String(pageSize));
     url.searchParams.set("offset", String(offset));
@@ -185,13 +202,14 @@ async function main() {
   loadEnvFile();
 
   const apply = process.argv.includes("--apply");
+  const mlCodes = parseMlCodeFilter();
   const supabaseUrl = getEnv("NEXT_PUBLIC_SUPABASE_URL");
   const serviceRoleKey = getEnv("SUPABASE_SERVICE_ROLE_KEY");
   if (apply) {
     await verifyTargetColumns(supabaseUrl, serviceRoleKey);
   }
 
-  const products = await fetchAllProducts(supabaseUrl, serviceRoleKey);
+  const products = await fetchAllProducts(supabaseUrl, serviceRoleKey, mlCodes);
 
   let updated = 0;
   let skipped = 0;
@@ -211,7 +229,7 @@ async function main() {
     if (!apply) {
       updated += 1;
       console.log(
-        `预览：${product.product_name ?? product.id} [${category}] -> ${JSON.stringify(
+        `预览：${product.ml_code ?? "-"} ${product.product_name ?? product.id} [${category}] -> ${JSON.stringify(
           patch,
         )}`,
       );
@@ -221,11 +239,15 @@ async function main() {
     try {
       await updateProduct(supabaseUrl, serviceRoleKey, product.id, patch);
       updated += 1;
-      console.log(`已更新：${product.product_name ?? product.id} [${category}]`);
+      console.log(
+        `已更新：${product.ml_code ?? "-"} ${product.product_name ?? product.id} [${category}]`,
+      );
     } catch (error) {
       failed += 1;
       const message = error instanceof Error ? error.message : String(error);
-      console.error(`失败：${product.product_name ?? product.id} [${category}]，${message}`);
+      console.error(
+        `失败：${product.ml_code ?? "-"} ${product.product_name ?? product.id} [${category}]，${message}`,
+      );
     }
   }
 

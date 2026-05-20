@@ -26,7 +26,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 }
 
 function getInvoiceTemplateName(providerName?: string | null) {
-  return `${providerName?.trim() || "物流商"}下单发票模板`;
+  return `${providerName?.trim() || "物流商"}发票模板`;
 }
 
 export default function LogisticsInvoiceTemplateUpload({

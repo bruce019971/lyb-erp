@@ -65,13 +65,22 @@ export async function DELETE(
     }
 
     const adminClient = createSupabaseAdminClient();
-    const { error } = await adminClient
+    const { data, error } = await adminClient
       .from("shipment_records")
-      .delete()
-      .eq("id", id.trim());
+      .update({
+        status: "已删除",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id.trim())
+      .select("id")
+      .maybeSingle();
 
     if (error) {
       throw error;
+    }
+
+    if (!data) {
+      throw new Error("未找到需要删除的货件");
     }
 
     return NextResponse.json({ data: true });

@@ -30,6 +30,7 @@ type ShipmentsTableProps = {
   onBatchCartonLabels: () => void;
   onSelectedShipmentNosChange: (shipmentNos: string[]) => void;
   onGenerateLogisticsBoxMark: (record: ShipmentRecord) => void;
+  onRishenghuiOrder: (record: ShipmentRecord) => void;
   onEdit: (record: ShipmentRecord) => void;
   onDelete: (record: ShipmentRecord) => void;
   onStartDeliveryStatusEdit: (record: ShipmentRecord) => void;
@@ -54,7 +55,7 @@ type ShipmentsTableProps = {
 };
 
 const STORAGE_PREFIX = "mercado-inbound-planning:shipments";
-const COLUMNS_STATE_STORAGE_KEY = `${STORAGE_PREFIX}:columns:v2`;
+const COLUMNS_STATE_STORAGE_KEY = `${STORAGE_PREFIX}:columns:v3`;
 const PAGE_SIZE = 40;
 
 function mergeShipmentsById(
@@ -74,6 +75,14 @@ function mergeShipmentsById(
   return Array.from(merged.values());
 }
 
+function isWarehouseArrivedUndelivered(record: ShipmentRecord) {
+  const isWarehouseArrived =
+    record.warehouse_arrived_status === "是" ||
+    Boolean(record.overseas_warehouse_arrived_at);
+
+  return isWarehouseArrived && record.delivery_status !== "是";
+}
+
 export default function ShipmentsTable({
   actionRef,
   formRef,
@@ -81,6 +90,7 @@ export default function ShipmentsTable({
   onBatchCartonLabels,
   onSelectedShipmentNosChange,
   onGenerateLogisticsBoxMark,
+  onRishenghuiOrder,
   onEdit,
   onDelete,
   onStartDeliveryStatusEdit,
@@ -237,6 +247,7 @@ export default function ShipmentsTable({
         handleDownloadLogisticsBoxMark,
         handleGenerateCartonLabel,
         onGenerateLogisticsBoxMark,
+        onRishenghuiOrder,
         onDelete,
         onStartDeliveryStatusEdit,
         onCancelDeliveryStatusEdit,
@@ -275,6 +286,7 @@ export default function ShipmentsTable({
       onDelete,
       onEdit,
       onGenerateLogisticsBoxMark,
+      onRishenghuiOrder,
       onStartDeliveryStatusEdit,
       onStartRelabelEdit,
       productOptions,
@@ -346,9 +358,13 @@ export default function ShipmentsTable({
           );
         },
       }}
-      rowClassName={(record) =>
-        record.is_delivery_completed ? "shipment-delivered-row" : ""
-      }
+      rowClassName={(record) => {
+        if (record.is_delivery_completed) return "shipment-delivered-row";
+        if (isWarehouseArrivedUndelivered(record)) {
+          return "shipment-warehouse-pending-delivery-row";
+        }
+        return "";
+      }}
       tableAlertRender={false}
       tableAlertOptionRender={false}
       columnsState={{

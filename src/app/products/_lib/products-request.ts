@@ -67,7 +67,8 @@ export async function requestProductRecords(
 ) {
   let query = supabase
     .from("products")
-    .select("*", { count: "exact" });
+    .select("*", { count: "exact" })
+    .eq("status", "有效");
 
   productKeywordFields.forEach((field) => {
     const value = params[field];
@@ -138,6 +139,7 @@ async function requestProductFieldOptions(field: keyof ProductRecord) {
   const { data, error } = await supabase
     .from("products")
     .select(field)
+    .eq("status", "有效")
     .order(field, { ascending: true });
 
   if (error) {
@@ -153,6 +155,7 @@ export async function requestProductFilterOptions() {
   const { data, error } = await supabase
     .from("products")
     .select("product_name, product_id, sku, store_name")
+    .eq("status", "有效")
     .order("product_name", { ascending: true });
 
   if (!error) {
@@ -189,6 +192,7 @@ export async function requestProductShipmentOptions() {
   const { data, error } = await supabase
     .from("products")
     .select("id, product_name, store_name, pcs_per_carton, product_unit_price")
+    .eq("status", "有效")
     .order("product_name", { ascending: true });
 
   if (error) {
@@ -370,6 +374,7 @@ export async function checkProductReferences(productName: string) {
     .from("shipment_records")
     .select("id")
     .eq("product_name", productName)
+    .eq("status", "有效")
     .limit(1);
 
   if (shipments && shipments.length > 0) {
@@ -380,19 +385,23 @@ export async function checkProductReferences(productName: string) {
 }
 
 export async function deleteProductRecord(id: string, productName: string) {
-  // 先检查关联
-  const references = await checkProductReferences(productName);
+  void productName;
 
-  if (references.length > 0) {
-    throw new Error(`产品被${references.join("、")}关联，请先删除关联数据`);
-  }
-
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("products")
-    .delete()
-    .eq("id", id);
+    .update({
+      status: "已删除",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
 
   if (error) {
     throw error;
+  }
+
+  if (!data) {
+    throw new Error("产品未被删除，请检查 Supabase products 表的 update 权限策略");
   }
 }

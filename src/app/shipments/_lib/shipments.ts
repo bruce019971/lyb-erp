@@ -8,6 +8,7 @@ export type ShipmentRecord = {
   tracking_no: string | null;
   carton_label_url: string | null;
   logistics_box_mark_url: string | null;
+  order_invoice_url: string | null;
   product_name: string | null;
   box_count: number | null;
   pcs_per_box: number | null;
@@ -20,6 +21,7 @@ export type ShipmentRecord = {
   relabel_delivery_times?: string[];
   goods_value: number | null;
   is_delivery_completed?: boolean;
+  status: string | null;
   created_at: string | null;
   updated_at: string | null;
 };

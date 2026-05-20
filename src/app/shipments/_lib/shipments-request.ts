@@ -32,6 +32,7 @@ export async function requestShipmentRecords(
   let query = supabase
     .from("shipment_records")
     .select("*", { count: "exact" })
+    .eq("status", "有效")
     .range(from, to);
 
   shipmentKeywordFields.forEach((field) => {
@@ -275,13 +276,11 @@ function compactPayload<T extends Record<string, unknown>>(payload: T) {
 }
 
 function buildShipmentPayload(values: ShipmentUpdateValues) {
-  return compactPayload({
+  const payload: Partial<ShipmentUpdateValues> = compactPayload({
     order_store: normalizeTextValue(values.order_store),
     logistics_provider: normalizeTextValue(values.logistics_provider),
     shipment_no: normalizeTextValue(values.shipment_no),
     tracking_no: normalizeTextValue(values.tracking_no),
-    carton_label_url: normalizeTextValue(values.carton_label_url),
-    logistics_box_mark_url: normalizeTextValue(values.logistics_box_mark_url),
     product_name: normalizeTextValue(values.product_name),
     box_count: normalizeNumberValue(values.box_count),
     pcs_per_box: normalizeNumberValue(values.pcs_per_box),
@@ -298,6 +297,18 @@ function buildShipmentPayload(values: ShipmentUpdateValues) {
     is_relabel: normalizeTextValue(values.is_relabel),
     goods_value: normalizeNumberValue(values.goods_value),
   });
+
+  if ("carton_label_url" in values) {
+    payload.carton_label_url = normalizeTextValue(values.carton_label_url);
+  }
+
+  if ("logistics_box_mark_url" in values) {
+    payload.logistics_box_mark_url = normalizeTextValue(
+      values.logistics_box_mark_url,
+    );
+  }
+
+  return payload;
 }
 
 export async function createShipmentRecord(values: ShipmentCreateValues) {
@@ -498,6 +509,93 @@ export async function generateShipmentLogisticsBoxMark(values: {
   return payload.data;
 }
 
+export async function generateShipmentRishenghuiOrderInvoice(values: {
+  shipmentId: string;
+  shipmentNo?: string | null;
+}) {
+  const response = await fetch("/api/shipments/rishenghui-order-invoice", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(values),
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        data?: ShipmentRecord;
+        fileUrl?: string;
+        fileName?: string;
+        error?: string;
+      }
+    | null;
+
+  if (!response.ok || !payload?.fileUrl || !payload.fileName) {
+    throw new Error(payload?.error || "日升辉下单发票生成失败");
+  }
+
+  return {
+    record: payload.data,
+    fileUrl: payload.fileUrl,
+    fileName: payload.fileName,
+  };
+}
+
+export async function getRishenghuiAccessToken(values: {
+  code: string;
+  uuid: string;
+}) {
+  const response = await fetch("/api/logistics/rishenghui/access-token", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(values),
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        accessToken?: string;
+        error?: string;
+      }
+    | null;
+
+  if (!response.ok || !payload?.accessToken) {
+    throw new Error(payload?.error || "日升辉登录失败");
+  }
+
+  return payload.accessToken;
+}
+
+export async function submitRishenghuiOrderInvoice(values: {
+  shipmentId: string;
+  fileUrl: string;
+  fileName: string;
+  accessToken: string;
+}) {
+  const response = await fetch("/api/shipments/rishenghui-order-submit", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(values),
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        data?: ShipmentRecord;
+        packno?: string;
+        error?: string;
+      }
+    | null;
+
+  if (!response.ok) {
+    throw new Error(payload?.error || "日升辉发票上传失败");
+  }
+
+  return {
+    record: payload?.data,
+    packno: payload?.packno?.trim() || "",
+  };
+}
+
 function getShipmentAssetPath(prefix: string, file: File) {
   const extension = file.name.includes(".")
     ? file.name.split(".").pop()?.toLowerCase()
@@ -533,6 +631,7 @@ export async function requestShipmentOptions() {
   const { data, error } = await supabase
     .from("shipment_records")
     .select("id, shipment_no, order_store, box_count")
+    .eq("status", "有效")
     .order("created_at", { ascending: false, nullsFirst: false });
 
   if (!error) {
@@ -544,6 +643,7 @@ export async function requestShipmentOptions() {
   const { data: fallbackData, error: fallbackError } = await supabase
     .from("shipment_records")
     .select("id, shipment_no")
+    .eq("status", "有效")
     .order("created_at", { ascending: false, nullsFirst: false });
 
   if (fallbackError) {

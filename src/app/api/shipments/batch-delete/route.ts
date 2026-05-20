@@ -67,7 +67,10 @@ export async function POST(request: Request) {
     const adminClient = createSupabaseAdminClient();
     const { error } = await adminClient
       .from("shipment_records")
-      .delete()
+      .update({
+        status: "已删除",
+        updated_at: new Date().toISOString(),
+      })
       .in("id", ids);
 
     if (error) {

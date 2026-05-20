@@ -88,6 +88,7 @@ export async function requestRelabelRecords(
     const { data: shipmentRows, error: shipmentError } = await supabase
       .from("shipment_records")
       .select("shipment_no")
+      .eq("status", "有效")
       .in("logistics_provider", logisticsProviderValues)
       .not("shipment_no", "is", null)
       .range(0, 9999);

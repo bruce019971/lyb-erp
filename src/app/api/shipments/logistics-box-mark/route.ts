@@ -98,6 +98,7 @@ export async function POST(request: Request) {
     const { data: shipmentData, error: shipmentError } = await adminClient
       .from("shipment_records")
       .select("id, tracking_no")
+      .eq("status", "有效")
       .eq("id", shipmentId)
       .single();
 

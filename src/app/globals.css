@@ -122,6 +122,23 @@ td.relabel-delivery-done-cell:hover,
   color: #94a3b8 !important;
 }
 
+.shipment-warehouse-pending-delivery-row > td {
+  background: #fff7e6 !important;
+  font-weight: 600;
+}
+
+.shipment-warehouse-pending-delivery-row:hover > td {
+  background: #fff1cc !important;
+}
+
+.shipment-warehouse-pending-delivery-row .ant-typography,
+.shipment-warehouse-pending-delivery-row .ant-btn,
+.shipment-warehouse-pending-delivery-row .ant-btn-link,
+.shipment-warehouse-pending-delivery-row .ant-select-selection-item,
+.shipment-warehouse-pending-delivery-row a {
+  font-weight: 600;
+}
+
 td.shipment-delivery-overdue-cell,
 .shipment-delivered-row > td.shipment-delivery-overdue-cell {
   background: #fff1f0 !important;

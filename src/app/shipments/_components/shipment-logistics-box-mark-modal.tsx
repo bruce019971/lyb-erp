@@ -1,7 +1,7 @@
 "use client";
 
 import { ReloadOutlined } from "@ant-design/icons";
-import { App, Button, Form, Input, Modal, Space } from "antd";
+import { App, Button, Input, Modal, Space } from "antd";
 import { useCallback, useRef, useState } from "react";
 
 import type { ShipmentRecord } from "../_lib/shipments";
@@ -19,12 +19,6 @@ type ShipmentLogisticsBoxMarkModalProps = {
     code: string;
     uuid: string;
   }) => void;
-};
-
-type LogisticsBoxMarkFormValues = {
-  username: string;
-  password: string;
-  code: string;
 };
 
 type AuthCodeResponse = {
@@ -60,7 +54,9 @@ export default function ShipmentLogisticsBoxMarkModal({
   onGenerate,
 }: ShipmentLogisticsBoxMarkModalProps) {
   const { message } = App.useApp();
-  const [form] = Form.useForm<LogisticsBoxMarkFormValues>();
+  const [usernameValue, setUsernameValue] = useState("");
+  const [passwordValue, setPasswordValue] = useState("");
+  const [codeValue, setCodeValue] = useState("");
   const [authCodeImg, setAuthCodeImg] = useState("");
   const [authCodeUuid, setAuthCodeUuid] = useState("");
   const [authCodeLoading, setAuthCodeLoading] = useState(false);
@@ -92,7 +88,7 @@ export default function ShipmentLogisticsBoxMarkModal({
 
       setAuthCodeImg(payload.img);
       setAuthCodeUuid(payload.uuid);
-      form.setFieldValue("code", "");
+      setCodeValue("");
       clearValidateTimer();
       setValidCodeStatus("idle");
     } catch (error) {
@@ -104,7 +100,7 @@ export default function ShipmentLogisticsBoxMarkModal({
     } finally {
       setAuthCodeLoading(false);
     }
-  }, [form, message]);
+  }, [message]);
 
   const validateAuthCode = useCallback(
     async (code: string, uuid: string) => {
@@ -153,7 +149,9 @@ export default function ShipmentLogisticsBoxMarkModal({
   }
 
   function handleClose() {
-    form.resetFields();
+    setUsernameValue("");
+    setPasswordValue("");
+    setCodeValue("");
     setAuthCodeImg("");
     setAuthCodeUuid("");
     clearValidateTimer();
@@ -161,8 +159,25 @@ export default function ShipmentLogisticsBoxMarkModal({
     onClose();
   }
 
-  async function handleSubmit() {
-    const values = await form.validateFields();
+  function handleSubmit() {
+    const username = usernameValue.trim();
+    const password = passwordValue.trim();
+    const code = codeValue.trim();
+
+    if (!username) {
+      message.error("请输入用户名");
+      return;
+    }
+
+    if (!password) {
+      message.error("请输入密码");
+      return;
+    }
+
+    if (!code) {
+      message.error("请输入验证码");
+      return;
+    }
 
     if (!authCodeUuid) {
       message.error("请先获取验证码图片");
@@ -181,27 +196,32 @@ export default function ShipmentLogisticsBoxMarkModal({
 
     onGenerate({
       record,
-      username: values.username,
-      password: values.password,
-      code: values.code,
+      username,
+      password,
+      code,
       uuid: authCodeUuid,
     });
     handleClose();
+  }
+
+  function handleOpenChange(visible: boolean) {
+    if (!visible) return;
+    setUsernameValue(provider?.username?.trim() ?? "");
+    setPasswordValue(provider?.password?.trim() ?? "");
+    setCodeValue("");
+    void loadAuthCode();
   }
 
   return (
     <Modal
       title={null}
       open={open}
-      width={560}
+      width={520}
       destroyOnHidden
       maskClosable={false}
+      closable={false}
       onCancel={handleClose}
-      afterOpenChange={(visible) => {
-        if (visible) {
-          void loadAuthCode();
-        }
-      }}
+      afterOpenChange={handleOpenChange}
       footer={
         <div className="flex justify-end">
           <Space>
@@ -209,7 +229,7 @@ export default function ShipmentLogisticsBoxMarkModal({
             <Button
               type="primary"
               disabled={validCodeStatus !== "valid"}
-              onClick={() => void handleSubmit()}
+              onClick={handleSubmit}
             >
               生成箱唛
             </Button>
@@ -217,69 +237,45 @@ export default function ShipmentLogisticsBoxMarkModal({
         </div>
       }
     >
-      <Form<LogisticsBoxMarkFormValues>
-        form={form}
-        layout="vertical"
-        initialValues={{
-          username: provider?.username?.trim() ?? "",
-          password: provider?.password?.trim() ?? "",
-          code: "",
-        }}
-      >
-        <Form.Item
-          label="用户名"
-          name="username"
-          rules={[{ required: true, message: "请输入用户名" }]}
-        >
-          <Input placeholder="请输入用户名" />
-        </Form.Item>
-        <Form.Item
-          label="密码"
-          name="password"
-          rules={[{ required: true, message: "请输入密码" }]}
-        >
-          <Input.Password placeholder="请输入密码" />
-        </Form.Item>
-        <Form.Item
-          label="验证码"
-          name="code"
-          rules={[{ required: true, message: "请输入验证码" }]}
-          validateStatus={
-            validCodeStatus === "validating"
-              ? "validating"
-              : validCodeStatus === "valid"
-                ? "success"
-                : validCodeStatus === "invalid"
-                  ? "error"
-                  : undefined
-          }
-          help={validCodeStatus === "invalid" ? "验证码错误" : undefined}
-        >
-          <Space.Compact className="!flex">
-            <Input
-              placeholder="请输入验证码"
-              onChange={(event) =>
-                scheduleValidateAuthCode(event.target.value)
-              }
-            />
-            <div className="flex h-8 min-w-32 items-center justify-center border border-l-0 border-slate-200 bg-white px-2">
-              {authCodeImg ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={authCodeImg}
-                  alt="验证码"
-                  className="h-7 max-w-28 object-contain"
-                />
-              ) : null}
-            </div>
-            <Button
-              icon={<ReloadOutlined />}
-              loading={authCodeLoading}
-              onClick={() => void loadAuthCode()}
-            />
-          </Space.Compact>
-        </Form.Item>
-      </Form>
+      <div className="flex flex-col gap-4">
+        <div className="flex items-start gap-3">
+          <label className="w-16 shrink-0 pt-1.5 text-sm text-slate-700">
+            验证码
+          </label>
+          <div className="min-w-0 flex-1">
+            <Space.Compact className="!flex">
+              <Input
+                value={codeValue}
+                status={validCodeStatus === "invalid" ? "error" : undefined}
+                placeholder="请输入验证码"
+                onChange={(event) => {
+                  const nextValue = event.target.value;
+                  setCodeValue(nextValue);
+                  scheduleValidateAuthCode(nextValue);
+                }}
+              />
+              <div className="flex h-8 min-w-32 items-center justify-center border border-l-0 border-slate-200 bg-white px-2">
+                {authCodeImg ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={authCodeImg}
+                    alt="验证码"
+                    className="h-7 max-w-28 object-contain"
+                  />
+                ) : null}
+              </div>
+              <Button
+                icon={<ReloadOutlined />}
+                loading={authCodeLoading}
+                onClick={() => void loadAuthCode()}
+              />
+            </Space.Compact>
+            {validCodeStatus === "invalid" ? (
+              <div className="mt-1 text-sm text-red-500">验证码错误</div>
+            ) : null}
+          </div>
+        </div>
+      </div>
     </Modal>
   );
 }

@@ -406,6 +406,9 @@ export default function ProductFormDrawer({
         onFinish={handleFinish}
         onFinishFailed={() => message.error("请先完善必填信息")}
       >
+        <Form.Item name="product_english_name" hidden>
+          <Input />
+        </Form.Item>
         <div className="grid grid-cols-2 gap-x-4">
           <Form.Item
             label="产品名称"
@@ -416,10 +419,6 @@ export default function ProductFormDrawer({
             ]}
           >
             <Input placeholder="请输入产品名称" maxLength={200} showCount />
-          </Form.Item>
-
-          <Form.Item label="英文名" name="product_english_name">
-            <Input placeholder="请输入产品英文名" maxLength={200} showCount />
           </Form.Item>
 
           <Form.Item label="产品属性" name="product_attribute">

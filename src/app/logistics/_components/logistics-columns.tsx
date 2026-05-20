@@ -16,7 +16,7 @@ function getSystemHref(value?: string | null) {
 }
 
 function getInvoiceTemplateName(providerName?: string | null) {
-  return `${providerName?.trim() || "物流商"}下单发票模板`;
+  return `${providerName?.trim() || "物流商"}发票模板`;
 }
 
 export function getLogisticsProviderColumns(

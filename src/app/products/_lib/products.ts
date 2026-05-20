@@ -22,6 +22,7 @@ export type ProductRecord = {
   product_usage: string | null;
   product_attribute: string | null;
   product_material: string | null;
+  status: string | null;
   created_at: string | null;
   updated_at: string | null;
 };

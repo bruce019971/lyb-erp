@@ -180,7 +180,8 @@ export async function GET(request: Request) {
     if (shipmentNoValues.length > 0 || logisticsProviderValues.length > 0) {
       let shipmentQuery = adminClient
         .from("shipment_records")
-        .select("id");
+        .select("id")
+        .eq("status", "有效");
 
       if (shipmentNoValues.length > 0) {
         shipmentQuery = shipmentQuery.in("shipment_no", shipmentNoValues);

@@ -20,7 +20,10 @@ import { requestStoreOptions } from "../../stores/_lib/stores-request";
 import {
   deleteShipmentRecord,
   generateShipmentLogisticsBoxMark,
+  generateShipmentRishenghuiOrderInvoice,
+  getRishenghuiAccessToken,
   requestShipmentOptions,
+  submitRishenghuiOrderInvoice,
   updateShipmentDeliveryStatus,
   updateShipmentRelabelStatus,
 } from "../_lib/shipments-request";
@@ -28,6 +31,7 @@ import ShipmentCreateDrawer from "./shipment-create-drawer";
 import ShipmentEditDrawer from "./shipment-edit-drawer";
 import ShipmentBatchCartonLabelModal from "./shipment-batch-carton-label-modal";
 import ShipmentLogisticsBoxMarkModal from "./shipment-logistics-box-mark-modal";
+import ShipmentRishenghuiOrderModal from "./shipment-rishenghui-order-modal";
 import ShipmentsTable from "./shipments-table";
 import ShipmentsTableSkeleton from "./shipments-table-skeleton";
 
@@ -45,10 +49,14 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
   const [selectedShipmentNos, setSelectedShipmentNos] = useState<string[]>([]);
   const [editOpen, setEditOpen] = useState(false);
   const [logisticsBoxMarkOpen, setLogisticsBoxMarkOpen] = useState(false);
+  const [rishenghuiOrderOpen, setRishenghuiOrderOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<
     ShipmentRecord | undefined
   >(undefined);
   const [logisticsBoxMarkRecord, setLogisticsBoxMarkRecord] = useState<
+    ShipmentRecord | undefined
+  >(undefined);
+  const [rishenghuiOrderRecord, setRishenghuiOrderRecord] = useState<
     ShipmentRecord | undefined
   >(undefined);
   const [deletingShipmentId, setDeletingShipmentId] = useState<string | null>(null);
@@ -258,7 +266,9 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
         code: values.code,
         uuid: values.uuid,
       });
-      messageApi.success("物流箱唛生成成功");
+      messageApi.success(
+        `${values.record.tracking_no?.trim() || ""}箱唛生成成功`,
+      );
       tableActionRef.current?.reload();
     } catch (error) {
       messageApi.error(
@@ -267,6 +277,18 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
     } finally {
       setGeneratingLogisticsBoxMarkId(null);
     }
+  }
+
+  async function handleGenerateRishenghuiOrderInvoice(values: {
+    record: ShipmentRecord;
+  }) {
+    const result = await generateShipmentRishenghuiOrderInvoice({
+      shipmentId: values.record.id,
+      shipmentNo: values.record.shipment_no,
+    });
+    setRishenghuiOrderRecord(result.record ?? values.record);
+    tableActionRef.current?.reload();
+    return result;
   }
 
   return (
@@ -300,6 +322,10 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
                 onGenerateLogisticsBoxMark={(record) => {
                   setLogisticsBoxMarkRecord(record);
                   setLogisticsBoxMarkOpen(true);
+                }}
+                onRishenghuiOrder={(record) => {
+                  setRishenghuiOrderRecord(record);
+                  setRishenghuiOrderOpen(true);
                 }}
                 onEdit={(record) => {
                   setEditingRecord(record);
@@ -343,6 +369,30 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
             )}
           </section>
         </main>
+        {mounted ? (
+          <ShipmentRishenghuiOrderModal
+            key={
+              rishenghuiOrderRecord
+                ? `rishenghui-order-${rishenghuiOrderRecord.id}`
+                : "rishenghui-order-closed"
+            }
+            open={rishenghuiOrderOpen}
+            record={rishenghuiOrderRecord}
+            onClose={() => {
+              setRishenghuiOrderOpen(false);
+              setRishenghuiOrderRecord(undefined);
+            }}
+            onGenerateInvoice={handleGenerateRishenghuiOrderInvoice}
+            onGetAccessToken={getRishenghuiAccessToken}
+            onSubmitOrder={submitRishenghuiOrderInvoice}
+            onSubmitSuccess={(record) => {
+              if (record) {
+                setRishenghuiOrderRecord(record);
+              }
+              tableActionRef.current?.reload();
+            }}
+          />
+        ) : null}
         {mounted ? (
           <ShipmentLogisticsBoxMarkModal
             key={

@@ -94,6 +94,7 @@ export async function POST(request: Request) {
     const { data: shipmentsData, error: shipmentsError } = await adminClient
       .from("shipment_records")
       .select("id, shipment_no, order_store, product_name, box_count")
+      .eq("status", "有效")
       .in("shipment_no", shipmentNos);
 
     if (shipmentsError) {
