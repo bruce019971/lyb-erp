@@ -109,7 +109,14 @@ export async function downloadShipmentLogisticsBoxMark(
     throw new Error("当前货件未填写物流箱唛 URL");
   }
 
-  const response = await fetch(url);
+  const suffix = getUrlSuffix(url) || "pdf";
+  const filenameBase = getShipmentLogisticsBoxMarkFileName(record, storeOptions);
+  const fileName = suffix ? `${filenameBase}.${suffix}` : filenameBase;
+  const proxyUrl = `/api/proxy-download?${new URLSearchParams({
+    url,
+    filename: fileName,
+  })}`;
+  const response = await fetch(proxyUrl);
   if (!response.ok) {
     throw new Error("物流箱唛文件读取失败");
   }
@@ -117,11 +124,9 @@ export async function downloadShipmentLogisticsBoxMark(
   const blob = await response.blob();
   const objectUrl = window.URL.createObjectURL(blob);
   const link = document.createElement("a");
-  const suffix = getUrlSuffix(url) || "pdf";
-  const filenameBase = getShipmentLogisticsBoxMarkFileName(record, storeOptions);
 
   link.href = objectUrl;
-  link.download = suffix ? `${filenameBase}.${suffix}` : filenameBase;
+  link.download = fileName;
   document.body.appendChild(link);
   link.click();
   link.remove();
