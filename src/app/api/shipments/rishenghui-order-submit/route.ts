@@ -17,6 +17,21 @@ type RishenghuiOrderSubmitRequestBody = {
   accessToken?: string;
 };
 
+type ShipmentRow = {
+  id: string;
+  delivery_status: string | null;
+  warehouse_arrived_status: string | null;
+  overseas_warehouse_arrived_at: string | null;
+};
+
+function isShipmentLocked(record: ShipmentRow) {
+  return (
+    record.delivery_status === "是" ||
+    record.warehouse_arrived_status === "是" ||
+    Boolean(record.overseas_warehouse_arrived_at)
+  );
+}
+
 type UploadFileItem = {
   filesize?: unknown;
   filesuffix?: unknown;
@@ -185,6 +200,27 @@ export async function POST(request: Request) {
     const fileName = getRequiredText(body.fileName, "缺少发票文件名");
     const accessToken = getRequiredText(body.accessToken, "缺少日升辉accessToken");
     const authorization = `Bearer ${accessToken}`;
+    const adminClient = createSupabaseAdminClient();
+    const { data: currentShipment, error: currentShipmentError } =
+      await adminClient
+        .from("shipment_records")
+        .select(
+          "id, delivery_status, warehouse_arrived_status, overseas_warehouse_arrived_at",
+        )
+        .eq("id", shipmentId)
+        .maybeSingle();
+
+    if (currentShipmentError) {
+      throw currentShipmentError;
+    }
+
+    if (!currentShipment) {
+      throw new Error("未找到货件");
+    }
+
+    if (isShipmentLocked(currentShipment as ShipmentRow)) {
+      throw new Error("已到仓的货件不允许修改");
+    }
 
     const fileResponse = await fetch(fileUrl, { cache: "no-store" });
     if (!fileResponse.ok) {
@@ -260,7 +296,6 @@ export async function POST(request: Request) {
       );
     }
 
-    const adminClient = createSupabaseAdminClient();
     const { data: updatedShipment, error: updateError } = await adminClient
       .from("shipment_records")
       .update({

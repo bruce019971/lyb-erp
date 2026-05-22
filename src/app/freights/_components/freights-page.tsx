@@ -9,8 +9,6 @@ import { useEffect, useRef, useState } from "react";
 
 import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
 import { requestLogisticsProviderOptions } from "../../logistics/_lib/logistics-request";
-import type { ShipmentOption } from "../../shipments/_lib/shipments";
-import { requestShipmentOptions } from "../../shipments/_lib/shipments-request";
 import ShipmentsTableSkeleton from "../../shipments/_components/shipments-table-skeleton";
 import type { FreightRecord } from "../_lib/freights";
 import FreightsEditDrawer from "./freights-edit-drawer";
@@ -24,7 +22,6 @@ export default function FreightsPage() {
   const [editingRecord, setEditingRecord] = useState<FreightRecord | undefined>(
     undefined,
   );
-  const [shipmentOptions, setShipmentOptions] = useState<ShipmentOption[]>([]);
   const [logisticsOptions, setLogisticsOptions] = useState<
     LogisticsProviderOption[]
   >([]);
@@ -42,20 +39,15 @@ export default function FreightsPage() {
 
     async function loadOptions() {
       try {
-        const [shipments, logisticsProviders] = await Promise.all([
-          requestShipmentOptions(),
-          requestLogisticsProviderOptions(),
-        ]);
+        const logisticsProviders = await requestLogisticsProviderOptions();
 
         if (!cancelled) {
-          setShipmentOptions(shipments.filter((item) => item.shipment_no?.trim()));
           setLogisticsOptions(
             logisticsProviders.filter((item) => item.provider_name?.trim()),
           );
         }
       } catch {
         if (!cancelled) {
-          setShipmentOptions([]);
           setLogisticsOptions([]);
         }
       }
@@ -84,7 +76,6 @@ export default function FreightsPage() {
             {mounted ? (
               <FreightsTable
                 actionRef={tableActionRef}
-                shipmentOptions={shipmentOptions}
                 logisticsOptions={logisticsOptions}
                 onEdit={(record) => {
                   setEditingRecord(record);

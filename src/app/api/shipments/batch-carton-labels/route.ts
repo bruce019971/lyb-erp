@@ -24,6 +24,9 @@ type ShipmentRow = {
   order_store: string | null;
   product_name: string | null;
   box_count: number | null;
+  delivery_status: string | null;
+  warehouse_arrived_status: string | null;
+  overseas_warehouse_arrived_at: string | null;
 };
 
 type StoreRow = {
@@ -79,6 +82,14 @@ function normalizeShipmentNos(value: unknown) {
   );
 }
 
+function isShipmentLocked(record: ShipmentRow) {
+  return (
+    record.delivery_status === "是" ||
+    record.warehouse_arrived_status === "是" ||
+    Boolean(record.overseas_warehouse_arrived_at)
+  );
+}
+
 export async function POST(request: Request) {
   try {
     await verifyOperator();
@@ -93,7 +104,9 @@ export async function POST(request: Request) {
     const adminClient = createSupabaseAdminClient();
     const { data: shipmentsData, error: shipmentsError } = await adminClient
       .from("shipment_records")
-      .select("id, shipment_no, order_store, product_name, box_count")
+      .select(
+        "id, shipment_no, order_store, product_name, box_count, delivery_status, warehouse_arrived_status, overseas_warehouse_arrived_at",
+      )
       .eq("status", "有效")
       .in("shipment_no", shipmentNos);
 
@@ -147,6 +160,10 @@ export async function POST(request: Request) {
 
         if (!shipment) {
           throw new Error("未找到货件");
+        }
+
+        if (isShipmentLocked(shipment)) {
+          throw new Error("已到仓的货件不允许修改");
         }
 
         const boxCount =

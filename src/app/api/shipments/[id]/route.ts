@@ -17,6 +17,21 @@ type OperatorRow = {
     | null;
 };
 
+type ShipmentRow = {
+  id: string;
+  delivery_status: string | null;
+  warehouse_arrived_status: string | null;
+  overseas_warehouse_arrived_at: string | null;
+};
+
+function isShipmentLocked(record: ShipmentRow) {
+  return (
+    record.delivery_status === "是" ||
+    record.warehouse_arrived_status === "是" ||
+    Boolean(record.overseas_warehouse_arrived_at)
+  );
+}
+
 async function verifyOperator() {
   const cookieStore = await cookies();
   const token = cookieStore.get(APP_SESSION_COOKIE)?.value;
@@ -65,6 +80,27 @@ export async function DELETE(
     }
 
     const adminClient = createSupabaseAdminClient();
+    const { data: currentShipment, error: currentShipmentError } =
+      await adminClient
+        .from("shipment_records")
+        .select(
+          "id, delivery_status, warehouse_arrived_status, overseas_warehouse_arrived_at",
+        )
+        .eq("id", id.trim())
+        .maybeSingle();
+
+    if (currentShipmentError) {
+      throw currentShipmentError;
+    }
+
+    if (!currentShipment) {
+      throw new Error("未找到需要删除的货件");
+    }
+
+    if (isShipmentLocked(currentShipment as ShipmentRow)) {
+      throw new Error("已到仓的货件不允许修改");
+    }
+
     const { data, error } = await adminClient
       .from("shipment_records")
       .update({

@@ -22,6 +22,9 @@ type ShipmentRow = {
   pcs_per_box: number | null;
   total_qty: number | null;
   goods_value: number | null;
+  delivery_status: string | null;
+  warehouse_arrived_status: string | null;
+  overseas_warehouse_arrived_at: string | null;
 };
 
 type StoreRow = {
@@ -82,6 +85,14 @@ function getRequiredText(value: unknown, message: string) {
   }
 
   return value.trim();
+}
+
+function isShipmentLocked(record: ShipmentRow) {
+  return (
+    record.delivery_status === "是" ||
+    record.warehouse_arrived_status === "是" ||
+    Boolean(record.overseas_warehouse_arrived_at)
+  );
 }
 
 function normalizeCellText(value: unknown) {
@@ -384,7 +395,7 @@ export async function POST(request: Request) {
     const { data: shipmentData, error: shipmentError } = await adminClient
       .from("shipment_records")
       .select(
-        "id, order_store, logistics_provider, shipment_no, order_invoice_url, product_name, box_count, pcs_per_box, total_qty, goods_value",
+        "id, order_store, logistics_provider, shipment_no, order_invoice_url, product_name, box_count, pcs_per_box, total_qty, goods_value, delivery_status, warehouse_arrived_status, overseas_warehouse_arrived_at",
       )
       .eq("status", "有效")
       .eq("id", shipmentId)
@@ -395,6 +406,10 @@ export async function POST(request: Request) {
     }
 
     const shipment = shipmentData as ShipmentRow;
+    if (isShipmentLocked(shipment)) {
+      throw new Error("已到仓的货件不允许修改");
+    }
+
     const logisticsProviderName = shipment.logistics_provider?.trim();
     if (!logisticsProviderName) {
       throw new Error("当前货件未设置物流商");

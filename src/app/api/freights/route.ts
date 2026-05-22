@@ -114,6 +114,25 @@ function normalizeMultiSelectValues(values: string[]) {
     .filter(Boolean);
 }
 
+function splitShipmentNoValues(values: string[]) {
+  return values
+    .flatMap((item) => item.split(/[\s,，]+/))
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function normalizeShipmentNoFilterValue(value: string) {
+  return value.replace(/[(),，]/g, " ").trim();
+}
+
+function buildShipmentNoOrFilter(values: string[]) {
+  return values
+    .map(normalizeShipmentNoFilterValue)
+    .filter(Boolean)
+    .map((value) => `shipment_no.ilike.%${value}%`)
+    .join(",");
+}
+
 async function verifyOperator() {
   const cookieStore = await cookies();
   const token = cookieStore.get(APP_SESSION_COOKIE)?.value;
@@ -160,7 +179,7 @@ export async function GET(request: Request) {
     const to = from + Math.max(pageSize, 1) - 1;
     const orderField = searchParams.get("orderField") || "created_at";
     const orderDirection = searchParams.get("orderDirection") || "descend";
-    const shipmentNoValues = normalizeMultiSelectValues(
+    const shipmentNoValues = splitShipmentNoValues(
       searchParams.getAll("shipment_no"),
     );
     const logisticsProviderValues = normalizeMultiSelectValues(
@@ -184,7 +203,10 @@ export async function GET(request: Request) {
         .eq("status", "有效");
 
       if (shipmentNoValues.length > 0) {
-        shipmentQuery = shipmentQuery.in("shipment_no", shipmentNoValues);
+        const shipmentNoFilter = buildShipmentNoOrFilter(shipmentNoValues);
+        if (shipmentNoFilter) {
+          shipmentQuery = shipmentQuery.or(shipmentNoFilter);
+        }
       }
 
       if (logisticsProviderValues.length > 0) {

@@ -17,6 +17,21 @@ type OperatorRow = {
     | null;
 };
 
+type ShipmentRow = {
+  id: string;
+  delivery_status: string | null;
+  warehouse_arrived_status: string | null;
+  overseas_warehouse_arrived_at: string | null;
+};
+
+function isShipmentLocked(record: ShipmentRow) {
+  return (
+    record.delivery_status === "是" ||
+    record.warehouse_arrived_status === "是" ||
+    Boolean(record.overseas_warehouse_arrived_at)
+  );
+}
+
 async function verifyOperator() {
   const cookieStore = await cookies();
   const token = cookieStore.get(APP_SESSION_COOKIE)?.value;
@@ -65,6 +80,22 @@ export async function POST(request: Request) {
     }
 
     const adminClient = createSupabaseAdminClient();
+    const { data: currentShipments, error: currentShipmentsError } =
+      await adminClient
+        .from("shipment_records")
+        .select(
+          "id, delivery_status, warehouse_arrived_status, overseas_warehouse_arrived_at",
+        )
+        .in("id", ids);
+
+    if (currentShipmentsError) {
+      throw currentShipmentsError;
+    }
+
+    if (((currentShipments ?? []) as ShipmentRow[]).some(isShipmentLocked)) {
+      throw new Error("已到仓的货件不允许修改");
+    }
+
     const { error } = await adminClient
       .from("shipment_records")
       .update({

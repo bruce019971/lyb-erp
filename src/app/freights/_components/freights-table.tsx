@@ -7,14 +7,12 @@ import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
-import type { ShipmentOption } from "../../shipments/_lib/shipments";
 import type { FreightRecord } from "../_lib/freights";
 import { requestFreightRecords } from "../_lib/freights-request";
 import { getFreightColumns } from "./freights-columns";
 
 type FreightsTableProps = {
   actionRef?: MutableRefObject<ActionType | undefined>;
-  shipmentOptions: ShipmentOption[];
   logisticsOptions: LogisticsProviderOption[];
   onEdit: (record: FreightRecord) => void;
 };
@@ -37,13 +35,12 @@ function mergeFreightsById(current: FreightRecord[], incoming: FreightRecord[]) 
 
 export default function FreightsTable({
   actionRef,
-  shipmentOptions,
   logisticsOptions,
   onEdit,
 }: FreightsTableProps) {
   const columns = useMemo(
-    () => getFreightColumns(onEdit, shipmentOptions, logisticsOptions),
-    [logisticsOptions, onEdit, shipmentOptions],
+    () => getFreightColumns(onEdit, logisticsOptions),
+    [logisticsOptions, onEdit],
   );
   const searchParamsRef = useRef<Record<string, unknown>>({});
   const loadingRef = useRef(true);

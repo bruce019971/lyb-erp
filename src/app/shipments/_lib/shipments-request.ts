@@ -1,5 +1,6 @@
 import type { FilterValue, SortOrder } from "antd/es/table/interface";
 import { message } from "antd";
+import dayjs from "dayjs";
 
 import { supabase } from "@/lib/supabase";
 
@@ -7,7 +8,11 @@ import {
   shipmentDateFields,
   shipmentKeywordFields,
   canEditShipmentDeliveryStatus,
+  getShipmentListStatusRank,
+  isShipmentDeliveryOverdue,
+  isShipmentLocked,
   type ShipmentCreateValues,
+  type ShipmentDateField,
   type ShipmentOption,
   type ShipmentRecord,
   type ShipmentUpdateValues,
@@ -19,6 +24,35 @@ type ShipmentRequestParams = {
   keyword?: string;
 } & Record<string, unknown>;
 
+const ALERT_SORT_FETCH_LIMIT = 10000;
+
+function prioritizeShipmentAlerts(records: ShipmentRecord[]) {
+  return records
+    .map((record, index) => ({ record, index }))
+    .sort((left, right) => {
+      const statusRankDiff =
+        getShipmentListStatusRank(left.record) -
+        getShipmentListStatusRank(right.record);
+      if (statusRankDiff !== 0) {
+        return statusRankDiff;
+      }
+
+      const leftRank =
+        getShipmentListStatusRank(left.record) === 0 &&
+        isShipmentDeliveryOverdue(left.record)
+          ? 0
+          : 1;
+      const rightRank =
+        getShipmentListStatusRank(right.record) === 0 &&
+        isShipmentDeliveryOverdue(right.record)
+          ? 0
+          : 1;
+
+      return leftRank - rightRank || left.index - right.index;
+    })
+    .map(({ record }) => record);
+}
+
 export async function requestShipmentRecords(
   params: ShipmentRequestParams,
   sorter: Record<string, SortOrder>,
@@ -28,16 +62,16 @@ export async function requestShipmentRecords(
   const pageSize = params.pageSize ?? 20;
   const from = (current - 1) * pageSize;
   const to = from + pageSize - 1;
+  const fetchTo = Math.max(to, ALERT_SORT_FETCH_LIMIT - 1);
 
   let query = supabase
     .from("shipment_records")
     .select("*", { count: "exact" })
-    .eq("status", "有效")
-    .range(from, to);
+    .eq("status", "有效");
 
   shipmentKeywordFields.forEach((field) => {
     const value = params[field];
-    if (typeof value === "string" && value.trim()) {
+    if (field !== "shipment_no" && typeof value === "string" && value.trim()) {
       query = query.ilike(field, `%${value.trim()}%`);
     }
   });
@@ -52,11 +86,6 @@ export async function requestShipmentRecords(
   const orderStoreValues = normalizeMultiSelectValues(params.order_store);
   if (orderStoreValues.length > 0) {
     query = query.in("order_store", orderStoreValues);
-  }
-
-  const shipmentNoValues = normalizeMultiSelectValues(params.shipment_no);
-  if (shipmentNoValues.length > 0) {
-    query = query.in("shipment_no", shipmentNoValues);
   }
 
   const logisticsProviderValues = normalizeMultiSelectValues(
@@ -100,7 +129,7 @@ export async function requestShipmentRecords(
   function splitFilterText(value?: string) {
     return (value ?? "")
       .trim()
-      .split(/\s+/)
+      .split(/[\s,，;；]+/)
       .map((item) => item.trim())
       .filter(Boolean);
   }
@@ -145,8 +174,15 @@ export async function requestShipmentRecords(
   }
 
   const shipmentNoFilters = getFilterTexts("shipment_no");
-  if (shipmentNoFilters.length > 0) {
-    query = query.or(buildIlikeOrFilter(["shipment_no"], shipmentNoFilters));
+  const shipmentNoParamFilters =
+    typeof params.shipment_no === "string"
+      ? splitFilterText(params.shipment_no)
+      : normalizeMultiSelectValues(params.shipment_no);
+  const allShipmentNoFilters = Array.from(
+    new Set([...shipmentNoParamFilters, ...shipmentNoFilters]),
+  );
+  if (allShipmentNoFilters.length > 0) {
+    query = query.or(buildIlikeOrFilter(["shipment_no"], allShipmentNoFilters));
   }
 
   shipmentDateFields.forEach((field) => {
@@ -188,6 +224,8 @@ export async function requestShipmentRecords(
       nullsFirst: false,
     });
   }
+
+  query = query.range(0, fetchTo);
 
   const { data, error, count } = await query;
 
@@ -239,16 +277,18 @@ export async function requestShipmentRecords(
     }
   }
 
+  const normalizedRecords = shipmentRecords.map((item) => ({
+    ...item,
+    delivery_status: item.delivery_status ?? "否",
+    relabel_delivery_times:
+      item.is_relabel === "是" && item.shipment_no?.trim()
+        ? (relabelDeliveryTimeMap.get(item.shipment_no.trim()) ?? [])
+        : [],
+    is_delivery_completed: item.delivery_status === "是",
+  }));
+
   return {
-    data: shipmentRecords.map((item) => ({
-      ...item,
-      delivery_status: item.delivery_status ?? "否",
-      relabel_delivery_times:
-        item.is_relabel === "是" && item.shipment_no?.trim()
-          ? (relabelDeliveryTimeMap.get(item.shipment_no.trim()) ?? [])
-          : [],
-      is_delivery_completed: item.delivery_status === "是",
-    })),
+    data: prioritizeShipmentAlerts(normalizedRecords).slice(from, to + 1),
     success: true,
     total: count ?? 0,
   };
@@ -276,6 +316,8 @@ function compactPayload<T extends Record<string, unknown>>(payload: T) {
 }
 
 function buildShipmentPayload(values: ShipmentUpdateValues) {
+  const hasWarehouseArrivedAt = "overseas_warehouse_arrived_at" in values;
+  const hasAppointmentTime = "appointment_time" in values;
   const payload: Partial<ShipmentUpdateValues> = compactPayload({
     order_store: normalizeTextValue(values.order_store),
     logistics_provider: normalizeTextValue(values.logistics_provider),
@@ -284,16 +326,15 @@ function buildShipmentPayload(values: ShipmentUpdateValues) {
     product_name: normalizeTextValue(values.product_name),
     box_count: normalizeNumberValue(values.box_count),
     pcs_per_box: normalizeNumberValue(values.pcs_per_box),
-    overseas_warehouse_arrived_at: normalizeTextValue(
-      values.overseas_warehouse_arrived_at,
-    ),
-    warehouse_arrived_status: deriveWarehouseArrivedStatus(
-      values.overseas_warehouse_arrived_at,
-    ),
-    appointment_time:
-      values.appointment_time === undefined
-        ? undefined
-        : normalizeTextValue(values.appointment_time),
+    overseas_warehouse_arrived_at: hasWarehouseArrivedAt
+      ? normalizeTextValue(values.overseas_warehouse_arrived_at)
+      : undefined,
+    warehouse_arrived_status: hasWarehouseArrivedAt
+      ? deriveWarehouseArrivedStatus(values.overseas_warehouse_arrived_at)
+      : undefined,
+    appointment_time: hasAppointmentTime
+      ? normalizeTextValue(values.appointment_time)
+      : undefined,
     is_relabel: normalizeTextValue(values.is_relabel),
     goods_value: normalizeNumberValue(values.goods_value),
   });
@@ -338,6 +379,22 @@ export async function updateShipmentRecord(
   id: string,
   values: ShipmentUpdateValues,
 ) {
+  const { data: currentRecord, error: currentRecordError } = await supabase
+    .from("shipment_records")
+    .select(
+      "id, delivery_status, warehouse_arrived_status, overseas_warehouse_arrived_at",
+    )
+    .eq("id", id)
+    .single();
+
+  if (currentRecordError) {
+    throw currentRecordError;
+  }
+
+  if (isShipmentLocked(currentRecord as ShipmentRecord)) {
+    throw new Error("已到仓的货件不允许修改");
+  }
+
   const payload = {
     ...buildShipmentPayload(values),
     updated_at: new Date().toISOString(),
@@ -357,10 +414,85 @@ export async function updateShipmentRecord(
   return data as ShipmentRecord;
 }
 
+function isAppointmentBeforeMinDate(
+  appointmentTime?: string | null,
+  warehouseArrivedAt?: string | null,
+) {
+  if (!appointmentTime || !warehouseArrivedAt) return false;
+
+  const minDate = dayjs(warehouseArrivedAt).startOf("day").add(1, "day");
+  return dayjs(appointmentTime).startOf("day").isBefore(minDate);
+}
+
+export async function updateShipmentDateField(
+  record: ShipmentRecord,
+  field: ShipmentDateField,
+  value?: string | null,
+) {
+  if (isShipmentLocked(record)) {
+    throw new Error("已到仓的货件不允许修改");
+  }
+
+  const normalizedValue = normalizeTextValue(value);
+  const payload: Partial<ShipmentUpdateValues> & { updated_at: string } = {
+    updated_at: new Date().toISOString(),
+  };
+
+  if (field === "overseas_warehouse_arrived_at") {
+    payload.overseas_warehouse_arrived_at = normalizedValue;
+    payload.warehouse_arrived_status =
+      deriveWarehouseArrivedStatus(normalizedValue);
+
+    if (
+      !normalizedValue ||
+      isAppointmentBeforeMinDate(record.appointment_time, normalizedValue)
+    ) {
+      payload.appointment_time = null;
+    }
+  } else {
+    if (record.is_relabel === "是") {
+      throw new Error("换标货件不可编辑送仓时间");
+    }
+
+    if (normalizedValue && !record.overseas_warehouse_arrived_at) {
+      throw new Error("请先设置到仓时间");
+    }
+
+    if (
+      normalizedValue &&
+      isAppointmentBeforeMinDate(
+        normalizedValue,
+        record.overseas_warehouse_arrived_at,
+      )
+    ) {
+      throw new Error("送仓时间至少需要晚于到仓时间一天");
+    }
+
+    payload.appointment_time = normalizedValue;
+  }
+
+  const { data, error } = await supabase
+    .from("shipment_records")
+    .update(payload)
+    .eq("id", record.id)
+    .select("*")
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data as ShipmentRecord;
+}
+
 export async function updateShipmentDeliveryStatus(
   record: ShipmentRecord,
   value: string,
 ) {
+  if (isShipmentLocked(record)) {
+    throw new Error("已到仓的货件不允许修改");
+  }
+
   if (value === "是" && !canEditShipmentDeliveryStatus(record)) {
     throw new Error("只有过了送仓时间后才能标记为已送仓");
   }
@@ -392,6 +524,10 @@ export async function updateShipmentRelabelStatus(
   record: ShipmentRecord,
   value?: string | null,
 ) {
+  if (isShipmentLocked(record)) {
+    throw new Error("已到仓的货件不允许修改");
+  }
+
   const normalizedValue = normalizeTextValue(value);
 
   if ((record.is_relabel ?? null) === normalizedValue) {

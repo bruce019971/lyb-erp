@@ -17,13 +17,26 @@ function normalizeMultiSelectValues(value: unknown) {
     .filter(Boolean);
 }
 
+function splitShipmentNos(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.flatMap(splitShipmentNos);
+  }
+
+  if (typeof value !== "string") return [];
+
+  return value
+    .split(/[\s,，]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 export async function requestFreightRecords(params: FreightRequestParams) {
   const searchParams = new URLSearchParams({
     current: String(params.current ?? 1),
     pageSize: String(params.pageSize ?? 40),
   });
 
-  normalizeMultiSelectValues(params.shipment_no).forEach((value) => {
+  splitShipmentNos(params.shipment_no).forEach((value) => {
     searchParams.append("shipment_no", value);
   });
   normalizeMultiSelectValues(params.logistics_provider).forEach((value) => {

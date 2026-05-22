@@ -110,20 +110,6 @@ function TextField({
   );
 }
 
-function DateField({
-  label,
-  name,
-}: {
-  label: string;
-  name: keyof ShipmentUpdateFormValues;
-}) {
-  return (
-    <Form.Item label={label} name={name}>
-      <DatePicker className="!w-full" format="YYYY/MM/DD" />
-    </Form.Item>
-  );
-}
-
 function NumberField({
   label,
   name,
@@ -532,10 +518,12 @@ export default function ShipmentEditDrawer({
               />
             </Form.Item>
           ) : null}
-          <DateField
+          <Form.Item
             label="到仓时间"
             name="overseas_warehouse_arrived_at"
-          />
+          >
+            <DatePicker className="!w-full" format="YYYY/MM/DD" />
+          </Form.Item>
           <Form.Item
             label="送仓时间"
             name="appointment_time"
