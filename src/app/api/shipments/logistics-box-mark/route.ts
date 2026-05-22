@@ -48,18 +48,7 @@ type PrintMaitouResponse = {
 type ShipmentRow = {
   id: string;
   tracking_no: string | null;
-  delivery_status: string | null;
-  warehouse_arrived_status: string | null;
-  overseas_warehouse_arrived_at: string | null;
 };
-
-function isShipmentLocked(record: ShipmentRow) {
-  return (
-    record.delivery_status === "是" ||
-    record.warehouse_arrived_status === "是" ||
-    Boolean(record.overseas_warehouse_arrived_at)
-  );
-}
 
 function getRequiredText(value: unknown, message: string) {
   if (typeof value !== "string" || !value.trim()) {
@@ -108,9 +97,7 @@ export async function POST(request: Request) {
     const adminClient = createSupabaseAdminClient();
     const { data: shipmentData, error: shipmentError } = await adminClient
       .from("shipment_records")
-      .select(
-        "id, tracking_no, delivery_status, warehouse_arrived_status, overseas_warehouse_arrived_at",
-      )
+      .select("id, tracking_no")
       .eq("status", "有效")
       .eq("id", shipmentId)
       .single();
@@ -120,10 +107,6 @@ export async function POST(request: Request) {
     }
 
     const shipment = shipmentData as ShipmentRow;
-    if (isShipmentLocked(shipment)) {
-      throw new Error("已到仓的货件不允许修改");
-    }
-
     const trackingNo = shipment.tracking_no?.trim();
 
     if (!trackingNo) {

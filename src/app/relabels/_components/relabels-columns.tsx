@@ -36,7 +36,10 @@ function openStorePage(storeName?: string | null) {
   window.history.pushState(null, "", `/stores?${params.toString()}`);
 }
 
-function renderShipmentNoSearchInput() {
+function renderShipmentNoSearchInput(
+  _item: unknown,
+  _config: unknown,
+) {
   return (
     <Input.TextArea
       autoSize={{ minRows: 1, maxRows: 3 }}
@@ -112,7 +115,7 @@ export function getRelabelColumns(
       },
     },
     {
-      title: "箱数",
+      title: "外箱数",
       dataIndex: "box_count",
       width: 86,
       search: false,
@@ -137,7 +140,7 @@ export function getRelabelColumns(
       dataIndex: "delivery_time",
       width: 100,
       search: false,
-      render: (_, record) => formatRelabelDate(record.delivery_time) || "-",
+      render: (_, record) => formatRelabelDate(record.delivery_time),
     },
     {
       title: "是否送仓",
@@ -148,10 +151,12 @@ export function getRelabelColumns(
         className:
           record.delivery_status === "是"
             ? "relabel-delivery-done-cell"
+            : canEditRelabelDeliveryStatus(record)
+              ? "relabel-delivery-overdue-cell"
               : undefined,
         onDoubleClick: () => {
           if (
-            canEditRelabelDeliveryStatus(record) &&
+            record.delivery_status !== "是" &&
             !isStatusUpdating(record, "delivery_status")
           ) {
             onStartDeliveryStatusEdit(record);
@@ -181,9 +186,9 @@ export function getRelabelColumns(
         return (
           <span
             className={
-              canEditRelabelDeliveryStatus(record)
-                ? "inline-flex cursor-pointer"
-                : "inline-flex"
+              record.delivery_status === "是"
+                ? "inline-flex"
+                : "inline-flex cursor-pointer"
             }
           >
             <Typography.Text>{record.delivery_status ?? "否"}</Typography.Text>
@@ -247,35 +252,26 @@ export function getRelabelColumns(
       width: 84,
       fixed: "right",
       search: false,
-      render: (_, record) => {
-        const actions = [
-          <Tooltip key="edit" title="编辑">
-            <Button
-              type="text"
-              size="small"
-              icon={<EditOutlined />}
-              onClick={() => onEdit(record)}
-            />
-          </Tooltip>,
-        ];
-
-        if (!record.delivery_time?.trim()) {
-          actions.push(
-            <Tooltip key="delete" title="删除">
-              <Button
-                type="text"
-                size="small"
-                danger
-                icon={<DeleteOutlined />}
-                loading={isDeleting(record)}
-                onClick={() => onDelete(record)}
-              />
-            </Tooltip>,
-          );
-        }
-
-        return actions;
-      },
+      render: (_, record) => [
+        <Tooltip key="edit" title="编辑">
+          <Button
+            type="text"
+            size="small"
+            icon={<EditOutlined />}
+            onClick={() => onEdit(record)}
+          />
+        </Tooltip>,
+        <Tooltip key="delete" title="删除">
+          <Button
+            type="text"
+            size="small"
+            danger
+            icon={<DeleteOutlined />}
+            loading={isDeleting(record)}
+            onClick={() => onDelete(record)}
+          />
+        </Tooltip>,
+      ],
     },
   ];
 }

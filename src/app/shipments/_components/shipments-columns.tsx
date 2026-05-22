@@ -6,11 +6,11 @@ import {
   QrcodeOutlined,
 } from "@ant-design/icons";
 import type { ProColumns } from "@ant-design/pro-components";
-import { Button, Input, Select, Tooltip, Typography } from "antd";
+import { Button, Select, Tooltip, Typography } from "antd";
 
 import {
   formatShipmentDate,
-  isShipmentLocked,
+  isShipmentDeliveryOverdue,
   type ShipmentRecord,
 } from "../_lib/shipments";
 import type { ShipmentOption } from "../_lib/shipments";
@@ -43,15 +43,6 @@ function openProductPage(
 
   const href = params.size ? `/products?${params.toString()}` : "/products";
   window.history.pushState(null, "", href);
-}
-
-function openRelabelPage(shipmentNo?: string | null) {
-  const trimmedShipmentNo = shipmentNo?.trim();
-  if (!trimmedShipmentNo) return;
-
-  const params = new URLSearchParams();
-  params.set("original_shipment_no", trimmedShipmentNo);
-  window.history.pushState(null, "", `/relabels?${params.toString()}`);
 }
 
 export function getShipmentColumns(
@@ -88,15 +79,16 @@ export function getShipmentColumns(
     return <Typography.Text>{value || ""}</Typography.Text>;
   }
 
-  function renderShipmentNoSearchInput() {
-    return (
-      <Input.TextArea
-        autoSize={{ minRows: 1, maxRows: 3 }}
-        placeholder="可用回车、空格或逗号分隔"
-      />
-    );
-  }
-
+  const shipmentSelectOptions = Array.from(
+    new Set(
+      shipmentOptions
+        .map((item) => item.shipment_no?.trim())
+        .filter((item): item is string => Boolean(item)),
+    ),
+  ).map((item) => ({
+    label: item,
+    value: item,
+  }));
   const storeSelectOptions = Array.from(
     new Set(
       storeOptions
@@ -138,7 +130,14 @@ export function getShipmentColumns(
       title: "货件号",
       dataIndex: "shipment_no",
       hideInTable: true,
-      renderFormItem: renderShipmentNoSearchInput,
+      valueType: "select",
+      fieldProps: {
+        mode: "multiple",
+        showSearch: true,
+        optionFilterProp: "label",
+        placeholder: "请选择货件号",
+        options: shipmentSelectOptions,
+      },
     },
     {
       title: "货件号/运单编号",
@@ -319,7 +318,7 @@ export function getShipmentColumns(
       width: 88,
       hideInSearch: true,
       render: (_, record) =>
-        formatShipmentDate(record.overseas_warehouse_arrived_at) || "-",
+        formatShipmentDate(record.overseas_warehouse_arrived_at),
     },
     {
       title: "送仓时间",
@@ -335,16 +334,16 @@ export function getShipmentColumns(
             <div className="flex flex-col gap-1">
               {deliveryTimes.map((value) => (
                 <Typography.Text key={value} className="whitespace-nowrap">
-                  {formatShipmentDate(value) || "-"}
+                  {formatShipmentDate(value)}
                 </Typography.Text>
               ))}
             </div>
           ) : (
-            "-"
+            ""
           );
         }
 
-        return formatShipmentDate(record.appointment_time) || "-";
+        return formatShipmentDate(record.appointment_time);
       },
     },
     {
@@ -353,7 +352,7 @@ export function getShipmentColumns(
       width: 78,
       onCell: (record) => ({
         onDoubleClick: () => {
-          if (!isShipmentLocked(record) && !isRelabelUpdating(record)) {
+          if (!isRelabelUpdating(record)) {
             onStartRelabelEdit(record);
           }
         },
@@ -379,25 +378,10 @@ export function getShipmentColumns(
           );
         }
 
-        if (record.is_relabel === "是" && record.shipment_no?.trim()) {
-          return (
-            <Typography.Link
-              className="inline-flex"
-              onClick={(event) => {
-                event.stopPropagation();
-                openRelabelPage(record.shipment_no);
-              }}
-              onDoubleClick={(event) => event.stopPropagation()}
-            >
-              是
-            </Typography.Link>
-          );
-        }
-
         return (
           <span
             className={
-              isShipmentLocked(record)
+              record.is_relabel === "是"
                 ? "inline-flex"
                 : "inline-flex cursor-pointer"
             }
@@ -419,12 +403,11 @@ export function getShipmentColumns(
         className:
           record.delivery_status === "是"
             ? "shipment-delivery-done-cell"
-            : undefined,
+            : isShipmentDeliveryOverdue(record)
+              ? "shipment-delivery-overdue-cell"
+              : undefined,
         onDoubleClick: () => {
-          if (
-            !isShipmentLocked(record) &&
-            !isDeliveryStatusUpdating(record)
-          ) {
+          if (!isDeliveryStatusUpdating(record)) {
             onStartDeliveryStatusEdit(record);
           }
         },
@@ -452,7 +435,7 @@ export function getShipmentColumns(
         return (
           <span
             className={
-              isShipmentLocked(record) || isDeliveryStatusUpdating(record)
+              isDeliveryStatusUpdating(record)
                 ? "inline-flex"
                 : "inline-flex cursor-pointer"
             }
@@ -495,21 +478,18 @@ export function getShipmentColumns(
           record.logistics_box_mark_url?.trim(),
         );
         const isRishenghui = record.logistics_provider?.trim() === "日升辉";
-        const isLocked = isShipmentLocked(record);
 
         return [
-          !isLocked ? (
-            <Tooltip key="generate-carton-label" title="生成外箱标签">
-              <Button
-                type="text"
-                size="small"
-                icon={<FileSyncOutlined />}
-                loading={isGeneratingCartonLabel(record)}
-                onClick={() => onGenerateCartonLabel(record)}
-              />
-            </Tooltip>
-          ) : null,
-          !isLocked && isRishenghui && !hasTrackingNo ? (
+          <Tooltip key="generate-carton-label" title="生成外箱标签">
+            <Button
+              type="text"
+              size="small"
+              icon={<FileSyncOutlined />}
+              loading={isGeneratingCartonLabel(record)}
+              onClick={() => onGenerateCartonLabel(record)}
+            />
+          </Tooltip>,
+          isRishenghui && !hasTrackingNo ? (
             <Tooltip key="rishenghui-order" title="物流下单">
               <Button
                 type="text"
@@ -519,7 +499,7 @@ export function getShipmentColumns(
               />
             </Tooltip>
           ) : null,
-          !isLocked && hasTrackingNo && !hasLogisticsBoxMarkUrl ? (
+          hasTrackingNo && !hasLogisticsBoxMarkUrl ? (
             <Tooltip key="generate-logistics-box-mark" title="生成物流箱唛">
               <Button
                 type="text"
@@ -530,28 +510,24 @@ export function getShipmentColumns(
               />
             </Tooltip>
           ) : null,
-          !isLocked ? (
-            <Tooltip key="edit" title="编辑">
-              <Button
-                type="text"
-                size="small"
-                icon={<EditOutlined />}
-                onClick={() => onEdit(record)}
-              />
-            </Tooltip>
-          ) : null,
-          !isLocked && !hasTrackingNo ? (
-            <Tooltip key="delete" title="删除">
-              <Button
-                type="text"
-                size="small"
-                danger
-                icon={<DeleteOutlined />}
-                loading={isDeleting(record)}
-                onClick={() => onDelete(record)}
-              />
-            </Tooltip>
-          ) : null,
+          <Tooltip key="edit" title="编辑">
+            <Button
+              type="text"
+              size="small"
+              icon={<EditOutlined />}
+              onClick={() => onEdit(record)}
+            />
+          </Tooltip>,
+          <Tooltip key="delete" title="删除">
+            <Button
+              type="text"
+              size="small"
+              danger
+              icon={<DeleteOutlined />}
+              loading={isDeleting(record)}
+              onClick={() => onDelete(record)}
+            />
+          </Tooltip>,
         ];
       },
     },

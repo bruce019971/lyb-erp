@@ -1,9 +1,10 @@
 import { EditOutlined } from "@ant-design/icons";
 import type { ProColumns } from "@ant-design/pro-components";
-import { Button, Input, Tag, Tooltip, Typography } from "antd";
+import { Button, Tag, Tooltip, Typography } from "antd";
 
 import type { FreightRecord } from "../_lib/freights";
 import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
+import type { ShipmentOption } from "../../shipments/_lib/shipments";
 
 function PaymentTag({ value }: { value?: string | null }) {
   if (value === "是") {
@@ -29,19 +30,21 @@ function openShipmentPage(shipmentNo?: string | null) {
   window.history.pushState(null, "", href);
 }
 
-function renderShipmentNoSearchInput() {
-  return (
-    <Input.TextArea
-      autoSize={{ minRows: 1, maxRows: 3 }}
-      placeholder="可用回车、空格或逗号分隔"
-    />
-  );
-}
-
 export function getFreightColumns(
   onEdit: (record: FreightRecord) => void,
+  shipmentOptions: ShipmentOption[],
   logisticsOptions: LogisticsProviderOption[],
 ): ProColumns<FreightRecord>[] {
+  const shipmentSelectOptions = Array.from(
+    new Set(
+      shipmentOptions
+        .map((item) => item.shipment_no?.trim())
+        .filter((item): item is string => Boolean(item)),
+    ),
+  ).map((item) => ({
+    label: item,
+    value: item,
+  }));
   const logisticsSelectOptions = Array.from(
     new Set(
       logisticsOptions
@@ -59,7 +62,14 @@ export function getFreightColumns(
       dataIndex: "shipment_no",
       width: 180,
       fixed: "left",
-      renderFormItem: renderShipmentNoSearchInput,
+      valueType: "select",
+      fieldProps: {
+        mode: "multiple",
+        showSearch: true,
+        optionFilterProp: "label",
+        placeholder: "请选择货件号",
+        options: shipmentSelectOptions,
+      },
       render: (_, record) => (
         <Typography.Text
           className="whitespace-nowrap"
