@@ -14,7 +14,7 @@ import {
   requestShipmentRecords,
 } from "../_lib/shipments-request";
 import { getShipmentColumns } from "./shipments-columns";
-import type { ShipmentOption, ShipmentRecord } from "../_lib/shipments";
+import type { ShipmentRecord } from "../_lib/shipments";
 import type { ProductShipmentOption } from "../../products/_lib/products";
 import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
 import type { StoreOption } from "../../stores/_lib/stores";
@@ -48,7 +48,6 @@ type ShipmentsTableProps = {
   isGeneratingLogisticsBoxMark: (record: ShipmentRecord) => boolean;
   onStartGenerateCartonLabel: (record: ShipmentRecord) => void;
   onFinishGenerateCartonLabel: () => void;
-  shipmentOptions: ShipmentOption[];
   storeOptions: StoreOption[];
   productOptions: ProductShipmentOption[];
   logisticsOptions: LogisticsProviderOption[];
@@ -108,7 +107,6 @@ export default function ShipmentsTable({
   isGeneratingLogisticsBoxMark,
   onStartGenerateCartonLabel,
   onFinishGenerateCartonLabel,
-  shipmentOptions,
   storeOptions,
   productOptions,
   logisticsOptions,
@@ -262,7 +260,6 @@ export default function ShipmentsTable({
         isDeleting,
         isGeneratingCartonLabel,
         isGeneratingLogisticsBoxMark,
-        shipmentOptions,
         storeOptions,
         productOptions,
         logisticsOptions,
@@ -290,7 +287,6 @@ export default function ShipmentsTable({
       onStartDeliveryStatusEdit,
       onStartRelabelEdit,
       productOptions,
-      shipmentOptions,
       storeOptions,
     ],
   );
@@ -383,7 +379,8 @@ export default function ShipmentsTable({
       }}
       search={{
         labelWidth: "auto",
-        defaultCollapsed: false,
+        defaultCollapsed: true,
+        defaultColsNumber: 3,
       }}
       onSubmit={(values) => {
         searchParamsRef.current = values;

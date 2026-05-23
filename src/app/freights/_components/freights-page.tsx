@@ -48,7 +48,11 @@ export default function FreightsPage() {
         ]);
 
         if (!cancelled) {
-          setShipmentOptions(shipments.filter((item) => item.shipment_no?.trim()));
+          setShipmentOptions(
+            shipments.filter(
+              (item) => item.shipment_no?.trim() || item.tracking_no?.trim(),
+            ),
+          );
           setLogisticsOptions(
             logisticsProviders.filter((item) => item.provider_name?.trim()),
           );

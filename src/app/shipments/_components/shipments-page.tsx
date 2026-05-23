@@ -10,7 +10,7 @@ import "dayjs/locale/zh-cn";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-import type { ShipmentOption, ShipmentRecord } from "../_lib/shipments";
+import type { ShipmentRecord } from "../_lib/shipments";
 import type { ProductShipmentOption } from "../../products/_lib/products";
 import { requestProductShipmentOptions } from "../../products/_lib/products-request";
 import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
@@ -22,7 +22,6 @@ import {
   generateShipmentLogisticsBoxMark,
   generateShipmentRishenghuiOrderInvoice,
   getRishenghuiAccessToken,
-  requestShipmentOptions,
   submitRishenghuiOrderInvoice,
   updateShipmentDeliveryStatus,
   updateShipmentRelabelStatus,
@@ -73,7 +72,6 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
   >(null);
   const [generatingLogisticsBoxMarkId, setGeneratingLogisticsBoxMarkId] =
     useState<string | null>(null);
-  const [shipmentOptions, setShipmentOptions] = useState<ShipmentOption[]>([]);
   const [storeOptions, setStoreOptions] = useState<StoreOption[]>([]);
   const [productOptions, setProductOptions] = useState<ProductShipmentOption[]>(
     [],
@@ -97,20 +95,14 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
     let cancelled = false;
 
     async function loadOptions() {
-      const [shipmentsResult, storesResult, productsResult, logisticsResult] =
+      const [storesResult, productsResult, logisticsResult] =
         await Promise.allSettled([
-          requestShipmentOptions(),
           requestStoreOptions(),
           requestProductShipmentOptions(),
           requestLogisticsProviderOptions(),
         ]);
 
       if (!cancelled) {
-        setShipmentOptions(
-          shipmentsResult.status === "fulfilled"
-            ? shipmentsResult.value.filter((item) => item.shipment_no?.trim())
-            : [],
-        );
         setStoreOptions(
           storesResult.status === "fulfilled"
             ? storesResult.value.filter((item) => item.seller_name?.trim())
@@ -146,7 +138,7 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
     }
 
     searchFormRef.current?.setFieldsValue({
-      shipment_no: [shipmentNo],
+      shipment_no: shipmentNo,
     });
     searchFormRef.current?.submit?.();
   }, [mounted, searchParams]);
@@ -359,7 +351,6 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
                 onFinishGenerateCartonLabel={() =>
                   setGeneratingCartonLabelId(null)
                 }
-                shipmentOptions={shipmentOptions}
                 storeOptions={storeOptions}
                 productOptions={productOptions}
                 logisticsOptions={logisticsOptions}

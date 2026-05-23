@@ -36,16 +36,29 @@ export async function requestShipmentRecords(
     .range(from, to);
 
   shipmentKeywordFields.forEach((field) => {
+    if (field === "shipment_no" || field === "tracking_no") return;
+
     const value = params[field];
     if (typeof value === "string" && value.trim()) {
       query = query.ilike(field, `%${value.trim()}%`);
     }
   });
 
-  function normalizeMultiSelectValues(value: unknown) {
+  function normalizeMultiSelectValues(value: unknown): string[] {
     if (!Array.isArray(value)) return [];
     return value
       .map((item) => (typeof item === "string" ? item.trim() : ""))
+      .filter(Boolean);
+  }
+
+  function splitSearchTexts(value: unknown): string[] {
+    const values = Array.isArray(value) ? value : [value];
+
+    return values
+      .flatMap((item) =>
+        typeof item === "string" ? item.split(/[\s,，]+/) : [],
+      )
+      .map((item) => item.trim())
       .filter(Boolean);
   }
 
@@ -54,9 +67,14 @@ export async function requestShipmentRecords(
     query = query.in("order_store", orderStoreValues);
   }
 
-  const shipmentNoValues = normalizeMultiSelectValues(params.shipment_no);
+  const shipmentNoValues = splitSearchTexts(params.shipment_no);
   if (shipmentNoValues.length > 0) {
     query = query.in("shipment_no", shipmentNoValues);
+  }
+
+  const trackingNoValues = splitSearchTexts(params.tracking_no);
+  if (trackingNoValues.length > 0) {
+    query = query.in("tracking_no", trackingNoValues);
   }
 
   const logisticsProviderValues = normalizeMultiSelectValues(
@@ -630,7 +648,7 @@ export async function uploadShipmentLogisticsBoxMark(file: File) {
 export async function requestShipmentOptions() {
   const { data, error } = await supabase
     .from("shipment_records")
-    .select("id, shipment_no, order_store, box_count")
+    .select("id, shipment_no, tracking_no, order_store, box_count")
     .eq("status", "有效")
     .order("created_at", { ascending: false, nullsFirst: false });
 
@@ -642,7 +660,7 @@ export async function requestShipmentOptions() {
 
   const { data: fallbackData, error: fallbackError } = await supabase
     .from("shipment_records")
-    .select("id, shipment_no")
+    .select("id, shipment_no, tracking_no")
     .eq("status", "有效")
     .order("created_at", { ascending: false, nullsFirst: false });
 

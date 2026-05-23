@@ -28,14 +28,18 @@ type FreightRow = {
   shipment:
     | {
         shipment_no: string | null;
+        tracking_no: string | null;
         logistics_provider: string | null;
         product_name: string | null;
+        box_count: number | null;
         total_qty: number | null;
       }
     | Array<{
         shipment_no: string | null;
+        tracking_no: string | null;
         logistics_provider: string | null;
         product_name: string | null;
+        box_count: number | null;
         total_qty: number | null;
       }>
     | null;
@@ -86,10 +90,12 @@ function normalizeFreightRow(row: FreightRow) {
     id: row.id,
     shipment_record_id: row.shipment_record_id,
     shipment_no: shipment?.shipment_no ?? null,
+    tracking_no: shipment?.tracking_no ?? null,
     logistics_provider: shipment?.logistics_provider ?? null,
     product_name: shipment?.product_name ?? null,
     freight_unit_price: row.freight_unit_price,
     volume: row.volume,
+    box_count: shipment?.box_count ?? null,
     total_qty: shipment?.total_qty ?? null,
     total_fee: totalFee,
     unit_fee: calculateFreightUnitFee(totalFee, shipment?.total_qty ?? null),
@@ -110,6 +116,13 @@ function normalizeTextValue(value: unknown) {
 
 function normalizeMultiSelectValues(values: string[]) {
   return values
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function splitSearchTexts(values: string[]) {
+  return values
+    .flatMap((item) => item.split(/[\s,，]+/))
     .map((item) => item.trim())
     .filter(Boolean);
 }
@@ -160,9 +173,10 @@ export async function GET(request: Request) {
     const to = from + Math.max(pageSize, 1) - 1;
     const orderField = searchParams.get("orderField") || "created_at";
     const orderDirection = searchParams.get("orderDirection") || "descend";
-    const shipmentNoValues = normalizeMultiSelectValues(
+    const shipmentNoValues = splitSearchTexts(
       searchParams.getAll("shipment_no"),
     );
+    const trackingNoValues = splitSearchTexts(searchParams.getAll("tracking_no"));
     const logisticsProviderValues = normalizeMultiSelectValues(
       searchParams.getAll("logistics_provider"),
     );
@@ -177,7 +191,11 @@ export async function GET(request: Request) {
     const adminClient = createSupabaseAdminClient();
     let matchedShipmentIds: string[] | null = null;
 
-    if (shipmentNoValues.length > 0 || logisticsProviderValues.length > 0) {
+    if (
+      shipmentNoValues.length > 0 ||
+      trackingNoValues.length > 0 ||
+      logisticsProviderValues.length > 0
+    ) {
       let shipmentQuery = adminClient
         .from("shipment_records")
         .select("id")
@@ -185,6 +203,10 @@ export async function GET(request: Request) {
 
       if (shipmentNoValues.length > 0) {
         shipmentQuery = shipmentQuery.in("shipment_no", shipmentNoValues);
+      }
+
+      if (trackingNoValues.length > 0) {
+        shipmentQuery = shipmentQuery.in("tracking_no", trackingNoValues);
       }
 
       if (logisticsProviderValues.length > 0) {
@@ -215,7 +237,7 @@ export async function GET(request: Request) {
     let query = adminClient
       .from("freight_records")
       .select(
-        "id, shipment_record_id, freight_unit_price, volume, freight_paid_status, created_at, updated_at, shipment:shipment_records(shipment_no, logistics_provider, product_name, total_qty)",
+        "id, shipment_record_id, freight_unit_price, volume, freight_paid_status, created_at, updated_at, shipment:shipment_records(shipment_no, tracking_no, logistics_provider, product_name, box_count, total_qty)",
         { count: "exact" },
       )
       .range(from, to);
@@ -269,7 +291,7 @@ export async function PATCH(request: Request) {
       })
       .eq("id", id)
       .select(
-        "id, shipment_record_id, freight_unit_price, volume, freight_paid_status, created_at, updated_at, shipment:shipment_records(shipment_no, logistics_provider, product_name, total_qty)",
+        "id, shipment_record_id, freight_unit_price, volume, freight_paid_status, created_at, updated_at, shipment:shipment_records(shipment_no, tracking_no, logistics_provider, product_name, box_count, total_qty)",
       )
       .single();
 

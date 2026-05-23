@@ -50,6 +50,7 @@ export type ShipmentCreateValues = ShipmentUpdateValues;
 export type ShipmentOption = {
   id: string;
   shipment_no: string | null;
+  tracking_no: string | null;
   order_store: string | null;
   box_count: number | null;
 };

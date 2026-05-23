@@ -6,14 +6,13 @@ import {
   QrcodeOutlined,
 } from "@ant-design/icons";
 import type { ProColumns } from "@ant-design/pro-components";
-import { Button, Select, Tooltip, Typography } from "antd";
+import { Button, Input, Select, Tooltip, Typography } from "antd";
 
 import {
   formatShipmentDate,
   isShipmentDeliveryOverdue,
   type ShipmentRecord,
 } from "../_lib/shipments";
-import type { ShipmentOption } from "../_lib/shipments";
 import type { ProductShipmentOption } from "../../products/_lib/products";
 import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
 import type { StoreOption } from "../../stores/_lib/stores";
@@ -45,6 +44,15 @@ function openProductPage(
   window.history.pushState(null, "", href);
 }
 
+function renderShipmentNoSearchInput() {
+  return (
+    <Input.TextArea
+      autoSize={{ minRows: 1, maxRows: 3 }}
+      placeholder="可用回车、空格或逗号分隔"
+    />
+  );
+}
+
 export function getShipmentColumns(
   onEdit: (record: ShipmentRecord) => void,
   onDownloadCartonLabel: (record: ShipmentRecord) => void,
@@ -66,7 +74,6 @@ export function getShipmentColumns(
   isDeleting: (record: ShipmentRecord) => boolean,
   isGeneratingCartonLabel: (record: ShipmentRecord) => boolean,
   isGeneratingLogisticsBoxMark: (record: ShipmentRecord) => boolean,
-  shipmentOptions: ShipmentOption[],
   storeOptions: StoreOption[],
   productOptions: ProductShipmentOption[],
   logisticsOptions: LogisticsProviderOption[],
@@ -79,16 +86,6 @@ export function getShipmentColumns(
     return <Typography.Text>{value || ""}</Typography.Text>;
   }
 
-  const shipmentSelectOptions = Array.from(
-    new Set(
-      shipmentOptions
-        .map((item) => item.shipment_no?.trim())
-        .filter((item): item is string => Boolean(item)),
-    ),
-  ).map((item) => ({
-    label: item,
-    value: item,
-  }));
   const storeSelectOptions = Array.from(
     new Set(
       storeOptions
@@ -130,14 +127,7 @@ export function getShipmentColumns(
       title: "货件号",
       dataIndex: "shipment_no",
       hideInTable: true,
-      valueType: "select",
-      fieldProps: {
-        mode: "multiple",
-        showSearch: true,
-        optionFilterProp: "label",
-        placeholder: "请选择货件号",
-        options: shipmentSelectOptions,
-      },
+      renderFormItem: renderShipmentNoSearchInput,
     },
     {
       title: "货件号/运单编号",
@@ -276,6 +266,12 @@ export function getShipmentColumns(
           "-"
         );
       },
+    },
+    {
+      title: "运单编号",
+      dataIndex: "tracking_no",
+      hideInTable: true,
+      renderFormItem: renderShipmentNoSearchInput,
     },
     {
       title: "箱数",

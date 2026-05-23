@@ -17,14 +17,28 @@ function normalizeMultiSelectValues(value: unknown) {
     .filter(Boolean);
 }
 
+function splitSearchTexts(value: unknown) {
+  const values = Array.isArray(value) ? value : [value];
+
+  return values
+    .flatMap((item) =>
+      typeof item === "string" ? item.split(/[\s,，]+/) : [],
+    )
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 export async function requestFreightRecords(params: FreightRequestParams) {
   const searchParams = new URLSearchParams({
     current: String(params.current ?? 1),
     pageSize: String(params.pageSize ?? 40),
   });
 
-  normalizeMultiSelectValues(params.shipment_no).forEach((value) => {
+  splitSearchTexts(params.shipment_no).forEach((value) => {
     searchParams.append("shipment_no", value);
+  });
+  splitSearchTexts(params.tracking_no).forEach((value) => {
+    searchParams.append("tracking_no", value);
   });
   normalizeMultiSelectValues(params.logistics_provider).forEach((value) => {
     searchParams.append("logistics_provider", value);
