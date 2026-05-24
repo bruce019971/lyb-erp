@@ -15,7 +15,7 @@ import {
   UserOutlined,
 } from "@ant-design/icons";
 import type { MenuProps } from "antd";
-import { Button, Menu, Typography } from "antd";
+import { Menu, Typography } from "antd";
 import type { ReactNode } from "react";
 import type { DataNode } from "antd/es/tree";
 
@@ -58,6 +58,20 @@ export const pageConfigs: PageConfig[] = [
     section: "core",
   },
   {
+    key: "freights",
+    label: "运费管理",
+    icon: <DollarOutlined />,
+    href: "/freights",
+    section: "core",
+  },
+  {
+    key: "relabels",
+    label: "换标管理",
+    icon: <TagsOutlined />,
+    href: "/relabels",
+    section: "core",
+  },
+  {
     key: "stores",
     label: "店铺管理",
     icon: <ShopOutlined />,
@@ -69,20 +83,6 @@ export const pageConfigs: PageConfig[] = [
     label: "物流管理",
     icon: <AppstoreOutlined />,
     href: "/logistics",
-    section: "core",
-  },
-  {
-    key: "relabels",
-    label: "换标管理",
-    icon: <TagsOutlined />,
-    href: "/relabels",
-    section: "core",
-  },
-  {
-    key: "freights",
-    label: "运费管理",
-    icon: <DollarOutlined />,
-    href: "/freights",
     section: "core",
   },
   {

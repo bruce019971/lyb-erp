@@ -40,6 +40,9 @@ export async function requestFreightRecords(params: FreightRequestParams) {
   splitSearchTexts(params.tracking_no).forEach((value) => {
     searchParams.append("tracking_no", value);
   });
+  splitSearchTexts(params.product_name).forEach((value) => {
+    searchParams.append("product_name", value);
+  });
   normalizeMultiSelectValues(params.logistics_provider).forEach((value) => {
     searchParams.append("logistics_provider", value);
   });

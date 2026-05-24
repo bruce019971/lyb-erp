@@ -50,7 +50,10 @@ export default function FreightsPage() {
         if (!cancelled) {
           setShipmentOptions(
             shipments.filter(
-              (item) => item.shipment_no?.trim() || item.tracking_no?.trim(),
+              (item) =>
+                item.shipment_no?.trim() ||
+                item.tracking_no?.trim() ||
+                item.product_name?.trim(),
             ),
           );
           setLogisticsOptions(

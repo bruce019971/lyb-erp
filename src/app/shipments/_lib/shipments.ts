@@ -51,6 +51,7 @@ export type ShipmentOption = {
   id: string;
   shipment_no: string | null;
   tracking_no: string | null;
+  product_name: string | null;
   order_store: string | null;
   box_count: number | null;
 };

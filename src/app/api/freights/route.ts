@@ -177,6 +177,9 @@ export async function GET(request: Request) {
       searchParams.getAll("shipment_no"),
     );
     const trackingNoValues = splitSearchTexts(searchParams.getAll("tracking_no"));
+    const productNameValues = splitSearchTexts(
+      searchParams.getAll("product_name"),
+    );
     const logisticsProviderValues = normalizeMultiSelectValues(
       searchParams.getAll("logistics_provider"),
     );
@@ -194,6 +197,7 @@ export async function GET(request: Request) {
     if (
       shipmentNoValues.length > 0 ||
       trackingNoValues.length > 0 ||
+      productNameValues.length > 0 ||
       logisticsProviderValues.length > 0
     ) {
       let shipmentQuery = adminClient
@@ -207,6 +211,10 @@ export async function GET(request: Request) {
 
       if (trackingNoValues.length > 0) {
         shipmentQuery = shipmentQuery.in("tracking_no", trackingNoValues);
+      }
+
+      if (productNameValues.length > 0) {
+        shipmentQuery = shipmentQuery.in("product_name", productNameValues);
       }
 
       if (logisticsProviderValues.length > 0) {

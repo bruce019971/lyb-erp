@@ -57,6 +57,16 @@ export function getFreightColumns(
     label: item,
     value: item,
   }));
+  const productSelectOptions = Array.from(
+    new Set(
+      shipmentOptions
+        .map((item) => item.product_name?.trim())
+        .filter((item): item is string => Boolean(item)),
+    ),
+  ).map((item) => ({
+    label: item,
+    value: item,
+  }));
   const logisticsSelectOptions = Array.from(
     new Set(
       logisticsOptions
@@ -129,7 +139,15 @@ export function getFreightColumns(
       width: 180,
       fixed: "left",
       ellipsis: true,
-      search: false,
+      valueType: "select",
+      fieldProps: {
+        mode: "tags",
+        showSearch: true,
+        optionFilterProp: "label",
+        tokenSeparators: TOKEN_SEPARATORS,
+        placeholder: "可粘贴多个产品名称",
+        options: productSelectOptions,
+      },
     },
     {
       title: "物流商",

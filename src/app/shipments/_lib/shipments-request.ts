@@ -648,7 +648,7 @@ export async function uploadShipmentLogisticsBoxMark(file: File) {
 export async function requestShipmentOptions() {
   const { data, error } = await supabase
     .from("shipment_records")
-    .select("id, shipment_no, tracking_no, order_store, box_count")
+    .select("id, shipment_no, tracking_no, product_name, order_store, box_count")
     .eq("status", "有效")
     .order("created_at", { ascending: false, nullsFirst: false });
 
@@ -660,7 +660,7 @@ export async function requestShipmentOptions() {
 
   const { data: fallbackData, error: fallbackError } = await supabase
     .from("shipment_records")
-    .select("id, shipment_no, tracking_no")
+    .select("id, shipment_no, tracking_no, product_name")
     .eq("status", "有效")
     .order("created_at", { ascending: false, nullsFirst: false });
 
