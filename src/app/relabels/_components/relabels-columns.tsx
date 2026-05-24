@@ -1,6 +1,6 @@
 import { DeleteOutlined, EditOutlined } from "@ant-design/icons";
 import type { ProColumns } from "@ant-design/pro-components";
-import { Button, Input, Select, Tag, Tooltip, Typography } from "antd";
+import { Button, Select, Tag, Tooltip, Typography } from "antd";
 
 import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
 import {
@@ -9,6 +9,8 @@ import {
   relabelTypeOptions,
   type RelabelRecord,
 } from "../_lib/relabels";
+
+const TOKEN_SEPARATORS = [" ", "\n", "\r", "\t", ",", "，"];
 
 function RelabelTypeTag({ value }: { value?: string | null }) {
   if (!value) return <span />;
@@ -36,14 +38,15 @@ function openStorePage(storeName?: string | null) {
   window.history.pushState(null, "", `/stores?${params.toString()}`);
 }
 
-function renderShipmentNoSearchInput(
-  _item: unknown,
-  _config: unknown,
-) {
+function renderShipmentNoSearchInput() {
   return (
-    <Input.TextArea
-      autoSize={{ minRows: 1, maxRows: 3 }}
+    <Select
+      mode="tags"
+      allowClear
+      open={false}
+      tokenSeparators={TOKEN_SEPARATORS}
       placeholder="可用回车、空格或逗号分隔"
+      className="w-full"
     />
   );
 }

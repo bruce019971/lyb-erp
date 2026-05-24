@@ -6,7 +6,7 @@ import {
   QrcodeOutlined,
 } from "@ant-design/icons";
 import type { ProColumns } from "@ant-design/pro-components";
-import { Button, Input, Select, Tooltip, Typography } from "antd";
+import { Button, Select, Tooltip, Typography } from "antd";
 
 import {
   formatShipmentDate,
@@ -44,11 +44,15 @@ function openProductPage(
   window.history.pushState(null, "", href);
 }
 
-function renderShipmentNoSearchInput() {
+function renderShipmentSearchTagsInput() {
   return (
-    <Input.TextArea
-      autoSize={{ minRows: 1, maxRows: 3 }}
+    <Select
+      mode="tags"
+      allowClear
+      open={false}
+      tokenSeparators={[" ", "\n", "\t", ",", "，"]}
       placeholder="可用回车、空格或逗号分隔"
+      className="w-full"
     />
   );
 }
@@ -127,7 +131,7 @@ export function getShipmentColumns(
       title: "货件号",
       dataIndex: "shipment_no",
       hideInTable: true,
-      renderFormItem: renderShipmentNoSearchInput,
+      renderFormItem: renderShipmentSearchTagsInput,
     },
     {
       title: "货件号/运单编号",
@@ -271,7 +275,7 @@ export function getShipmentColumns(
       title: "运单编号",
       dataIndex: "tracking_no",
       hideInTable: true,
-      renderFormItem: renderShipmentNoSearchInput,
+      renderFormItem: renderShipmentSearchTagsInput,
     },
     {
       title: "箱数",

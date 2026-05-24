@@ -91,7 +91,7 @@ export default function RelabelsTable({
       dateFormatter="string"
       form={{
         initialValues: {
-          original_shipment_no: originalShipmentNo,
+          original_shipment_no: originalShipmentNo ? [originalShipmentNo] : [],
         },
       }}
       request={requestRelabelRecords}

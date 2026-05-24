@@ -138,7 +138,7 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
     }
 
     searchFormRef.current?.setFieldsValue({
-      shipment_no: shipmentNo,
+      shipment_no: [shipmentNo],
     });
     searchFormRef.current?.submit?.();
   }, [mounted, searchParams]);

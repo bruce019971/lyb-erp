@@ -28,12 +28,16 @@ export async function requestRelabelRecords(
     .range(from, to);
 
   function splitShipmentNos(value: unknown) {
-    if (typeof value !== "string") return [];
+    const rawValues = Array.isArray(value) ? value : [value];
 
-    return value
-      .split(/[\s,，]+/)
-      .map((item) => item.trim())
-      .filter(Boolean);
+    return rawValues
+      .filter((item): item is string => typeof item === "string")
+      .flatMap((item) =>
+        item
+          .split(/[\s,，]+/)
+          .map((item) => item.trim())
+          .filter(Boolean),
+      );
   }
 
   function normalizeFilterValue(value: string) {
