@@ -124,6 +124,14 @@ export function getFreightColumns(
       ),
     },
     {
+      title: "产品名称",
+      dataIndex: "product_name",
+      width: 180,
+      fixed: "left",
+      ellipsis: true,
+      search: false,
+    },
+    {
       title: "物流商",
       dataIndex: "logistics_provider",
       width: 160,

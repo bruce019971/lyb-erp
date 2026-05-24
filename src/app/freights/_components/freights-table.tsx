@@ -150,7 +150,7 @@ export default function FreightsTable({
         reload: false,
         setting: true,
       }}
-      scroll={{ x: 1220, y: "calc(100vh - 360px)" }}
+      scroll={{ x: 1400, y: "calc(100vh - 360px)" }}
       onScroll={(event) => {
         const target = event.currentTarget;
         if (
