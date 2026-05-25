@@ -258,7 +258,7 @@ export async function GET(request: Request) {
     let query = adminClient
       .from("freight_records")
       .select(
-        "id, shipment_record_id, freight_unit_price, volume, extra_fee, freight_paid_status, created_at, updated_at, shipment:shipment_records(shipment_no, logistics_provider, product_name, total_qty)",
+        "id, shipment_record_id, freight_unit_price, volume, extra_fee, freight_paid_status, created_at, updated_at, shipment:shipment_records(shipment_no, tracking_no, logistics_provider, product_name, box_count, total_qty)",
         { count: "exact" },
       )
       .range(from, to);
@@ -314,7 +314,7 @@ export async function PATCH(request: Request) {
       })
       .eq("id", id)
       .select(
-        "id, shipment_record_id, freight_unit_price, volume, extra_fee, freight_paid_status, created_at, updated_at, shipment:shipment_records(shipment_no, logistics_provider, product_name, total_qty)",
+        "id, shipment_record_id, freight_unit_price, volume, extra_fee, freight_paid_status, created_at, updated_at, shipment:shipment_records(shipment_no, tracking_no, logistics_provider, product_name, box_count, total_qty)",
       )
       .single();
 
