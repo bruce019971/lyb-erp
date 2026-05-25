@@ -21,41 +21,41 @@ export async function fetchShipmentCartonLabel({
 }: CartonLabelInput) {
   const isLocalStore = storeType?.trim() === "本土";
 
-  const response = await fetch("https://melinet.cn/api/download-shipment-label", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      status: isLocalStore
-        ? {
-            isNew: true,
-          }
-        : {
-            isId: true,
-            isNew: false,
-          },
-      data: {
-        id: shipmentNo,
-        warehouseNumber: isLocalStore ? "MXRC03" : "",
-        warehouseName: isLocalStore
-          ? "Centro logístico Danhos Cuautitlán - MXRC03"
-          : "",
-        nb: boxCount,
-        shopId: storeId,
-        shopName: isLocalStore ? "" : storeAlias,
+  const response = await fetch(
+    "https://melinet.cn/api/download-shipment-label",
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
       },
-    }),
-  });
+      body: JSON.stringify({
+        status: {
+          isId: true,
+          isNew: isLocalStore ? true : false,
+        },
+        data: {
+          id: shipmentNo,
+          warehouseNumber: isLocalStore ? "MXRC03" : "",
+          warehouseName: isLocalStore
+            ? "Centro logístico Danhos Cuautitlán - MXRC03"
+            : "",
+          nb: boxCount,
+          shopId: storeId,
+          shopName: isLocalStore ? "" : storeAlias,
+        },
+      }),
+    },
+  );
 
   const contentType = response.headers.get("content-type") ?? "application/pdf";
 
   if (!response.ok) {
     let message = "外箱标签下载失败";
     if (contentType.includes("application/json")) {
-      const result = (await response.json().catch(() => null)) as
-        | { error?: string; message?: string }
-        | null;
+      const result = (await response.json().catch(() => null)) as {
+        error?: string;
+        message?: string;
+      } | null;
       message = result?.error || result?.message || message;
     } else {
       const text = await response.text().catch(() => "");
