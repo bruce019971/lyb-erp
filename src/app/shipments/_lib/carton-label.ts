@@ -64,7 +64,12 @@ export async function downloadShipmentCartonLabel(
     throw new Error("当前货件未生成外箱标签");
   }
 
-  const response = await fetch(cartonLabelUrl);
+  const proxyUrl = `/api/proxy-download?${new URLSearchParams({
+    url: cartonLabelUrl,
+    filename: fileName,
+    t: String(Date.now()),
+  })}`;
+  const response = await fetch(proxyUrl, { cache: "no-store" });
   if (!response.ok) {
     throw new Error("外箱标签文件读取失败");
   }

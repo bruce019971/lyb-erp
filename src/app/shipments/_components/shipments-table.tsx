@@ -144,10 +144,19 @@ export default function ShipmentsTable({
   const [dataSource, setDataSource] = useState<ShipmentRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
-  const [currentPage, setCurrentPage] = useState(1);
   const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
   const [reloadRequest, setReloadRequest] = useState(0);
+
+  const updateShipmentRow = useCallback(
+    (shipmentNo: string, values: Partial<ShipmentRecord>) => {
+      setDataSource((current) =>
+        current.map((item) =>
+          item.shipment_no?.trim() === shipmentNo ? { ...item, ...values } : item,
+        ),
+      );
+    },
+    [],
+  );
 
   const loadPage = useCallback(
     async (
@@ -185,9 +194,7 @@ export default function ShipmentsTable({
           onSelectedShipmentNosChange([]);
         }
         currentPageRef.current = page;
-        setCurrentPage(page);
         hasMoreRef.current = nextData.length >= PAGE_SIZE;
-        setHasMore(nextData.length >= PAGE_SIZE);
       } finally {
         loadingRef.current = false;
         loadingMoreRef.current = false;
@@ -220,6 +227,16 @@ export default function ShipmentsTable({
           throw new Error(failedItem.error || "外箱标签生成失败");
         }
 
+        const successItem = result.results.find(
+          (item) => item.success && item.shipmentNo === shipmentNo,
+        );
+
+        if (successItem?.url) {
+          updateShipmentRow(shipmentNo, {
+            carton_label_url: successItem.url,
+          });
+        }
+
         message.success(`${shipmentNo}外箱标签生成成功`);
         setReloadRequest((value) => value + 1);
       } catch (error) {
@@ -234,6 +251,7 @@ export default function ShipmentsTable({
       message,
       onFinishGenerateCartonLabel,
       onStartGenerateCartonLabel,
+      updateShipmentRow,
     ],
   );
 

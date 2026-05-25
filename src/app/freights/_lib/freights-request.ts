@@ -17,10 +17,6 @@ function normalizeMultiSelectValues(value: unknown) {
     .filter(Boolean);
 }
 
-function splitShipmentNos(value: unknown): string[] {
-  if (Array.isArray(value)) {
-    return value.flatMap(splitShipmentNos);
-  }
 function splitSearchTexts(value: unknown) {
   const values = Array.isArray(value) ? value : [value];
 

@@ -62,3 +62,13 @@ export function canEditRelabelDeliveryStatus(record: RelabelRecord) {
 
   return deliveryDate.diff(today, "day") <= 0;
 }
+
+export function isRelabelDeliveryOverdue(record: RelabelRecord) {
+  if (record.delivery_status === "是") return false;
+  if (!record.delivery_time) return false;
+
+  const today = dayjs().startOf("day");
+  const deliveryDate = dayjs(record.delivery_time).startOf("day");
+
+  return deliveryDate.isBefore(today, "day");
+}

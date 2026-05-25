@@ -79,14 +79,14 @@ export async function uploadShipmentCartonLabel(
   },
 ) {
   const { buffer, contentType } = await fetchShipmentCartonLabel(params);
-  const filePath = `shipment-carton-labels/${params.shipmentId}/carton-label.pdf`;
+  const filePath = `shipment-carton-labels/${params.shipmentId}/${crypto.randomUUID()}.pdf`;
 
   const { error: uploadError } = await adminClient.storage
     .from("product-images")
     .upload(filePath, buffer, {
-      cacheControl: "3600",
+      cacheControl: "0",
       contentType,
-      upsert: true,
+      upsert: false,
     });
 
   if (uploadError) {

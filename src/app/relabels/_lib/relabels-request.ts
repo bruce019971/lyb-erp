@@ -15,7 +15,7 @@ type RelabelRequestParams = {
 
 export async function requestRelabelRecords(
   params: RelabelRequestParams,
-  sorter: Record<string, SortOrder>,
+  sorter: Record<string, SortOrder> = {},
 ) {
   const current = params.current ?? 1;
   const pageSize = params.pageSize ?? 20;
@@ -134,10 +134,12 @@ export async function requestRelabelRecords(
       ascending: orderDirection === "ascend",
     });
   } else {
-    query = query.order("delivery_time", {
-      ascending: true,
-      nullsFirst: false,
-    });
+    query = query
+      .order("delivery_status", { ascending: true })
+      .order("delivery_time", {
+        ascending: true,
+        nullsFirst: false,
+      });
   }
 
   const { data, error, count } = await query;
