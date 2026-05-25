@@ -33,6 +33,7 @@ type StoreRow = {
   seller_name: string | null;
   seller_id: string | null;
   seller_alias: string | null;
+  seller_type: string | null;
 };
 
 async function verifyOperator() {
@@ -132,7 +133,7 @@ export async function POST(request: Request) {
     const { data: storesData, error: storesError } = storeNames.length
       ? await adminClient
           .from("stores")
-          .select("seller_name, seller_id, seller_alias")
+          .select("seller_name, seller_id, seller_alias, seller_type")
           .in("seller_name", storeNames)
       : { data: [], error: null };
 
@@ -180,6 +181,7 @@ export async function POST(request: Request) {
         const store = storeName ? storeMap.get(storeName) : undefined;
         const storeId = store?.seller_id?.trim();
         const storeAlias = store?.seller_alias?.trim();
+        const storeType = store?.seller_type?.trim();
 
         if (!storeId || !storeAlias) {
           throw new Error("缺少店铺别名或店铺ID");
@@ -191,6 +193,7 @@ export async function POST(request: Request) {
           boxCount,
           storeId,
           storeAlias,
+          storeType,
           productName: shipment.product_name,
         });
 

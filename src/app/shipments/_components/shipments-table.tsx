@@ -249,7 +249,7 @@ export default function ShipmentsTable({
           throw new Error(failedItem.error || "外箱标签生成失败");
         }
 
-        message.success("外箱标签生成成功");
+        message.success(`${shipmentNo}外箱标签生成成功`);
         setReloadRequest((value) => value + 1);
       } catch (error) {
         message.error(

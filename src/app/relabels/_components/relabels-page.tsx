@@ -8,7 +8,6 @@ import dayjs from "dayjs";
 import "dayjs/locale/zh-cn";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import type { Dayjs } from "dayjs";
 
 import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
 import { requestLogisticsProviderOptions } from "../../logistics/_lib/logistics-request";
@@ -19,13 +18,11 @@ import { requestShipmentOptions } from "../../shipments/_lib/shipments-request";
 import ShipmentsTableSkeleton from "../../shipments/_components/shipments-table-skeleton";
 import {
   canEditRelabelDeliveryStatus,
-  type RelabelDateField,
   type RelabelRecord,
 } from "../_lib/relabels";
 import {
   deleteRelabelRecord,
   markRelabelStatusAsYes,
-  updateRelabelDateField,
 } from "../_lib/relabels-request";
 import RelabelFormDrawer from "./relabel-form-drawer";
 import RelabelsTable from "./relabels-table";
@@ -49,8 +46,6 @@ export default function RelabelsPage() {
   const [editingDeliveryStatusId, setEditingDeliveryStatusId] = useState<
     string | null
   >(null);
-  const [editingDateKey, setEditingDateKey] = useState<string | null>(null);
-  const [updatingDateKey, setUpdatingDateKey] = useState<string | null>(null);
   const [updatingStatusKey, setUpdatingStatusKey] = useState<string | null>(null);
   const [deletingRelabelId, setDeletingRelabelId] = useState<string | null>(null);
   const tableActionRef = useRef<ActionType>(undefined);
@@ -108,52 +103,12 @@ export default function RelabelsPage() {
     return updatingStatusKey === `${record.id}:${field}`;
   }
 
-  function getDateKey(record: RelabelRecord, field: RelabelDateField) {
-    return `${record.id}:${field}`;
-  }
-
-  function isDateEditing(record: RelabelRecord, field: RelabelDateField) {
-    return editingDateKey === getDateKey(record, field);
-  }
-
-  function isDateUpdating(record: RelabelRecord, field: RelabelDateField) {
-    return updatingDateKey === getDateKey(record, field);
-  }
-
   function isDeliveryStatusEditing(record: RelabelRecord) {
     return editingDeliveryStatusId === record.id;
   }
 
   function isDeleting(record: RelabelRecord) {
     return deletingRelabelId === record.id;
-  }
-
-  async function handleChangeDateField(
-    record: RelabelRecord,
-    field: RelabelDateField,
-    value: Dayjs | null,
-  ) {
-    const nextValue = value ? value.format("YYYY-MM-DD") : null;
-
-    if ((record[field] ?? null) === nextValue) {
-      setEditingDateKey(null);
-      return;
-    }
-
-    try {
-      const dateKey = getDateKey(record, field);
-      setUpdatingDateKey(dateKey);
-      await updateRelabelDateField(record, field, nextValue);
-      messageApi.success("送仓时间已更新");
-      setEditingDateKey(null);
-      tableActionRef.current?.reload();
-    } catch (error) {
-      const description =
-        error instanceof Error ? error.message : "请检查数据库权限或字段内容";
-      messageApi.error(`时间更新失败：${description}`);
-    } finally {
-      setUpdatingDateKey(null);
-    }
   }
 
   async function handleChangeStatus(
@@ -238,13 +193,6 @@ export default function RelabelsPage() {
                   setEditOpen(true);
                 }}
                 onDelete={(record) => void handleDelete(record)}
-                onStartDateEdit={(record, field) =>
-                  setEditingDateKey(getDateKey(record, field))
-                }
-                onCancelDateEdit={() => setEditingDateKey(null)}
-                onChangeDateField={(record, field, value) =>
-                  void handleChangeDateField(record, field, value)
-                }
                 onStartDeliveryStatusEdit={(record) =>
                   setEditingDeliveryStatusId(record.id)
                 }
@@ -254,8 +202,6 @@ export default function RelabelsPage() {
                 onChangeDeliveryStatus={(record, value) =>
                   void handleChangeStatus(record, "delivery_status", value)
                 }
-                isDateEditing={isDateEditing}
-                isDateUpdating={isDateUpdating}
                 isDeliveryStatusEditing={isDeliveryStatusEditing}
                 isStatusUpdating={isStatusUpdating}
                 isDeleting={isDeleting}

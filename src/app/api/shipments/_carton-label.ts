@@ -5,6 +5,7 @@ type CartonLabelInput = {
   boxCount: string;
   storeId: string;
   storeAlias: string;
+  storeType?: string | null;
 };
 
 export function safeCartonLabelFilePart(value?: string | null) {
@@ -16,24 +17,33 @@ export async function fetchShipmentCartonLabel({
   boxCount,
   storeId,
   storeAlias,
+  storeType,
 }: CartonLabelInput) {
+  const isLocalStore = storeType?.trim() === "本土";
+
   const response = await fetch("https://melinet.cn/api/download-shipment-label", {
     method: "POST",
     headers: {
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      status: {
-        isId: true,
-        isNew: false,
-      },
+      status: isLocalStore
+        ? {
+            isNew: true,
+          }
+        : {
+            isId: true,
+            isNew: false,
+          },
       data: {
         id: shipmentNo,
-        warehouseNumber: "",
-        warehouseName: "",
+        warehouseNumber: isLocalStore ? "MXRC03" : "",
+        warehouseName: isLocalStore
+          ? "Centro logístico Danhos Cuautitlán - MXRC03"
+          : "",
         nb: boxCount,
         shopId: storeId,
-        shopName: storeAlias,
+        shopName: isLocalStore ? "" : storeAlias,
       },
     }),
   });

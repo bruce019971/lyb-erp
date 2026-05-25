@@ -23,6 +23,7 @@ type CartonLabelRequestBody = {
   boxCount?: string;
   storeId?: string;
   storeAlias?: string;
+  storeType?: string | null;
 };
 
 async function verifyOperator() {
@@ -77,12 +78,15 @@ export async function POST(request: Request) {
     const boxCount = getRequiredText(body.boxCount, "缺少箱数");
     const storeId = getRequiredText(body.storeId, "缺少店铺ID");
     const storeAlias = getRequiredText(body.storeAlias, "缺少店铺别名");
+    const storeType =
+      typeof body.storeType === "string" ? body.storeType.trim() : null;
 
     const { buffer, contentType } = await fetchShipmentCartonLabel({
       shipmentNo,
       boxCount,
       storeId,
       storeAlias,
+      storeType,
     });
 
     return new Response(buffer, {

@@ -22,6 +22,7 @@ type FreightRow = {
   shipment_record_id: string;
   freight_unit_price: number | null;
   volume: number | null;
+  extra_fee: number | null;
   freight_paid_status: string | null;
   created_at: string | null;
   updated_at: string | null;
@@ -48,6 +49,7 @@ function roundMoney(value: number) {
 function calculateFreightTotalFee(
   freightUnitPrice?: number | null,
   volume?: number | null,
+  extraFee?: number | null,
 ) {
   if (
     typeof freightUnitPrice !== "number" ||
@@ -58,7 +60,10 @@ function calculateFreightTotalFee(
     return null;
   }
 
-  return roundMoney(freightUnitPrice * volume);
+  const normalizedExtraFee =
+    typeof extraFee === "number" && Number.isFinite(extraFee) ? extraFee : 0;
+
+  return roundMoney(freightUnitPrice * volume + normalizedExtraFee);
 }
 
 function calculateFreightUnitFee(
@@ -80,7 +85,11 @@ function calculateFreightUnitFee(
 
 function normalizeFreightRow(row: FreightRow) {
   const shipment = Array.isArray(row.shipment) ? row.shipment[0] : row.shipment;
-  const totalFee = calculateFreightTotalFee(row.freight_unit_price, row.volume);
+  const totalFee = calculateFreightTotalFee(
+    row.freight_unit_price,
+    row.volume,
+    row.extra_fee,
+  );
 
   return {
     id: row.id,
@@ -90,6 +99,7 @@ function normalizeFreightRow(row: FreightRow) {
     product_name: shipment?.product_name ?? null,
     freight_unit_price: row.freight_unit_price,
     volume: row.volume,
+    extra_fee: row.extra_fee,
     total_qty: shipment?.total_qty ?? null,
     total_fee: totalFee,
     unit_fee: calculateFreightUnitFee(totalFee, shipment?.total_qty ?? null),
@@ -190,6 +200,7 @@ export async function GET(request: Request) {
       "updated_at",
       "freight_unit_price",
       "volume",
+      "extra_fee",
       "freight_paid_status",
     ]);
 
@@ -237,7 +248,7 @@ export async function GET(request: Request) {
     let query = adminClient
       .from("freight_records")
       .select(
-        "id, shipment_record_id, freight_unit_price, volume, freight_paid_status, created_at, updated_at, shipment:shipment_records(shipment_no, logistics_provider, product_name, total_qty)",
+        "id, shipment_record_id, freight_unit_price, volume, extra_fee, freight_paid_status, created_at, updated_at, shipment:shipment_records(shipment_no, logistics_provider, product_name, total_qty)",
         { count: "exact" },
       )
       .range(from, to);
@@ -287,11 +298,12 @@ export async function PATCH(request: Request) {
       .update({
         freight_unit_price: normalizeNumberValue(body.freight_unit_price),
         volume: normalizeNumberValue(body.volume),
+        extra_fee: normalizeNumberValue(body.extra_fee),
         freight_paid_status: normalizeTextValue(body.freight_paid_status) ?? "否",
       })
       .eq("id", id)
       .select(
-        "id, shipment_record_id, freight_unit_price, volume, freight_paid_status, created_at, updated_at, shipment:shipment_records(shipment_no, logistics_provider, product_name, total_qty)",
+        "id, shipment_record_id, freight_unit_price, volume, extra_fee, freight_paid_status, created_at, updated_at, shipment:shipment_records(shipment_no, logistics_provider, product_name, total_qty)",
       )
       .single();
 

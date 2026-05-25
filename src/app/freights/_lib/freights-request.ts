@@ -17,7 +17,7 @@ function normalizeMultiSelectValues(value: unknown) {
     .filter(Boolean);
 }
 
-function splitShipmentNos(value: unknown) {
+function splitShipmentNos(value: unknown): string[] {
   if (Array.isArray(value)) {
     return value.flatMap(splitShipmentNos);
   }
@@ -74,6 +74,7 @@ export async function updateFreightRecord(
 ) {
   const freightUnitPrice = normalizeNumberValue(values.freight_unit_price);
   const volume = normalizeNumberValue(values.volume);
+  const extraFee = normalizeNumberValue(values.extra_fee);
 
   const response = await fetch("/api/freights", {
     method: "PATCH",
@@ -84,6 +85,7 @@ export async function updateFreightRecord(
       id,
       freight_unit_price: freightUnitPrice,
       volume,
+      extra_fee: extraFee,
       freight_paid_status: normalizeTextValue(values.freight_paid_status) ?? "否",
     }),
   });
@@ -101,11 +103,13 @@ export async function updateFreightRecord(
     total_fee: calculateFreightTotalFee(
       payload.data.freight_unit_price,
       payload.data.volume,
+      payload.data.extra_fee,
     ),
     unit_fee: calculateFreightUnitFee(
       calculateFreightTotalFee(
         payload.data.freight_unit_price,
         payload.data.volume,
+        payload.data.extra_fee,
       ),
       payload.data.total_qty,
     ),

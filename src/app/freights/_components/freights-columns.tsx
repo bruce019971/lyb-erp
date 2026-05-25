@@ -100,6 +100,13 @@ export function getFreightColumns(
       search: false,
     },
     {
+      title: "额外费用",
+      dataIndex: "extra_fee",
+      valueType: "money",
+      width: 120,
+      search: false,
+    },
+    {
       title: "总费用",
       dataIndex: "total_fee",
       valueType: "money",

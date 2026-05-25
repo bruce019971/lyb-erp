@@ -6,13 +6,11 @@ import { ProTable } from "@ant-design/pro-components";
 import { Button, Spin, Tooltip } from "antd";
 import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Dayjs } from "dayjs";
 
 import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
 import { requestRelabelRecords } from "../_lib/relabels-request";
 import {
   isRelabelDeliveryOverdue,
-  type RelabelDateField,
   type RelabelRecord,
 } from "../_lib/relabels";
 import { getRelabelColumns } from "./relabels-columns";
@@ -23,18 +21,9 @@ type RelabelsTableProps = {
   onCreate: () => void;
   onEdit: (record: RelabelRecord) => void;
   onDelete: (record: RelabelRecord) => void;
-  onStartDateEdit: (record: RelabelRecord, field: RelabelDateField) => void;
-  onCancelDateEdit: () => void;
-  onChangeDateField: (
-    record: RelabelRecord,
-    field: RelabelDateField,
-    value: Dayjs | null,
-  ) => void;
   onStartDeliveryStatusEdit: (record: RelabelRecord) => void;
   onCancelDeliveryStatusEdit: () => void;
   onChangeDeliveryStatus: (record: RelabelRecord, value: string) => void;
-  isDateEditing: (record: RelabelRecord, field: RelabelDateField) => boolean;
-  isDateUpdating: (record: RelabelRecord, field: RelabelDateField) => boolean;
   isDeliveryStatusEditing: (record: RelabelRecord) => boolean;
   isStatusUpdating: (
     record: RelabelRecord,
@@ -77,14 +66,9 @@ export default function RelabelsTable({
   onCreate,
   onEdit,
   onDelete,
-  onStartDateEdit,
-  onCancelDateEdit,
-  onChangeDateField,
   onStartDeliveryStatusEdit,
   onCancelDeliveryStatusEdit,
   onChangeDeliveryStatus,
-  isDateEditing,
-  isDateUpdating,
   isDeliveryStatusEditing,
   isStatusUpdating,
   isDeleting,
@@ -168,14 +152,9 @@ export default function RelabelsTable({
       getRelabelColumns(
         onEdit,
         onDelete,
-        onStartDateEdit,
-        onCancelDateEdit,
-        onChangeDateField,
         onStartDeliveryStatusEdit,
         onCancelDeliveryStatusEdit,
         onChangeDeliveryStatus,
-        isDateEditing,
-        isDateUpdating,
         isDeliveryStatusEditing,
         isStatusUpdating,
         isDeleting,
@@ -183,18 +162,13 @@ export default function RelabelsTable({
       ),
     [
       isDeleting,
-      isDateEditing,
-      isDateUpdating,
       isDeliveryStatusEditing,
       isStatusUpdating,
       logisticsOptions,
-      onCancelDateEdit,
       onCancelDeliveryStatusEdit,
-      onChangeDateField,
       onChangeDeliveryStatus,
       onDelete,
       onEdit,
-      onStartDateEdit,
       onStartDeliveryStatusEdit,
     ],
   );
