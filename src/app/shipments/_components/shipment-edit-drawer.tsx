@@ -370,6 +370,7 @@ export default function ShipmentEditDrawer({
       appointment_time: toDateInputValue(record.appointment_time),
       is_relabel: record.is_relabel ?? undefined,
       goods_value: record.goods_value,
+      remark: record.remark ?? undefined,
     });
     logisticsBoxMarkUrlRef.current = record.logistics_box_mark_url ?? undefined;
   }, [form, open, record]);
@@ -579,6 +580,13 @@ export default function ShipmentEditDrawer({
                 return current.startOf("day").isBefore(minDate);
               }}
             />
+          </Form.Item>
+          <Form.Item
+            className="md:col-span-2"
+            label="备注"
+            name="remark"
+          >
+            <Input.TextArea rows={3} placeholder="请输入备注" />
           </Form.Item>
         </div>
       </Form>

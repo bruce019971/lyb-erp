@@ -2,6 +2,7 @@
 
 import {
   BarcodeOutlined,
+  CalculatorOutlined,
   FilePdfOutlined,
   KeyOutlined,
   PlusOutlined,
@@ -19,7 +20,10 @@ import {
   requestShipmentRecords,
 } from "../_lib/shipments-request";
 import { getShipmentColumns } from "./shipments-columns";
-import type { ShipmentRecord } from "../_lib/shipments";
+import {
+  isShipmentDeliveryOverdue,
+  type ShipmentRecord,
+} from "../_lib/shipments";
 import type { ProductShipmentOption } from "../../products/_lib/products";
 import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
 import type { StoreOption } from "../../stores/_lib/stores";
@@ -32,6 +36,7 @@ type ShipmentsTableProps = {
   actionRef?: MutableRefObject<ActionType | undefined>;
   formRef?: MutableRefObject<FormInstance | undefined>;
   onCreate: () => void;
+  onBatchCalculateGoodsValue: (ids: string[]) => void;
   onClearCartonLabels: (ids: string[]) => void;
   onClearLogisticsBoxMarks: (ids: string[]) => void;
   onOpenRishenghuiAuth: () => void;
@@ -94,6 +99,7 @@ export default function ShipmentsTable({
   actionRef,
   formRef,
   onCreate,
+  onBatchCalculateGoodsValue,
   onClearCartonLabels,
   onClearLogisticsBoxMarks,
   onOpenRishenghuiAuth,
@@ -381,6 +387,11 @@ export default function ShipmentsTable({
       }}
       rowClassName={(record) => {
         if (record.is_delivery_completed) return "shipment-delivered-row";
+        if (isShipmentDeliveryOverdue(record)) {
+          return isWarehouseArrivedUndelivered(record)
+            ? "shipment-warehouse-pending-delivery-row shipment-delivery-overdue-row"
+            : "shipment-delivery-overdue-row";
+        }
         if (isWarehouseArrivedUndelivered(record)) {
           return "shipment-warehouse-pending-delivery-row";
         }
@@ -429,6 +440,19 @@ export default function ShipmentsTable({
         const actions = [
           <Tooltip key="create" title="新增货件">
             <Button type="text" icon={<PlusOutlined />} onClick={onCreate} />
+          </Tooltip>,
+          <Tooltip
+            key="calculate-goods-value"
+            title={
+              hasSelectedRows ? "计算货物价值" : "请先选择需要处理的货件"
+            }
+          >
+            <Button
+              type="text"
+              disabled={!hasSelectedRows}
+              icon={<CalculatorOutlined />}
+              onClick={() => onBatchCalculateGoodsValue(selectedIds)}
+            />
           </Tooltip>,
           <Tooltip
             key="clear-carton-labels"

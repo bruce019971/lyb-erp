@@ -152,8 +152,46 @@ export async function requestRelabelRecords(
     };
   }
 
+  const relabelRecords = (data ?? []) as RelabelRecord[];
+  const relabelOriginalShipmentNos = Array.from(
+    new Set(
+      relabelRecords
+        .map((item) => item.original_shipment_no?.trim())
+        .filter((item): item is string => Boolean(item)),
+    ),
+  );
+  const productNameByShipmentNo = new Map<string, string | null>();
+
+  if (relabelOriginalShipmentNos.length > 0) {
+    const { data: shipmentRows } = await supabase
+      .from("shipment_records")
+      .select("shipment_no, product_name")
+      .eq("status", "有效")
+      .in("shipment_no", relabelOriginalShipmentNos);
+
+    (shipmentRows ?? []).forEach((item) => {
+      const shipmentNo =
+        typeof item.shipment_no === "string" ? item.shipment_no.trim() : "";
+      if (!shipmentNo || productNameByShipmentNo.has(shipmentNo)) return;
+
+      productNameByShipmentNo.set(
+        shipmentNo,
+        typeof item.product_name === "string" ? item.product_name : null,
+      );
+    });
+  }
+
   return {
-    data: (data ?? []) as RelabelRecord[],
+    data: relabelRecords.map((item) => {
+      const shipmentNo = item.original_shipment_no?.trim();
+
+      return {
+        ...item,
+        product_name: shipmentNo
+          ? (productNameByShipmentNo.get(shipmentNo) ?? null)
+          : null,
+      };
+    }),
     success: true,
     total: count ?? 0,
   };
@@ -186,6 +224,7 @@ export async function createRelabelRecord(values: RelabelCreateValues) {
     instruction_submitted: normalizeTextValue(values.instruction_submitted) ?? "否",
     delivery_status: normalizeTextValue(values.delivery_status) ?? "否",
     delivery_time: normalizeTextValue(values.delivery_time),
+    remark: normalizeTextValue(values.remark),
   };
 
   const { data, error } = await supabase
@@ -222,6 +261,7 @@ export async function updateRelabelRecord(
         ? undefined
         : normalizeTextValue(values.delivery_status) ?? "否",
     delivery_time: normalizeTextValue(values.delivery_time),
+    remark: normalizeTextValue(values.remark),
   });
 
   const { data, error } = await supabase

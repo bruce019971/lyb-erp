@@ -16,10 +16,7 @@ import { requestStoreOptions } from "../../stores/_lib/stores-request";
 import type { ShipmentOption } from "../../shipments/_lib/shipments";
 import { requestShipmentOptions } from "../../shipments/_lib/shipments-request";
 import ShipmentsTableSkeleton from "../../shipments/_components/shipments-table-skeleton";
-import {
-  canEditRelabelDeliveryStatus,
-  type RelabelRecord,
-} from "../_lib/relabels";
+import type { RelabelRecord } from "../_lib/relabels";
 import {
   deleteRelabelRecord,
   markRelabelStatusAsYes,
@@ -138,6 +135,11 @@ export default function RelabelsPage() {
   }
 
   function handleDelete(record: RelabelRecord) {
+    if (record.delivery_time?.trim()) {
+      messageApi.warning("送仓时间不为空的货件不允许删除");
+      return;
+    }
+
     modalApi.confirm({
       title: "删除换标记录",
       icon: <ExclamationCircleFilled className="!text-amber-500" />,

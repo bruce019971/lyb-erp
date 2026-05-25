@@ -57,11 +57,20 @@ body {
 }
 
 .relabel-alert-row > td {
-  background: #fff1f0 !important;
+  color: #cf1322 !important;
 }
 
 .relabel-alert-row:hover > td {
-  background: #ffe4e1 !important;
+  color: #cf1322 !important;
+}
+
+.relabel-alert-row .ant-typography,
+.relabel-alert-row .ant-typography-copy,
+.relabel-alert-row .ant-btn,
+.relabel-alert-row .ant-btn-link,
+.relabel-alert-row .ant-select-selection-item,
+.relabel-alert-row a {
+  color: #cf1322 !important;
 }
 
 .relabel-delivered-row > td {
@@ -85,12 +94,12 @@ body {
 
 td.relabel-delivery-overdue-cell,
 .relabel-delivered-row > td.relabel-delivery-overdue-cell {
-  background: #fff1f0 !important;
+  color: #cf1322 !important;
 }
 
 td.relabel-delivery-overdue-cell:hover,
 .relabel-delivered-row:hover > td.relabel-delivery-overdue-cell {
-  background: #ffe4e1 !important;
+  color: #cf1322 !important;
 }
 
 td.relabel-delivery-done-cell,
@@ -137,6 +146,19 @@ td.relabel-delivery-done-cell:hover,
 .shipment-warehouse-pending-delivery-row .ant-select-selection-item,
 .shipment-warehouse-pending-delivery-row a {
   font-weight: 600;
+}
+
+.shipment-delivery-overdue-row > td {
+  color: #cf1322 !important;
+}
+
+.shipment-delivery-overdue-row .ant-typography,
+.shipment-delivery-overdue-row .ant-typography-copy,
+.shipment-delivery-overdue-row .ant-btn,
+.shipment-delivery-overdue-row .ant-btn-link,
+.shipment-delivery-overdue-row .ant-select-selection-item,
+.shipment-delivery-overdue-row a {
+  color: #cf1322 !important;
 }
 
 td.shipment-delivery-overdue-cell,

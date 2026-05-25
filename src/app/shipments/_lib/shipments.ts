@@ -20,6 +20,7 @@ export type ShipmentRecord = {
   is_relabel: string | null;
   relabel_delivery_times?: string[];
   goods_value: number | null;
+  remark: string | null;
   is_delivery_completed?: boolean;
   status: string | null;
   created_at: string | null;
@@ -43,6 +44,7 @@ export type ShipmentUpdateValues = {
   delivery_status?: string | null;
   is_relabel?: string | null;
   goods_value?: number | null;
+  remark?: string | null;
 };
 
 export type ShipmentCreateValues = ShipmentUpdateValues;

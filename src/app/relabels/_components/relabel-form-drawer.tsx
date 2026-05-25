@@ -12,7 +12,7 @@ import {
   Space,
 } from "antd";
 import type { FormProps } from "antd";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import dayjs, { type Dayjs } from "dayjs";
 
 import type { StoreOption } from "../../stores/_lib/stores";
@@ -80,9 +80,7 @@ export default function RelabelFormDrawer({
   const [form] = Form.useForm<RelabelFormValues>();
   const [submitting, setSubmitting] = useState(false);
   const { message } = App.useApp();
-  const [selectedOriginalShipmentNo, setSelectedOriginalShipmentNo] = useState<
-    string | undefined
-  >(undefined);
+  const selectedOriginalShipmentNo = Form.useWatch("original_shipment_no", form);
   const selectedRelabelType = Form.useWatch("relabel_type", form);
   const shouldShowProductCount =
     Boolean(selectedRelabelType) && selectedRelabelType !== "外箱标";
@@ -140,7 +138,7 @@ export default function RelabelFormDrawer({
     return boxCountByShipmentNo.get(shipmentNo) ?? null;
   }, [boxCountByShipmentNo, selectedOriginalShipmentNo]);
 
-  function applyDefaultBoxCount(shipmentNo?: string | null) {
+  const applyDefaultBoxCount = useCallback((shipmentNo?: string | null) => {
     const trimmedShipmentNo = shipmentNo?.trim();
     const nextBoxCount = trimmedShipmentNo
       ? boxCountByShipmentNo.get(trimmedShipmentNo)
@@ -152,7 +150,7 @@ export default function RelabelFormDrawer({
         value: nextBoxCount,
       },
     ]);
-  }
+  }, [boxCountByShipmentNo, form]);
 
   useEffect(() => {
     if (!open) return;
@@ -168,12 +166,12 @@ export default function RelabelFormDrawer({
         product_count: record.product_count ?? undefined,
         relabel_type: record.relabel_type ?? undefined,
         delivery_time: toDateInputValue(record.delivery_time),
+        remark: record.remark ?? undefined,
       });
 
       if (record.box_count === null || record.box_count === undefined) {
         applyDefaultBoxCount(originalShipmentNo);
       }
-      setSelectedOriginalShipmentNo(originalShipmentNo);
       return;
     }
 
@@ -182,8 +180,7 @@ export default function RelabelFormDrawer({
       box_count: undefined,
       product_count: undefined,
     });
-    setSelectedOriginalShipmentNo(undefined);
-  }, [boxCountByShipmentNo, form, mode, open, record]);
+  }, [applyDefaultBoxCount, form, mode, open, record]);
 
   const handleFinish: FormProps<RelabelFormValues>["onFinish"] = async (
     values,
@@ -197,6 +194,7 @@ export default function RelabelFormDrawer({
         values.relabel_type === "外箱标" ? null : values.product_count,
       relabel_type: normalizeRequiredText(values.relabel_type),
       delivery_time: serializeDate(values.delivery_time),
+      remark: values.remark,
     };
 
     try {
@@ -268,7 +266,6 @@ export default function RelabelFormDrawer({
               options={originalShipmentOptions}
               onChange={(value) => {
                 const shipmentNo = typeof value === "string" ? value : undefined;
-                setSelectedOriginalShipmentNo(shipmentNo);
                 applyDefaultBoxCount(shipmentNo);
               }}
             />
@@ -380,6 +377,14 @@ export default function RelabelFormDrawer({
 
           <Form.Item label="送仓时间" name="delivery_time">
             <DatePicker className="!w-full" format="YYYY/MM/DD" />
+          </Form.Item>
+
+          <Form.Item
+            className="md:col-span-2"
+            label="备注"
+            name="remark"
+          >
+            <Input.TextArea rows={3} placeholder="请输入备注" />
           </Form.Item>
         </div>
       </Form>

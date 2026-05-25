@@ -3,6 +3,7 @@ import dayjs from "dayjs";
 export type RelabelRecord = {
   id: string;
   original_shipment_no: string | null;
+  product_name?: string | null;
   delivery_store: string | null;
   delivery_shipment_no: string | null;
   box_count: number | null;
@@ -12,6 +13,7 @@ export type RelabelRecord = {
   instruction_submitted: string | null;
   delivery_status: string | null;
   delivery_time: string | null;
+  remark: string | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -27,6 +29,7 @@ export type RelabelCreateValues = {
   instruction_submitted?: string | null;
   delivery_status?: string | null;
   delivery_time?: string | null;
+  remark?: string | null;
 };
 
 export type RelabelUpdateValues = RelabelCreateValues;

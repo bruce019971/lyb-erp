@@ -402,9 +402,7 @@ export function getShipmentColumns(
       width: 78,
       onCell: (record) => ({
         className:
-          record.delivery_status === "是"
-            ? "shipment-delivery-done-cell"
-            : isShipmentDeliveryOverdue(record)
+          record.delivery_status !== "是" && isShipmentDeliveryOverdue(record)
               ? "shipment-delivery-overdue-cell"
               : undefined,
         onDoubleClick: () => {
@@ -460,6 +458,14 @@ export function getShipmentColumns(
       search: false,
     },
     {
+      title: "备注",
+      dataIndex: "remark",
+      width: 140,
+      ellipsis: true,
+      search: false,
+      render: (_, record) => record.remark ?? "",
+    },
+    {
       title: "创建时间",
       dataIndex: "created_at",
       valueType: "dateRange",
@@ -512,7 +518,7 @@ export function getShipmentColumns(
               />
             </Tooltip>
           ) : null,
-          hasTrackingNo && !hasLogisticsBoxMarkUrl ? (
+          isRishenghui && hasTrackingNo && !hasLogisticsBoxMarkUrl ? (
             <Tooltip key="generate-logistics-box-mark" title="生成物流箱唛">
               <Button
                 type="text"

@@ -314,6 +314,7 @@ function buildShipmentPayload(values: ShipmentUpdateValues) {
         : normalizeTextValue(values.appointment_time),
     is_relabel: normalizeTextValue(values.is_relabel),
     goods_value: normalizeNumberValue(values.goods_value),
+    remark: normalizeTextValue(values.remark),
   });
 
   if ("carton_label_url" in values) {
@@ -487,6 +488,36 @@ export async function clearShipmentFileUrls(
 
   if (!response.ok || !payload?.data) {
     throw new Error(payload?.error || "货件文件清理失败");
+  }
+
+  return payload.data;
+}
+
+export type ShipmentBatchGoodsValueResponse = {
+  total: number;
+  successCount: number;
+  failureCount: number;
+  failures: Array<{
+    shipmentNo: string;
+    error: string;
+  }>;
+};
+
+export async function batchCalculateShipmentGoodsValue(ids: string[]) {
+  const response = await fetch("/api/shipments/batch-goods-value", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ ids }),
+  });
+
+  const payload = (await response.json().catch(() => null)) as
+    | { data?: ShipmentBatchGoodsValueResponse; error?: string }
+    | null;
+
+  if (!response.ok || !payload?.data) {
+    throw new Error(payload?.error || "货物价值批量计算失败");
   }
 
   return payload.data;

@@ -18,6 +18,7 @@ import { requestLogisticsProviderOptions } from "../../logistics/_lib/logistics-
 import type { StoreOption } from "../../stores/_lib/stores";
 import { requestStoreOptions } from "../../stores/_lib/stores-request";
 import {
+  batchCalculateShipmentGoodsValue,
   clearShipmentFileUrls,
   deleteShipmentRecord,
   generateShipmentLogisticsBoxMark,
@@ -280,6 +281,56 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
     });
   }
 
+  function handleBatchCalculateGoodsValue(ids: string[]) {
+    if (!ids.length) {
+      messageApi.warning("请先选择需要处理的货件");
+      return;
+    }
+
+    modalApi.confirm({
+      title: "计算货物价值",
+      icon: <ExclamationCircleFilled className="!text-amber-500" />,
+      content: `确定重新计算已选择 ${ids.length} 个货件的货物价值吗？`,
+      okText: "确定计算",
+      cancelText: "取消",
+      centered: true,
+      onOk: async () => {
+        try {
+          const result = await batchCalculateShipmentGoodsValue(ids);
+          const failedText = result.failureCount
+            ? `，失败 ${result.failureCount} 个`
+            : "";
+
+          messageApi.success(
+            `货物价值计算完成：成功 ${result.successCount} 个${failedText}`,
+          );
+
+          if (result.failures.length > 0) {
+            Modal.warning({
+              title: "部分货件计算失败",
+              content: (
+                <div className="max-h-60 overflow-auto">
+                  {result.failures.map((item) => (
+                    <div key={item.shipmentNo}>
+                      {item.shipmentNo}：{item.error}
+                    </div>
+                  ))}
+                </div>
+              ),
+            });
+          }
+
+          tableActionRef.current?.reload();
+        } catch (error) {
+          const description =
+            error instanceof Error ? error.message : "请检查数据库权限或字段内容";
+          messageApi.error(`货物价值计算失败：${description}`);
+          throw error;
+        }
+      },
+    });
+  }
+
   async function handleGenerateLogisticsBoxMark(values: {
     record: ShipmentRecord;
     accessToken: string;
@@ -381,6 +432,7 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
                 actionRef={tableActionRef}
                 formRef={searchFormRef}
                 onCreate={() => setCreateOpen(true)}
+                onBatchCalculateGoodsValue={handleBatchCalculateGoodsValue}
                 onClearCartonLabels={(ids) =>
                   handleClearShipmentFiles(ids, "carton_label_url")
                 }

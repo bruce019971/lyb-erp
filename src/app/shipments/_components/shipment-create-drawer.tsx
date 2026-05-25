@@ -547,6 +547,13 @@ export default function ShipmentCreateDrawer({
               }}
             />
           </Form.Item>
+          <Form.Item
+            className="md:col-span-2"
+            label="备注"
+            name="remark"
+          >
+            <Input.TextArea rows={3} placeholder="请输入备注" />
+          </Form.Item>
         </div>
       </Form>
     </Drawer>

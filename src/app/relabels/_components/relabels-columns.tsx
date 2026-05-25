@@ -118,6 +118,14 @@ export function getRelabelColumns(
       },
     },
     {
+      title: "产品名称",
+      dataIndex: "product_name",
+      width: 120,
+      ellipsis: true,
+      search: false,
+      render: (_, record) => record.product_name ?? "",
+    },
+    {
       title: "外箱数",
       dataIndex: "box_count",
       width: 86,
@@ -152,11 +160,9 @@ export function getRelabelColumns(
       search: false,
       onCell: (record) => ({
         className:
-          record.delivery_status === "是"
-            ? "relabel-delivery-done-cell"
-            : canEditRelabelDeliveryStatus(record)
-              ? "relabel-delivery-overdue-cell"
-              : undefined,
+          record.delivery_status !== "是" && canEditRelabelDeliveryStatus(record)
+            ? "relabel-delivery-overdue-cell"
+            : undefined,
         onDoubleClick: () => {
           if (
             record.delivery_status !== "是" &&
@@ -250,31 +256,52 @@ export function getRelabelColumns(
       ),
     },
     {
+      title: "备注",
+      dataIndex: "remark",
+      width: 140,
+      ellipsis: true,
+      search: false,
+      render: (_, record) => record.remark ?? "",
+    },
+    {
       title: "操作",
       valueType: "option",
       width: 84,
       fixed: "right",
       search: false,
-      render: (_, record) => [
-        <Tooltip key="edit" title="编辑">
-          <Button
-            type="text"
-            size="small"
-            icon={<EditOutlined />}
-            onClick={() => onEdit(record)}
-          />
-        </Tooltip>,
-        <Tooltip key="delete" title="删除">
-          <Button
-            type="text"
-            size="small"
-            danger
-            icon={<DeleteOutlined />}
-            loading={isDeleting(record)}
-            onClick={() => onDelete(record)}
-          />
-        </Tooltip>,
-      ],
+      render: (_, record) => {
+        const hasDeliveryTime = Boolean(record.delivery_time?.trim());
+        const actions = [
+          <Tooltip key="edit" title="编辑">
+            <Button
+              type="text"
+              size="small"
+              icon={<EditOutlined />}
+              onClick={() => onEdit(record)}
+            />
+          </Tooltip>,
+        ];
+
+        if (!hasDeliveryTime) {
+          actions.push(
+            <Tooltip
+              key="delete"
+              title="删除"
+            >
+              <Button
+                type="text"
+                size="small"
+                danger
+                icon={<DeleteOutlined />}
+                loading={isDeleting(record)}
+                onClick={() => onDelete(record)}
+              />
+            </Tooltip>,
+          );
+        }
+
+        return actions;
+      },
     },
   ];
 }
