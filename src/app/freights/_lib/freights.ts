@@ -2,11 +2,13 @@ export type FreightRecord = {
   id: string;
   shipment_record_id: string;
   shipment_no: string | null;
+  tracking_no: string | null;
   logistics_provider: string | null;
   product_name: string | null;
   freight_unit_price: number | null;
   volume: number | null;
   extra_fee: number | null;
+  box_count: number | null;
   total_qty: number | null;
   total_fee: number | null;
   unit_fee: number | null;

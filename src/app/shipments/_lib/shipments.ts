@@ -47,13 +47,11 @@ export type ShipmentUpdateValues = {
 
 export type ShipmentCreateValues = ShipmentUpdateValues;
 
-export type ShipmentDateField =
-  | "overseas_warehouse_arrived_at"
-  | "appointment_time";
-
 export type ShipmentOption = {
   id: string;
   shipment_no: string | null;
+  tracking_no: string | null;
+  product_name: string | null;
   order_store: string | null;
   box_count: number | null;
 };
@@ -97,95 +95,6 @@ export function canEditShipmentDeliveryStatus(record: ShipmentRecord) {
   });
 }
 
-export function isShipmentDelivered(
-  record: Partial<Pick<ShipmentRecord, "delivery_status">> &
-    Partial<Pick<ShipmentRecord, "is_delivery_completed">>,
-) {
-  return record.is_delivery_completed === true || record.delivery_status === "是";
-}
-
-export function isShipmentLocked(
-  record: Partial<
-    Pick<
-      ShipmentRecord,
-      | "delivery_status"
-      | "is_delivery_completed"
-      | "warehouse_arrived_status"
-      | "overseas_warehouse_arrived_at"
-    >
-  >,
-) {
-  return (
-    isShipmentDelivered(record) ||
-    record.warehouse_arrived_status === "是" ||
-    Boolean(record.overseas_warehouse_arrived_at)
-  );
-}
-
-export function isShipmentWarehouseArrived(
-  record: Partial<
-    Pick<
-      ShipmentRecord,
-      "warehouse_arrived_status" | "overseas_warehouse_arrived_at"
-    >
-  >,
-) {
-  return (
-    record.warehouse_arrived_status === "是" ||
-    Boolean(record.overseas_warehouse_arrived_at)
-  );
-}
-
-export function isShipmentWarehousePendingDelivery(
-  record: Partial<
-    Pick<
-      ShipmentRecord,
-      | "delivery_status"
-      | "is_delivery_completed"
-      | "warehouse_arrived_status"
-      | "overseas_warehouse_arrived_at"
-    >
-  >,
-) {
-  return isShipmentWarehouseArrived(record) && !isShipmentDelivered(record);
-}
-
-export function getShipmentListStatusRank(
-  record: Partial<
-    Pick<
-      ShipmentRecord,
-      | "delivery_status"
-      | "is_delivery_completed"
-      | "warehouse_arrived_status"
-      | "overseas_warehouse_arrived_at"
-    >
-  >,
-) {
-  if (isShipmentDelivered(record)) return 2;
-  if (isShipmentWarehousePendingDelivery(record)) return 1;
-  return 0;
-}
-
-export function canEditShipmentDateField(
-  record: Partial<
-    Pick<
-      ShipmentRecord,
-      | "delivery_status"
-      | "is_delivery_completed"
-      | "warehouse_arrived_status"
-      | "overseas_warehouse_arrived_at"
-      | "is_relabel"
-    >
-  >,
-  field: ShipmentDateField,
-) {
-  if (isShipmentWarehouseArrived(record) || isShipmentDelivered(record)) {
-    return false;
-  }
-
-  return field !== "appointment_time" || record.is_relabel !== "是";
-}
-
 export function isShipmentDeliveryOverdue(record: ShipmentRecord) {
   if (record.delivery_status === "是") return false;
 
@@ -202,6 +111,6 @@ export function isShipmentDeliveryOverdue(record: ShipmentRecord) {
 
   return deliveryTimes.some((value) => {
     const deliveryDate = dayjs(value).startOf("day");
-    return deliveryDate.diff(today, "day") < 0;
+    return deliveryDate.diff(today, "day") <= 0;
   });
 }

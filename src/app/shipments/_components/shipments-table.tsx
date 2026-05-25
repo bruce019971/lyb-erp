@@ -14,7 +14,7 @@ import {
   requestShipmentRecords,
 } from "../_lib/shipments-request";
 import { getShipmentColumns } from "./shipments-columns";
-import type { ShipmentOption, ShipmentRecord } from "../_lib/shipments";
+import type { ShipmentRecord } from "../_lib/shipments";
 import type { ProductShipmentOption } from "../../products/_lib/products";
 import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
 import type { StoreOption } from "../../stores/_lib/stores";
@@ -22,12 +22,6 @@ import {
   downloadShipmentCartonLabel,
   downloadShipmentLogisticsBoxMark,
 } from "../_lib/carton-label";
-import {
-  getShipmentListStatusRank,
-  isShipmentDeliveryOverdue,
-  isShipmentLocked,
-  isShipmentWarehousePendingDelivery,
-} from "../_lib/shipments";
 
 type ShipmentsTableProps = {
   actionRef?: MutableRefObject<ActionType | undefined>;
@@ -54,7 +48,6 @@ type ShipmentsTableProps = {
   isGeneratingLogisticsBoxMark: (record: ShipmentRecord) => boolean;
   onStartGenerateCartonLabel: (record: ShipmentRecord) => void;
   onFinishGenerateCartonLabel: () => void;
-  shipmentOptions: ShipmentOption[];
   storeOptions: StoreOption[];
   productOptions: ProductShipmentOption[];
   logisticsOptions: LogisticsProviderOption[];
@@ -82,34 +75,11 @@ function mergeShipmentsById(
 }
 
 function isWarehouseArrivedUndelivered(record: ShipmentRecord) {
-  return isShipmentWarehousePendingDelivery(record);
-}
+  const isWarehouseArrived =
+    record.warehouse_arrived_status === "是" ||
+    Boolean(record.overseas_warehouse_arrived_at);
 
-function prioritizeShipmentAlerts(records: ShipmentRecord[]) {
-  return records
-    .map((record, index) => ({ record, index }))
-    .sort((left, right) => {
-      const statusRankDiff =
-        getShipmentListStatusRank(left.record) -
-        getShipmentListStatusRank(right.record);
-      if (statusRankDiff !== 0) {
-        return statusRankDiff;
-      }
-
-      const leftRank =
-        getShipmentListStatusRank(left.record) === 0 &&
-        isShipmentDeliveryOverdue(left.record)
-          ? 0
-          : 1;
-      const rightRank =
-        getShipmentListStatusRank(right.record) === 0 &&
-        isShipmentDeliveryOverdue(right.record)
-          ? 0
-          : 1;
-
-      return leftRank - rightRank || left.index - right.index;
-    })
-    .map(({ record }) => record);
+  return isWarehouseArrived && record.delivery_status !== "是";
 }
 
 export default function ShipmentsTable({
@@ -137,7 +107,6 @@ export default function ShipmentsTable({
   isGeneratingLogisticsBoxMark,
   onStartGenerateCartonLabel,
   onFinishGenerateCartonLabel,
-  shipmentOptions,
   storeOptions,
   productOptions,
   logisticsOptions,
@@ -175,6 +144,8 @@ export default function ShipmentsTable({
   const [dataSource, setDataSource] = useState<ShipmentRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
   const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
   const [reloadRequest, setReloadRequest] = useState(0);
 
@@ -205,18 +176,18 @@ export default function ShipmentsTable({
           {},
         );
 
-        const nextData = prioritizeShipmentAlerts(result.data ?? []);
+        const nextData = result.data ?? [];
         setDataSource((current) =>
-          append
-            ? prioritizeShipmentAlerts(mergeShipmentsById(current, nextData))
-            : nextData,
+          append ? mergeShipmentsById(current, nextData) : nextData,
         );
         if (!append) {
           setSelectedRowKeys([]);
           onSelectedShipmentNosChange([]);
         }
         currentPageRef.current = page;
+        setCurrentPage(page);
         hasMoreRef.current = nextData.length >= PAGE_SIZE;
+        setHasMore(nextData.length >= PAGE_SIZE);
       } finally {
         loadingRef.current = false;
         loadingMoreRef.current = false;
@@ -289,7 +260,6 @@ export default function ShipmentsTable({
         isDeleting,
         isGeneratingCartonLabel,
         isGeneratingLogisticsBoxMark,
-        shipmentOptions,
         storeOptions,
         productOptions,
         logisticsOptions,
@@ -317,7 +287,6 @@ export default function ShipmentsTable({
       onStartDeliveryStatusEdit,
       onStartRelabelEdit,
       productOptions,
-      shipmentOptions,
       storeOptions,
     ],
   );
@@ -376,14 +345,10 @@ export default function ShipmentsTable({
         type: "checkbox",
         selectedRowKeys,
         preserveSelectedRowKeys: true,
-        getCheckboxProps: (record) => ({
-          disabled: isShipmentLocked(record),
-        }),
         onChange: (keys, rows) => {
           setSelectedRowKeys(keys);
           onSelectedShipmentNosChange(
             rows
-              .filter((item) => !isShipmentLocked(item))
               .map((item) => item.shipment_no?.trim())
               .filter((item): item is string => Boolean(item)),
           );
@@ -393,9 +358,6 @@ export default function ShipmentsTable({
         if (record.is_delivery_completed) return "shipment-delivered-row";
         if (isWarehouseArrivedUndelivered(record)) {
           return "shipment-warehouse-pending-delivery-row";
-        }
-        if (isShipmentDeliveryOverdue(record)) {
-          return "shipment-delivery-overdue-row";
         }
         return "";
       }}
@@ -417,7 +379,8 @@ export default function ShipmentsTable({
       }}
       search={{
         labelWidth: "auto",
-        defaultCollapsed: false,
+        defaultCollapsed: true,
+        defaultColsNumber: 3,
       }}
       onSubmit={(values) => {
         searchParamsRef.current = values;

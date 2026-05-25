@@ -46,8 +46,12 @@ export default function RelabelsPage() {
   const [editingDeliveryStatusId, setEditingDeliveryStatusId] = useState<
     string | null
   >(null);
-  const [updatingStatusKey, setUpdatingStatusKey] = useState<string | null>(null);
-  const [deletingRelabelId, setDeletingRelabelId] = useState<string | null>(null);
+  const [updatingStatusKey, setUpdatingStatusKey] = useState<string | null>(
+    null,
+  );
+  const [deletingRelabelId, setDeletingRelabelId] = useState<string | null>(
+    null,
+  );
   const tableActionRef = useRef<ActionType>(undefined);
   const [messageApi, contextHolder] = message.useMessage();
   const [modalApi, modalContextHolder] = Modal.useModal();
@@ -96,10 +100,7 @@ export default function RelabelsPage() {
     };
   }, [mounted]);
 
-  function isStatusUpdating(
-    record: RelabelRecord,
-    field: "delivery_status",
-  ) {
+  function isStatusUpdating(record: RelabelRecord, field: "delivery_status") {
     return updatingStatusKey === `${record.id}:${field}`;
   }
 
@@ -117,11 +118,6 @@ export default function RelabelsPage() {
     value: string,
   ) {
     if (value !== "是" || record[field] === "是") {
-      setEditingDeliveryStatusId(null);
-      return;
-    }
-
-    if (!canEditRelabelDeliveryStatus(record)) {
       setEditingDeliveryStatusId(null);
       return;
     }
@@ -158,7 +154,9 @@ export default function RelabelsPage() {
           tableActionRef.current?.reload();
         } catch (error) {
           const description =
-            error instanceof Error ? error.message : "请检查数据库权限或记录状态";
+            error instanceof Error
+              ? error.message
+              : "请检查数据库权限或记录状态";
           messageApi.error(`换标记录删除失败：${description}`);
           throw error;
         } finally {

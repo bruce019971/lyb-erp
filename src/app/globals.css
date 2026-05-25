@@ -83,18 +83,24 @@ body {
   color: #94a3b8 !important;
 }
 
-.relabel-delivery-overdue-row > td {
-  color: #cf1322 !important;
-  font-weight: 600;
+td.relabel-delivery-overdue-cell,
+.relabel-delivered-row > td.relabel-delivery-overdue-cell {
+  background: #fff1f0 !important;
 }
 
-.relabel-delivery-overdue-row .ant-typography,
-.relabel-delivery-overdue-row .ant-btn,
-.relabel-delivery-overdue-row .ant-btn-link,
-.relabel-delivery-overdue-row .ant-select-selection-item,
-.relabel-delivery-overdue-row a {
-  color: #cf1322 !important;
-  font-weight: 600;
+td.relabel-delivery-overdue-cell:hover,
+.relabel-delivered-row:hover > td.relabel-delivery-overdue-cell {
+  background: #ffe4e1 !important;
+}
+
+td.relabel-delivery-done-cell,
+.relabel-delivered-row > td.relabel-delivery-done-cell {
+  background: #f6ffed !important;
+}
+
+td.relabel-delivery-done-cell:hover,
+.relabel-delivered-row:hover > td.relabel-delivery-done-cell {
+  background: #eaffd0 !important;
 }
 
 .shipment-delivered-row > td {
@@ -133,18 +139,24 @@ body {
   font-weight: 600;
 }
 
-.shipment-delivery-overdue-row > td {
-  color: #cf1322 !important;
-  font-weight: 600;
+td.shipment-delivery-overdue-cell,
+.shipment-delivered-row > td.shipment-delivery-overdue-cell {
+  background: #fff1f0 !important;
 }
 
-.shipment-delivery-overdue-row .ant-typography,
-.shipment-delivery-overdue-row .ant-btn,
-.shipment-delivery-overdue-row .ant-btn-link,
-.shipment-delivery-overdue-row .ant-select-selection-item,
-.shipment-delivery-overdue-row a {
-  color: #cf1322 !important;
-  font-weight: 600;
+td.shipment-delivery-overdue-cell:hover,
+.shipment-delivered-row:hover > td.shipment-delivery-overdue-cell {
+  background: #ffe4e1 !important;
+}
+
+td.shipment-delivery-done-cell,
+.shipment-delivered-row > td.shipment-delivery-done-cell {
+  background: #f6ffed !important;
+}
+
+td.shipment-delivery-done-cell:hover,
+.shipment-delivered-row:hover > td.shipment-delivery-done-cell {
+  background: #eaffd0 !important;
 }
 
 .role-status-group .ant-radio-button-wrapper {

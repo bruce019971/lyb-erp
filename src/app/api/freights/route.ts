@@ -29,14 +29,18 @@ type FreightRow = {
   shipment:
     | {
         shipment_no: string | null;
+        tracking_no: string | null;
         logistics_provider: string | null;
         product_name: string | null;
+        box_count: number | null;
         total_qty: number | null;
       }
     | Array<{
         shipment_no: string | null;
+        tracking_no: string | null;
         logistics_provider: string | null;
         product_name: string | null;
+        box_count: number | null;
         total_qty: number | null;
       }>
     | null;
@@ -95,11 +99,13 @@ function normalizeFreightRow(row: FreightRow) {
     id: row.id,
     shipment_record_id: row.shipment_record_id,
     shipment_no: shipment?.shipment_no ?? null,
+    tracking_no: shipment?.tracking_no ?? null,
     logistics_provider: shipment?.logistics_provider ?? null,
     product_name: shipment?.product_name ?? null,
     freight_unit_price: row.freight_unit_price,
     volume: row.volume,
     extra_fee: row.extra_fee,
+    box_count: shipment?.box_count ?? null,
     total_qty: shipment?.total_qty ?? null,
     total_fee: totalFee,
     unit_fee: calculateFreightUnitFee(totalFee, shipment?.total_qty ?? null),
@@ -119,28 +125,14 @@ function normalizeTextValue(value: unknown) {
 }
 
 function normalizeMultiSelectValues(values: string[]) {
-  return values
-    .map((item) => item.trim())
-    .filter(Boolean);
+  return values.map((item) => item.trim()).filter(Boolean);
 }
 
-function splitShipmentNoValues(values: string[]) {
+function splitSearchTexts(values: string[]) {
   return values
     .flatMap((item) => item.split(/[\s,，]+/))
     .map((item) => item.trim())
     .filter(Boolean);
-}
-
-function normalizeShipmentNoFilterValue(value: string) {
-  return value.replace(/[(),，]/g, " ").trim();
-}
-
-function buildShipmentNoOrFilter(values: string[]) {
-  return values
-    .map(normalizeShipmentNoFilterValue)
-    .filter(Boolean)
-    .map((value) => `shipment_no.ilike.%${value}%`)
-    .join(",");
 }
 
 async function verifyOperator() {
@@ -164,7 +156,9 @@ async function verifyOperator() {
   }
 
   const operator = data as OperatorRow;
-  const roleData = Array.isArray(operator.role) ? operator.role[0] : operator.role;
+  const roleData = Array.isArray(operator.role)
+    ? operator.role[0]
+    : operator.role;
   const permissions = Array.isArray(roleData?.menu_permissions)
     ? roleData.menu_permissions
     : [];
@@ -189,8 +183,14 @@ export async function GET(request: Request) {
     const to = from + Math.max(pageSize, 1) - 1;
     const orderField = searchParams.get("orderField") || "created_at";
     const orderDirection = searchParams.get("orderDirection") || "descend";
-    const shipmentNoValues = splitShipmentNoValues(
+    const shipmentNoValues = splitSearchTexts(
       searchParams.getAll("shipment_no"),
+    );
+    const trackingNoValues = splitSearchTexts(
+      searchParams.getAll("tracking_no"),
+    );
+    const productNameValues = splitSearchTexts(
+      searchParams.getAll("product_name"),
     );
     const logisticsProviderValues = normalizeMultiSelectValues(
       searchParams.getAll("logistics_provider"),
@@ -207,17 +207,27 @@ export async function GET(request: Request) {
     const adminClient = createSupabaseAdminClient();
     let matchedShipmentIds: string[] | null = null;
 
-    if (shipmentNoValues.length > 0 || logisticsProviderValues.length > 0) {
+    if (
+      shipmentNoValues.length > 0 ||
+      trackingNoValues.length > 0 ||
+      productNameValues.length > 0 ||
+      logisticsProviderValues.length > 0
+    ) {
       let shipmentQuery = adminClient
         .from("shipment_records")
         .select("id")
         .eq("status", "有效");
 
       if (shipmentNoValues.length > 0) {
-        const shipmentNoFilter = buildShipmentNoOrFilter(shipmentNoValues);
-        if (shipmentNoFilter) {
-          shipmentQuery = shipmentQuery.or(shipmentNoFilter);
-        }
+        shipmentQuery = shipmentQuery.in("shipment_no", shipmentNoValues);
+      }
+
+      if (trackingNoValues.length > 0) {
+        shipmentQuery = shipmentQuery.in("tracking_no", trackingNoValues);
+      }
+
+      if (productNameValues.length > 0) {
+        shipmentQuery = shipmentQuery.in("product_name", productNameValues);
       }
 
       if (logisticsProviderValues.length > 0) {
@@ -299,7 +309,8 @@ export async function PATCH(request: Request) {
         freight_unit_price: normalizeNumberValue(body.freight_unit_price),
         volume: normalizeNumberValue(body.volume),
         extra_fee: normalizeNumberValue(body.extra_fee),
-        freight_paid_status: normalizeTextValue(body.freight_paid_status) ?? "否",
+        freight_paid_status:
+          normalizeTextValue(body.freight_paid_status) ?? "否",
       })
       .eq("id", id)
       .select(

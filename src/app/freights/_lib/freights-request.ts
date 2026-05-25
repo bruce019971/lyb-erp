@@ -21,11 +21,13 @@ function splitShipmentNos(value: unknown): string[] {
   if (Array.isArray(value)) {
     return value.flatMap(splitShipmentNos);
   }
+function splitSearchTexts(value: unknown) {
+  const values = Array.isArray(value) ? value : [value];
 
-  if (typeof value !== "string") return [];
-
-  return value
-    .split(/[\s,，]+/)
+  return values
+    .flatMap((item) =>
+      typeof item === "string" ? item.split(/[\s,，]+/) : [],
+    )
     .map((item) => item.trim())
     .filter(Boolean);
 }
@@ -36,8 +38,14 @@ export async function requestFreightRecords(params: FreightRequestParams) {
     pageSize: String(params.pageSize ?? 40),
   });
 
-  splitShipmentNos(params.shipment_no).forEach((value) => {
+  splitSearchTexts(params.shipment_no).forEach((value) => {
     searchParams.append("shipment_no", value);
+  });
+  splitSearchTexts(params.tracking_no).forEach((value) => {
+    searchParams.append("tracking_no", value);
+  });
+  splitSearchTexts(params.product_name).forEach((value) => {
+    searchParams.append("product_name", value);
   });
   normalizeMultiSelectValues(params.logistics_provider).forEach((value) => {
     searchParams.append("logistics_provider", value);

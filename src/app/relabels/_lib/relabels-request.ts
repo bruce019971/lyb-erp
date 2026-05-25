@@ -4,48 +4,14 @@ import { supabase } from "@/lib/supabase";
 
 import type {
   RelabelCreateValues,
-  RelabelDateField,
   RelabelRecord,
   RelabelUpdateValues,
 } from "./relabels";
-import { isRelabelDeliveryOverdue } from "./relabels";
-
-const RELABEL_SORT_FETCH_LIMIT = 10000;
 
 type RelabelRequestParams = {
   current?: number;
   pageSize?: number;
 } & Record<string, unknown>;
-
-function getDeliveryTimeValue(record: RelabelRecord) {
-  const time = record.delivery_time ? new Date(record.delivery_time).getTime() : 0;
-  return Number.isFinite(time) ? time : 0;
-}
-
-function sortRelabelRecords(records: RelabelRecord[]) {
-  return records
-    .map((record, index) => ({ record, index }))
-    .sort((left, right) => {
-      const leftOverdue = isRelabelDeliveryOverdue(left.record) ? 0 : 1;
-      const rightOverdue = isRelabelDeliveryOverdue(right.record) ? 0 : 1;
-      const leftDelivered = left.record.delivery_status === "是" ? 1 : 0;
-      const rightDelivered = right.record.delivery_status === "是" ? 1 : 0;
-
-      if (leftOverdue !== rightOverdue) {
-        return leftOverdue - rightOverdue;
-      }
-
-      if (leftDelivered !== rightDelivered) {
-        return leftDelivered - rightDelivered;
-      }
-
-      return (
-        getDeliveryTimeValue(left.record) -
-          getDeliveryTimeValue(right.record) || left.index - right.index
-      );
-    })
-    .map(({ record }) => record);
-}
 
 export async function requestRelabelRecords(
   params: RelabelRequestParams,
@@ -55,20 +21,23 @@ export async function requestRelabelRecords(
   const pageSize = params.pageSize ?? 20;
   const from = (current - 1) * pageSize;
   const to = from + pageSize - 1;
-  const fetchTo = Math.max(to, RELABEL_SORT_FETCH_LIMIT - 1);
 
   let query = supabase
     .from("relabel_records")
     .select("*", { count: "exact" })
-    .range(0, fetchTo);
+    .range(from, to);
 
   function splitShipmentNos(value: unknown) {
-    if (typeof value !== "string") return [];
+    const rawValues = Array.isArray(value) ? value : [value];
 
-    return value
-      .split(/[\s,，]+/)
-      .map((item) => item.trim())
-      .filter(Boolean);
+    return rawValues
+      .filter((item): item is string => typeof item === "string")
+      .flatMap((item) =>
+        item
+          .split(/[\s,，]+/)
+          .map((item) => item.trim())
+          .filter(Boolean),
+      );
   }
 
   function normalizeFilterValue(value: string) {
@@ -182,10 +151,7 @@ export async function requestRelabelRecords(
   }
 
   return {
-    data: sortRelabelRecords((data ?? []) as RelabelRecord[]).slice(
-      from,
-      to + 1,
-    ),
+    data: (data ?? []) as RelabelRecord[],
     success: true,
     total: count ?? 0,
   };
@@ -260,29 +226,6 @@ export async function updateRelabelRecord(
     .from("relabel_records")
     .update(payload)
     .eq("id", id)
-    .select("*")
-    .single();
-
-  if (error) {
-    throw error;
-  }
-
-  return data as RelabelRecord;
-}
-
-export async function updateRelabelDateField(
-  record: RelabelRecord,
-  field: RelabelDateField,
-  value?: string | null,
-) {
-  if (record.delivery_status === "是") {
-    throw new Error("已送仓的换标记录不允许修改送仓时间");
-  }
-
-  const { data, error } = await supabase
-    .from("relabel_records")
-    .update({ [field]: normalizeTextValue(value) })
-    .eq("id", record.id)
     .select("*")
     .single();
 
