@@ -1,6 +1,11 @@
 "use client";
 
-import { FileSyncOutlined, PlusOutlined } from "@ant-design/icons";
+import {
+  BarcodeOutlined,
+  FilePdfOutlined,
+  KeyOutlined,
+  PlusOutlined,
+} from "@ant-design/icons";
 import type { ActionType } from "@ant-design/pro-components";
 import { ProTable } from "@ant-design/pro-components";
 import type { FormInstance } from "antd";
@@ -27,8 +32,10 @@ type ShipmentsTableProps = {
   actionRef?: MutableRefObject<ActionType | undefined>;
   formRef?: MutableRefObject<FormInstance | undefined>;
   onCreate: () => void;
-  onBatchCartonLabels: () => void;
-  onSelectedShipmentNosChange: (shipmentNos: string[]) => void;
+  onClearCartonLabels: (ids: string[]) => void;
+  onClearLogisticsBoxMarks: (ids: string[]) => void;
+  onOpenRishenghuiAuth: () => void;
+  hasRishenghuiAccessToken: boolean;
   onGenerateLogisticsBoxMark: (record: ShipmentRecord) => void;
   onRishenghuiOrder: (record: ShipmentRecord) => void;
   onEdit: (record: ShipmentRecord) => void;
@@ -46,6 +53,7 @@ type ShipmentsTableProps = {
   isDeleting: (record: ShipmentRecord) => boolean;
   isGeneratingCartonLabel: (record: ShipmentRecord) => boolean;
   isGeneratingLogisticsBoxMark: (record: ShipmentRecord) => boolean;
+  isSubmittingRishenghuiOrder: (record: ShipmentRecord) => boolean;
   onStartGenerateCartonLabel: (record: ShipmentRecord) => void;
   onFinishGenerateCartonLabel: () => void;
   storeOptions: StoreOption[];
@@ -86,8 +94,10 @@ export default function ShipmentsTable({
   actionRef,
   formRef,
   onCreate,
-  onBatchCartonLabels,
-  onSelectedShipmentNosChange,
+  onClearCartonLabels,
+  onClearLogisticsBoxMarks,
+  onOpenRishenghuiAuth,
+  hasRishenghuiAccessToken,
   onGenerateLogisticsBoxMark,
   onRishenghuiOrder,
   onEdit,
@@ -105,6 +115,7 @@ export default function ShipmentsTable({
   isDeleting,
   isGeneratingCartonLabel,
   isGeneratingLogisticsBoxMark,
+  isSubmittingRishenghuiOrder,
   onStartGenerateCartonLabel,
   onFinishGenerateCartonLabel,
   storeOptions,
@@ -191,7 +202,6 @@ export default function ShipmentsTable({
         );
         if (!append) {
           setSelectedRowKeys([]);
-          onSelectedShipmentNosChange([]);
         }
         currentPageRef.current = page;
         hasMoreRef.current = nextData.length >= PAGE_SIZE;
@@ -202,7 +212,7 @@ export default function ShipmentsTable({
         setLoadingMore(false);
       }
     },
-    [onSelectedShipmentNosChange],
+    [],
   );
 
   const reloadFirstPage = useCallback(async () => {
@@ -278,6 +288,7 @@ export default function ShipmentsTable({
         isDeleting,
         isGeneratingCartonLabel,
         isGeneratingLogisticsBoxMark,
+        isSubmittingRishenghuiOrder,
         storeOptions,
         productOptions,
         logisticsOptions,
@@ -294,6 +305,7 @@ export default function ShipmentsTable({
       handleGenerateCartonLabel,
       isGeneratingCartonLabel,
       isGeneratingLogisticsBoxMark,
+      isSubmittingRishenghuiOrder,
       onCancelDeliveryStatusEdit,
       onCancelRelabelEdit,
       onChangeDeliveryStatus,
@@ -363,13 +375,8 @@ export default function ShipmentsTable({
         type: "checkbox",
         selectedRowKeys,
         preserveSelectedRowKeys: true,
-        onChange: (keys, rows) => {
+        onChange: (keys) => {
           setSelectedRowKeys(keys);
-          onSelectedShipmentNosChange(
-            rows
-              .map((item) => item.shipment_no?.trim())
-              .filter((item): item is string => Boolean(item)),
-          );
         },
       }}
       rowClassName={(record) => {
@@ -415,15 +422,50 @@ export default function ShipmentsTable({
         setting: true,
       }}
       toolBarRender={() => {
+        const selectedIds = selectedRowKeys
+          .map((item) => String(item))
+          .filter(Boolean);
+        const hasSelectedRows = selectedIds.length > 0;
         const actions = [
           <Tooltip key="create" title="新增货件">
             <Button type="text" icon={<PlusOutlined />} onClick={onCreate} />
           </Tooltip>,
-          <Tooltip key="batch-carton-labels" title="批量生成外箱标签">
+          <Tooltip
+            key="clear-carton-labels"
+            title={
+              hasSelectedRows ? "删除外箱标签" : "请先选择需要处理的货件"
+            }
+          >
             <Button
               type="text"
-              icon={<FileSyncOutlined />}
-              onClick={onBatchCartonLabels}
+              danger
+              disabled={!hasSelectedRows}
+              icon={<FilePdfOutlined />}
+              onClick={() => onClearCartonLabels(selectedIds)}
+            />
+          </Tooltip>,
+          <Tooltip
+            key="clear-logistics-box-marks"
+            title={
+              hasSelectedRows ? "删除物流箱唛" : "请先选择需要处理的货件"
+            }
+          >
+            <Button
+              type="text"
+              danger
+              disabled={!hasSelectedRows}
+              icon={<BarcodeOutlined />}
+              onClick={() => onClearLogisticsBoxMarks(selectedIds)}
+            />
+          </Tooltip>,
+          <Tooltip
+            key="rishenghui-auth"
+            title={hasRishenghuiAccessToken ? "更新日升辉Token" : "获取日升辉Token"}
+          >
+            <Button
+              type="text"
+              icon={<KeyOutlined />}
+              onClick={onOpenRishenghuiAuth}
             />
           </Tooltip>,
         ];

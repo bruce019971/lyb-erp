@@ -158,6 +158,9 @@ export default function ShipmentEditDrawer({
   const [form] = Form.useForm<ShipmentUpdateFormValues>();
   const [submitting, setSubmitting] = useState(false);
   const [boxMarkUploading, setBoxMarkUploading] = useState(false);
+  const [logisticsBoxMarkUrlState, setLogisticsBoxMarkUrlState] = useState<
+    string | null | undefined
+  >(() => record?.logistics_box_mark_url ?? undefined);
   const logisticsBoxMarkUrlRef = useRef<string | null | undefined>(
     record?.logistics_box_mark_url ?? undefined,
   );
@@ -167,7 +170,6 @@ export default function ShipmentEditDrawer({
   const shipmentNo = Form.useWatch("shipment_no", form);
   const productName = Form.useWatch("product_name", form);
   const boxCount = Form.useWatch("box_count", form);
-  const logisticsBoxMarkUrl = Form.useWatch("logistics_box_mark_url", form);
   const warehouseArrivedAt = Form.useWatch("overseas_warehouse_arrived_at", form);
   const appointmentTime = Form.useWatch("appointment_time", form);
   const isRelabel = Form.useWatch("is_relabel", form);
@@ -281,7 +283,7 @@ export default function ShipmentEditDrawer({
 
   function handleLogisticsBoxMarkUrlChange(url: string | null) {
     logisticsBoxMarkUrlRef.current = url;
-    form.setFieldValue("logistics_box_mark_url", url ?? undefined);
+    setLogisticsBoxMarkUrlState(url ?? undefined);
   }
 
   function handleValuesChange(
@@ -402,6 +404,7 @@ export default function ShipmentEditDrawer({
   function handleClose() {
     form.resetFields();
     logisticsBoxMarkUrlRef.current = record?.logistics_box_mark_url ?? undefined;
+    setLogisticsBoxMarkUrlState(record?.logistics_box_mark_url ?? undefined);
     setBoxMarkUploading(false);
     onClose();
   }
@@ -517,7 +520,7 @@ export default function ShipmentEditDrawer({
           {!isRishenghuiProvider ? (
             <Form.Item label="物流箱唛">
               <ShipmentLogisticsBoxMarkUpload
-                fileUrl={logisticsBoxMarkUrl}
+                fileUrl={logisticsBoxMarkUrlState}
                 record={{
                   id: record?.id ?? "new",
                   order_store: selectedStoreName,

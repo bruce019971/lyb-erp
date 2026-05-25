@@ -78,6 +78,7 @@ export function getShipmentColumns(
   isDeleting: (record: ShipmentRecord) => boolean,
   isGeneratingCartonLabel: (record: ShipmentRecord) => boolean,
   isGeneratingLogisticsBoxMark: (record: ShipmentRecord) => boolean,
+  isSubmittingRishenghuiOrder: (record: ShipmentRecord) => boolean,
   storeOptions: StoreOption[],
   productOptions: ProductShipmentOption[],
   logisticsOptions: LogisticsProviderOption[],
@@ -467,12 +468,21 @@ export function getShipmentColumns(
       render: (_, record) => formatShipmentDate(record.created_at),
     },
     {
+      title: "更新时间",
+      dataIndex: "updated_at",
+      valueType: "dateRange",
+      width: 88,
+      hideInSearch: true,
+      render: (_, record) => formatShipmentDate(record.updated_at),
+    },
+    {
       title: "操作",
       valueType: "option",
       width: 150,
       fixed: "right",
       search: false,
       render: (_, record) => {
+        const hasCartonLabelUrl = Boolean(record.carton_label_url?.trim());
         const hasTrackingNo = Boolean(record.tracking_no?.trim());
         const hasLogisticsBoxMarkUrl = Boolean(
           record.logistics_box_mark_url?.trim(),
@@ -480,21 +490,24 @@ export function getShipmentColumns(
         const isRishenghui = record.logistics_provider?.trim() === "日升辉";
 
         return [
-          <Tooltip key="generate-carton-label" title="生成外箱标签">
-            <Button
-              type="text"
-              size="small"
-              icon={<FileSyncOutlined />}
-              loading={isGeneratingCartonLabel(record)}
-              onClick={() => onGenerateCartonLabel(record)}
-            />
-          </Tooltip>,
+          !hasCartonLabelUrl ? (
+            <Tooltip key="generate-carton-label" title="生成外箱标签">
+              <Button
+                type="text"
+                size="small"
+                icon={<FileSyncOutlined />}
+                loading={isGeneratingCartonLabel(record)}
+                onClick={() => onGenerateCartonLabel(record)}
+              />
+            </Tooltip>
+          ) : null,
           isRishenghui && !hasTrackingNo ? (
             <Tooltip key="rishenghui-order" title="物流下单">
               <Button
                 type="text"
                 size="small"
                 icon={<ShoppingCartOutlined />}
+                loading={isSubmittingRishenghuiOrder(record)}
                 onClick={() => onRishenghuiOrder(record)}
               />
             </Tooltip>
@@ -518,16 +531,18 @@ export function getShipmentColumns(
               onClick={() => onEdit(record)}
             />
           </Tooltip>,
-          <Tooltip key="delete" title="删除">
-            <Button
-              type="text"
-              size="small"
-              danger
-              icon={<DeleteOutlined />}
-              loading={isDeleting(record)}
-              onClick={() => onDelete(record)}
-            />
-          </Tooltip>,
+          !hasTrackingNo ? (
+            <Tooltip key="delete" title="删除">
+              <Button
+                type="text"
+                size="small"
+                danger
+                icon={<DeleteOutlined />}
+                loading={isDeleting(record)}
+                onClick={() => onDelete(record)}
+              />
+            </Tooltip>
+          ) : null,
         ];
       },
     },

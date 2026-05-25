@@ -465,6 +465,33 @@ export async function deleteShipmentRecords(ids: string[]) {
   }
 }
 
+export type ShipmentFileUrlField =
+  | "carton_label_url"
+  | "logistics_box_mark_url";
+
+export async function clearShipmentFileUrls(
+  ids: string[],
+  field: ShipmentFileUrlField,
+) {
+  const response = await fetch("/api/shipments/batch-clear-files", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ ids, field }),
+  });
+
+  const payload = (await response.json().catch(() => null)) as
+    | { data?: { count?: number }; error?: string }
+    | null;
+
+  if (!response.ok || !payload?.data) {
+    throw new Error(payload?.error || "货件文件清理失败");
+  }
+
+  return payload.data;
+}
+
 export type ShipmentBatchCartonLabelResult = {
   shipmentNo: string;
   success: boolean;
@@ -503,10 +530,7 @@ export async function batchGenerateShipmentCartonLabels(
 
 export async function generateShipmentLogisticsBoxMark(values: {
   shipmentId: string;
-  username: string;
-  password: string;
-  code: string;
-  uuid: string;
+  accessToken: string;
 }) {
   const response = await fetch("/api/shipments/logistics-box-mark", {
     method: "POST",

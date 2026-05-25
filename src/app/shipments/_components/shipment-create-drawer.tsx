@@ -149,6 +149,9 @@ export default function ShipmentCreateDrawer({
   const [form] = Form.useForm<ShipmentCreateFormValues>();
   const [submitting, setSubmitting] = useState(false);
   const [boxMarkUploading, setBoxMarkUploading] = useState(false);
+  const [logisticsBoxMarkUrlState, setLogisticsBoxMarkUrlState] = useState<
+    string | null | undefined
+  >(undefined);
   const logisticsBoxMarkUrlRef = useRef<string | null | undefined>(undefined);
   const { message } = App.useApp();
   const selectedStoreName = Form.useWatch("order_store", form);
@@ -156,7 +159,6 @@ export default function ShipmentCreateDrawer({
   const shipmentNo = Form.useWatch("shipment_no", form);
   const productName = Form.useWatch("product_name", form);
   const boxCount = Form.useWatch("box_count", form);
-  const logisticsBoxMarkUrl = Form.useWatch("logistics_box_mark_url", form);
   const warehouseArrivedAt = Form.useWatch("overseas_warehouse_arrived_at", form);
   const appointmentTime = Form.useWatch("appointment_time", form);
   const isRelabel = Form.useWatch("is_relabel", form);
@@ -271,7 +273,7 @@ export default function ShipmentCreateDrawer({
 
   function handleLogisticsBoxMarkUrlChange(url: string | null) {
     logisticsBoxMarkUrlRef.current = url;
-    form.setFieldValue("logistics_box_mark_url", url ?? undefined);
+    setLogisticsBoxMarkUrlState(url ?? undefined);
   }
 
   function handleValuesChange(
@@ -357,6 +359,7 @@ export default function ShipmentCreateDrawer({
       message.success("货件新增成功");
       form.resetFields();
       logisticsBoxMarkUrlRef.current = undefined;
+      setLogisticsBoxMarkUrlState(undefined);
       onCreated();
     } catch (error) {
       message.error(`货件新增失败：${getErrorMessage(error)}`);
@@ -368,6 +371,7 @@ export default function ShipmentCreateDrawer({
   function handleClose() {
     form.resetFields();
     logisticsBoxMarkUrlRef.current = undefined;
+    setLogisticsBoxMarkUrlState(undefined);
     setBoxMarkUploading(false);
     onClose();
   }
@@ -483,7 +487,7 @@ export default function ShipmentCreateDrawer({
           {!isRishenghuiProvider ? (
             <Form.Item label="物流箱唛">
               <ShipmentLogisticsBoxMarkUpload
-                fileUrl={logisticsBoxMarkUrl}
+                fileUrl={logisticsBoxMarkUrlState}
                 record={{
                   id: "new",
                   order_store: selectedStoreName,

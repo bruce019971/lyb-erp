@@ -17,6 +17,8 @@ type OperatorRow = {
     | null;
 };
 
+type ClearFileField = "carton_label_url" | "logistics_box_mark_url";
+
 async function verifyOperator() {
   const cookieStore = await cookies();
   const token = cookieStore.get(APP_SESSION_COOKIE)?.value;
@@ -52,58 +54,64 @@ async function verifyOperator() {
   }
 }
 
-export async function DELETE(
-  _request: Request,
-  context: { params: Promise<{ id: string }> },
-) {
+function normalizeIds(value: unknown) {
+  if (!Array.isArray(value)) return [];
+
+  return Array.from(
+    new Set(
+      value
+        .map((item) => (typeof item === "string" ? item.trim() : ""))
+        .filter(Boolean),
+    ),
+  );
+}
+
+function normalizeField(value: unknown): ClearFileField {
+  if (value === "carton_label_url" || value === "logistics_box_mark_url") {
+    return value;
+  }
+
+  throw new Error("清理字段不支持");
+}
+
+export async function POST(request: Request) {
   try {
     await verifyOperator();
-    const { id } = await context.params;
 
-    if (!id?.trim()) {
-      throw new Error("缺少货件ID");
+    const body = (await request.json()) as {
+      ids?: unknown;
+      field?: unknown;
+    };
+    const ids = normalizeIds(body.ids);
+    const field = normalizeField(body.field);
+
+    if (!ids.length) {
+      throw new Error("请选择需要处理的货件");
     }
 
     const adminClient = createSupabaseAdminClient();
-    const { data: shipment, error: queryError } = await adminClient
-      .from("shipment_records")
-      .select("id, tracking_no")
-      .eq("id", id.trim())
-      .maybeSingle();
-
-    if (queryError) {
-      throw queryError;
-    }
-
-    if (!shipment) {
-      throw new Error("未找到需要删除的货件");
-    }
-
-    const trackingNo =
-      typeof shipment.tracking_no === "string" ? shipment.tracking_no.trim() : "";
-
-    if (trackingNo) {
-      throw new Error("已有运单编号的货件不允许删除");
-    }
-
-    const { error } = await adminClient
+    const { data, error } = await adminClient
       .from("shipment_records")
       .update({
-        status: "已删除",
+        [field]: null,
         updated_at: new Date().toISOString(),
       })
-      .eq("id", id.trim())
-      .select("id")
-      .maybeSingle();
+      .eq("status", "有效")
+      .in("id", ids)
+      .select("id");
 
     if (error) {
       throw error;
     }
 
-    return NextResponse.json({ data: true });
+    return NextResponse.json({
+      data: {
+        count: data?.length ?? 0,
+      },
+    });
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "货件删除失败，请稍后重试";
+      error instanceof Error ? error.message : "货件文件清理失败，请稍后重试";
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }

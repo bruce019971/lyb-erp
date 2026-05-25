@@ -63,6 +63,15 @@ function getPayloadError(payload: unknown) {
   return "";
 }
 
+function assertRishenghuiBusinessSuccess(payload: unknown, fallback: string) {
+  if (!payload || typeof payload !== "object") return;
+
+  const result = payload as { code?: unknown; success?: unknown };
+  if (result.code === false || result.success === false) {
+    throw new Error(getPayloadError(payload) || fallback);
+  }
+}
+
 function getUploadFileInfo(result: UploadResult | null) {
   const firstFile = Array.isArray(result) ? result[0] : null;
   const path = typeof firstFile?.path === "string" ? firstFile.path.trim() : "";
@@ -218,6 +227,7 @@ export async function POST(request: Request) {
     if (!uploadResponse.ok) {
       throw new Error(getPayloadError(uploadResult) || "日升辉发票上传失败");
     }
+    assertRishenghuiBusinessSuccess(uploadResult, "日升辉发票上传失败");
 
     const uploadFileInfo = getUploadFileInfo(uploadResult);
     if (!uploadFileInfo.path || !uploadFileInfo.url) {
@@ -249,6 +259,7 @@ export async function POST(request: Request) {
     if (!importResponse.ok) {
       throw new Error(getPayloadError(importResult) || "日升辉发票导入失败");
     }
+    assertRishenghuiBusinessSuccess(importResult, "日升辉发票导入失败");
 
     const { packNo, result: listResult } = await waitForRishenghuiPackNo({
       Authorization: authorization,

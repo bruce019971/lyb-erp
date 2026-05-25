@@ -151,6 +151,10 @@ async function requestProductFieldOptions(field: keyof ProductRecord) {
   );
 }
 
+export async function requestProductCategoryOptions() {
+  return requestProductFieldOptions("product_category");
+}
+
 export async function requestProductFilterOptions() {
   const { data, error } = await supabase
     .from("products")

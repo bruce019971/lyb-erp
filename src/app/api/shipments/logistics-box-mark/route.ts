@@ -2,33 +2,13 @@ import { NextResponse } from "next/server";
 
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import {
-  RISHENGHUI_LOGIN_URL,
   RISHENGHUI_PRINT_MAITOU_URL,
   verifyLogisticsOperator,
 } from "../../logistics/rishenghui/_lib";
 
 type LogisticsBoxMarkRequestBody = {
   shipmentId?: string;
-  username?: string;
-  password?: string;
-  code?: string;
-  uuid?: string;
-};
-
-type LoginResponse = {
   accessToken?: string;
-  refreshToken?: string;
-  token?: string;
-  data?:
-    | {
-        accessToken?: string;
-        refreshToken?: string;
-        token?: string;
-      }
-    | string
-    | null;
-  message?: string;
-  msg?: string;
 };
 
 type PrintMaitouResponse = {
@@ -58,18 +38,6 @@ function getRequiredText(value: unknown, message: string) {
   return value.trim();
 }
 
-function getAccessToken(result: LoginResponse | null) {
-  if (!result) return "";
-  if (typeof result.accessToken === "string") return result.accessToken.trim();
-  if (typeof result.token === "string") return result.token.trim();
-  if (typeof result.data === "string") return result.data.trim();
-  if (typeof result.data?.accessToken === "string") {
-    return result.data.accessToken.trim();
-  }
-  if (typeof result.data?.token === "string") return result.data.token.trim();
-  return "";
-}
-
 function getFileUrl(result: PrintMaitouResponse | null) {
   if (!result) return "";
   if (typeof result.fileurl === "string") return result.fileurl.trim();
@@ -90,10 +58,7 @@ export async function POST(request: Request) {
 
     const body = (await request.json()) as LogisticsBoxMarkRequestBody;
     const shipmentId = getRequiredText(body.shipmentId, "缺少货件ID");
-    const username = getRequiredText(body.username, "请输入用户名");
-    const password = getRequiredText(body.password, "请输入密码");
-    const code = getRequiredText(body.code, "请输入验证码");
-    const uuid = getRequiredText(body.uuid, "缺少验证码uuid");
+    const accessToken = getRequiredText(body.accessToken, "请先获取日升辉Token");
     const adminClient = createSupabaseAdminClient();
     const { data: shipmentData, error: shipmentError } = await adminClient
       .from("shipment_records")
@@ -111,31 +76,6 @@ export async function POST(request: Request) {
 
     if (!trackingNo) {
       throw new Error("当前货件缺少运单编号");
-    }
-
-    const loginResponse = await fetch(RISHENGHUI_LOGIN_URL, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        username,
-        password,
-        code,
-        uuid,
-      }),
-    });
-    const loginResult = (await loginResponse.json().catch(() => null)) as
-      | LoginResponse
-      | null;
-
-    if (!loginResponse.ok) {
-      throw new Error(loginResult?.message || loginResult?.msg || "登录失败");
-    }
-
-    const accessToken = getAccessToken(loginResult);
-    if (!accessToken) {
-      throw new Error(loginResult?.message || loginResult?.msg || "登录未返回accessToken");
     }
 
     const printResponse = await fetch(RISHENGHUI_PRINT_MAITOU_URL, {

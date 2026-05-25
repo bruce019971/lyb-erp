@@ -3,6 +3,7 @@
 import { LoadingOutlined, PlusOutlined } from "@ant-design/icons";
 import {
   App,
+  AutoComplete,
   Button,
   Drawer,
   Form,
@@ -19,6 +20,7 @@ import type { ProductCreateValues, ProductRecord } from "../_lib/products";
 import {
   createProductRecord,
   requestCustomsCodeByCategory,
+  requestProductCategoryOptions,
   updateProductRecord,
   uploadProductImage,
   uploadProductLabel,
@@ -27,6 +29,73 @@ import type { StoreOption } from "../../stores/_lib/stores";
 import { requestStoreOptions } from "../../stores/_lib/stores-request";
 
 const { TextArea } = Input;
+
+const PRODUCT_ENGLISH_NAME_RULES = [
+  { keyword: "美甲打磨机", englishName: "Nail Drill Machine" },
+  { keyword: "直发梳", englishName: "Hair Straightening Brush" },
+  { keyword: "理发器", englishName: "Hair Clipper" },
+  { keyword: "剃须刀", englishName: "Hair Clipper" },
+  { keyword: "直发器", englishName: "Hair Straightener" },
+  { keyword: "靠枕", englishName: "Cushion Pillow" },
+  { keyword: "射钉枪", englishName: "Nail Gun" },
+  { keyword: "喷漆枪", englishName: "Paint Spray Gun" },
+  { keyword: "打磨机", englishName: "Grinding Machine" },
+  { keyword: "洁牙器", englishName: "Dental Water Flosser" },
+  { keyword: "稳压器", englishName: "Voltage Regulator" },
+] as const;
+
+const PRODUCT_CATEGORY_FIELD_MAP = {
+  理发器: {
+    product_english_name: "Hair Clipper",
+    product_usage: "修剪头发、胡须 / For trimming hair and beard",
+    product_material: "塑料、金属 / Plastic and metal",
+  },
+  靠枕: {
+    product_english_name: "Cushion Pillow",
+    product_usage: "家居、办公或车内倚靠支撑 / For back support at home, office, or in the car",
+    product_material: "纺织面料、聚酯纤维填充 / Textile fabric and polyester fiber filling",
+  },
+  美甲打磨机: {
+    product_english_name: "Nail Drill Machine",
+    product_usage: "美甲打磨、修型和抛光 / For nail grinding, shaping, and polishing",
+    product_material: "ABS塑料、金属 / ABS plastic and metal",
+  },
+  射钉枪: {
+    product_english_name: "Nail Gun",
+    product_usage: "木工、装修固定和钉装作业 / For woodworking, decoration fastening, and nailing",
+    product_material: "金属、塑料 / Metal and plastic",
+  },
+  喷漆枪: {
+    product_english_name: "Paint Spray Gun",
+    product_usage: "表面喷漆、涂装和修补 / For surface painting, coating, and touch-up",
+    product_material: "铝合金、金属、塑料 / Aluminum alloy, metal, and plastic",
+  },
+  打磨机: {
+    product_english_name: "Grinding Machine",
+    product_usage: "表面打磨、修整和抛光 / For surface grinding, trimming, and polishing",
+    product_material: "塑料、金属 / Plastic and metal",
+  },
+  直发器: {
+    product_english_name: "Hair Straightener",
+    product_usage: "头发拉直和造型 / For hair straightening and styling",
+    product_material: "塑料、陶瓷、金属 / Plastic, ceramic, and metal",
+  },
+  洁牙器: {
+    product_english_name: "Dental Water Flosser",
+    product_usage: "口腔清洁和牙缝冲洗 / For oral cleaning and interdental rinsing",
+    product_material: "塑料、硅胶、电子元件 / Plastic, silicone, and electronic components",
+  },
+  稳压器: {
+    product_english_name: "Voltage Regulator",
+    product_usage: "稳定输出电压和保护用电设备 / For stabilizing output voltage and protecting electrical devices",
+    product_material: "塑料、铜、电子元件 / Plastic, copper, and electronic components",
+  },
+  直发梳: {
+    product_english_name: "Hair Straightening Brush",
+    product_usage: "头发梳理、拉直和造型 / For combing, straightening, and styling hair",
+    product_material: "塑料、陶瓷、电子元件 / Plastic, ceramic, and electronic components",
+  },
+} as const;
 
 type ProductFormDrawerProps = {
   open: boolean;
@@ -45,6 +114,24 @@ function getErrorMessage(error: unknown, fallback: string) {
   }
 
   return fallback;
+}
+
+function getProductEnglishName(productName?: string | null) {
+  const normalizedProductName = productName?.trim();
+  if (!normalizedProductName) return undefined;
+
+  return PRODUCT_ENGLISH_NAME_RULES.find((item) =>
+    normalizedProductName.includes(item.keyword),
+  )?.englishName;
+}
+
+function getProductGeneratedFields(productCategory?: string | null) {
+  const normalizedProductCategory = productCategory?.trim();
+  if (!normalizedProductCategory) return undefined;
+
+  return PRODUCT_CATEGORY_FIELD_MAP[
+    normalizedProductCategory as keyof typeof PRODUCT_CATEGORY_FIELD_MAP
+  ];
 }
 
 function buildInitialValues(record?: ProductRecord): ProductCreateValues {
@@ -157,6 +244,9 @@ export default function ProductFormDrawer({
   const [submitting, setSubmitting] = useState(false);
   const [storesLoading, setStoresLoading] = useState(false);
   const [storeOptions, setStoreOptions] = useState<StoreOption[]>([]);
+  const [categoryOptions, setCategoryOptions] = useState<
+    { label: string; value: string }[]
+  >([]);
   const [imageUploading, setImageUploading] = useState(false);
   const [labelUploading, setLabelUploading] = useState(false);
   const [imageUrlOverride, setImageUrlOverride] = useState<string | undefined>(
@@ -179,6 +269,7 @@ export default function ProductFormDrawer({
   >(null);
   const { message } = App.useApp();
   const currentProductName = Form.useWatch("product_name", form);
+  const currentProductCategory = Form.useWatch("product_category", form);
   const currentMlCode = Form.useWatch("ml_code", form);
   const currentStoreName = Form.useWatch("store_name", form);
   const currentStoreCode = getStoreCodeByName(
@@ -202,29 +293,48 @@ export default function ProductFormDrawer({
     labelUrlOverride ?? record?.product_label_url ?? undefined;
 
   useEffect(() => {
+    if (mode !== "create") return;
+
+    const generatedFields = getProductGeneratedFields(currentProductCategory);
+    if (generatedFields) {
+      form.setFieldsValue(generatedFields);
+      return;
+    }
+
+    const englishName = getProductEnglishName(currentProductName);
+    if (englishName) {
+      form.setFieldValue("product_english_name", englishName);
+    }
+  }, [currentProductCategory, currentProductName, form, mode]);
+
+  useEffect(() => {
     if (!open) return;
 
     let cancelled = false;
 
-    async function loadStoreOptions() {
+    async function loadOptions() {
       try {
         setStoresLoading(true);
-        const options = await requestStoreOptions();
+        const [stores, categories] = await Promise.all([
+          requestStoreOptions(),
+          requestProductCategoryOptions(),
+        ]);
 
         if (!cancelled) {
-          setStoreOptions(options.filter((item) => item.seller_name?.trim()));
+          setStoreOptions(stores.filter((item) => item.seller_name?.trim()));
+          setCategoryOptions(categories);
         }
       } catch (error) {
         if (!cancelled) {
           const description = getErrorMessage(error, "请检查店铺数据读取权限");
-          message.error(`店铺列表加载失败：${description}`);
+          message.error(`表单选项加载失败：${description}`);
         }
       } finally {
         if (!cancelled) setStoresLoading(false);
       }
     }
 
-    void loadStoreOptions();
+    void loadOptions();
 
     return () => {
       cancelled = true;
@@ -236,8 +346,19 @@ export default function ProductFormDrawer({
   ) => {
     try {
       setSubmitting(true);
+      const generatedFields = getProductGeneratedFields(
+        values.product_category,
+      );
       const nextValues = {
         ...values,
+        product_english_name:
+          values.product_english_name?.trim() ||
+          generatedFields?.product_english_name ||
+          getProductEnglishName(values.product_name),
+        product_usage:
+          values.product_usage?.trim() || generatedFields?.product_usage,
+        product_material:
+          values.product_material?.trim() || generatedFields?.product_material,
         customs_code: await requestCustomsCodeByCategory(
           values.product_category,
         ),
@@ -433,6 +554,25 @@ export default function ProductFormDrawer({
           </Form.Item>
 
           <Form.Item
+            label="产品类别"
+            name="product_category"
+            rules={[
+              { required: true, whitespace: true, message: "请输入产品类别" },
+            ]}
+          >
+            <AutoComplete
+              allowClear
+              options={categoryOptions}
+              placeholder="请选择或输入产品类别"
+              filterOption={(inputValue, option) =>
+                String(option?.value ?? "")
+                  .toLowerCase()
+                  .includes(inputValue.toLowerCase())
+              }
+            />
+          </Form.Item>
+
+          <Form.Item
             label="所属店铺"
             name="store_name"
             className="col-span-2"
@@ -494,10 +634,6 @@ export default function ProductFormDrawer({
               precision={0}
               placeholder="请输入装箱数量"
             />
-          </Form.Item>
-
-          <Form.Item label="产品类别" name="product_category">
-            <Input placeholder="请输入产品类别" />
           </Form.Item>
 
           <Form.Item label="用途" name="product_usage" className="col-span-2">

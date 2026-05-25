@@ -65,6 +65,33 @@ export async function POST(request: Request) {
     }
 
     const adminClient = createSupabaseAdminClient();
+    const { data: shipments, error: queryError } = await adminClient
+      .from("shipment_records")
+      .select("id, shipment_no, tracking_no")
+      .in("id", ids);
+
+    if (queryError) {
+      throw queryError;
+    }
+
+    const blockedShipmentNos = (shipments ?? [])
+      .filter((item) => {
+        const trackingNo =
+          typeof item.tracking_no === "string" ? item.tracking_no.trim() : "";
+        return Boolean(trackingNo);
+      })
+      .map((item) =>
+        typeof item.shipment_no === "string" && item.shipment_no.trim()
+          ? item.shipment_no.trim()
+          : item.id,
+      );
+
+    if (blockedShipmentNos.length > 0) {
+      throw new Error(
+        `已有运单编号的货件不允许删除：${blockedShipmentNos.join("、")}`,
+      );
+    }
+
     const { error } = await adminClient
       .from("shipment_records")
       .update({

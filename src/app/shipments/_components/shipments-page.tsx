@@ -18,6 +18,7 @@ import { requestLogisticsProviderOptions } from "../../logistics/_lib/logistics-
 import type { StoreOption } from "../../stores/_lib/stores";
 import { requestStoreOptions } from "../../stores/_lib/stores-request";
 import {
+  clearShipmentFileUrls,
   deleteShipmentRecord,
   generateShipmentLogisticsBoxMark,
   generateShipmentRishenghuiOrderInvoice,
@@ -28,9 +29,8 @@ import {
 } from "../_lib/shipments-request";
 import ShipmentCreateDrawer from "./shipment-create-drawer";
 import ShipmentEditDrawer from "./shipment-edit-drawer";
-import ShipmentBatchCartonLabelModal from "./shipment-batch-carton-label-modal";
-import ShipmentLogisticsBoxMarkModal from "./shipment-logistics-box-mark-modal";
 import ShipmentRishenghuiOrderModal from "./shipment-rishenghui-order-modal";
+import RishenghuiAuthModal from "./rishenghui-auth-modal";
 import ShipmentsTable from "./shipments-table";
 import ShipmentsTableSkeleton from "./shipments-table-skeleton";
 
@@ -44,15 +44,11 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
   const searchParams = useSearchParams();
   const [mounted, setMounted] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
-  const [batchCartonLabelOpen, setBatchCartonLabelOpen] = useState(false);
-  const [selectedShipmentNos, setSelectedShipmentNos] = useState<string[]>([]);
   const [editOpen, setEditOpen] = useState(false);
-  const [logisticsBoxMarkOpen, setLogisticsBoxMarkOpen] = useState(false);
   const [rishenghuiOrderOpen, setRishenghuiOrderOpen] = useState(false);
+  const [rishenghuiAuthOpen, setRishenghuiAuthOpen] = useState(false);
+  const [rishenghuiAccessToken, setRishenghuiAccessToken] = useState("");
   const [editingRecord, setEditingRecord] = useState<
-    ShipmentRecord | undefined
-  >(undefined);
-  const [logisticsBoxMarkRecord, setLogisticsBoxMarkRecord] = useState<
     ShipmentRecord | undefined
   >(undefined);
   const [rishenghuiOrderRecord, setRishenghuiOrderRecord] = useState<
@@ -71,6 +67,8 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
     string | null
   >(null);
   const [generatingLogisticsBoxMarkId, setGeneratingLogisticsBoxMarkId] =
+    useState<string | null>(null);
+  const [submittingRishenghuiOrderId, setSubmittingRishenghuiOrderId] =
     useState<string | null>(null);
   const [storeOptions, setStoreOptions] = useState<StoreOption[]>([]);
   const [productOptions, setProductOptions] = useState<ProductShipmentOption[]>(
@@ -171,6 +169,10 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
     return generatingLogisticsBoxMarkId === record.id;
   }
 
+  function isSubmittingRishenghuiOrder(record: ShipmentRecord) {
+    return submittingRishenghuiOrderId === record.id;
+  }
+
   async function handleChangeDeliveryStatus(
     record: ShipmentRecord,
     value: string,
@@ -242,27 +244,67 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
     });
   }
 
+  function handleClearShipmentFiles(
+    ids: string[],
+    field: "carton_label_url" | "logistics_box_mark_url",
+  ) {
+    const label = field === "carton_label_url" ? "外箱标签" : "物流箱唛";
+
+    if (!ids.length) {
+      messageApi.warning("请先选择需要处理的货件");
+      return;
+    }
+
+    modalApi.confirm({
+      title: `删除${label}`,
+      icon: <ExclamationCircleFilled className="!text-amber-500" />,
+      content: `确定删除已选择 ${ids.length} 个货件的${label}吗？`,
+      okText: "确定删除",
+      cancelText: "取消",
+      okButtonProps: { danger: true },
+      centered: true,
+      onOk: async () => {
+        try {
+          const result = await clearShipmentFileUrls(ids, field);
+          messageApi.success(
+            `${label}删除成功，已处理 ${result.count ?? ids.length} 个货件`,
+          );
+          tableActionRef.current?.reload();
+        } catch (error) {
+          const description =
+            error instanceof Error ? error.message : "请检查数据库权限或字段内容";
+          messageApi.error(`${label}删除失败：${description}`);
+          throw error;
+        }
+      },
+    });
+  }
+
   async function handleGenerateLogisticsBoxMark(values: {
     record: ShipmentRecord;
-    username: string;
-    password: string;
-    code: string;
-    uuid: string;
+    accessToken: string;
   }) {
     try {
       setGeneratingLogisticsBoxMarkId(values.record.id);
       await generateShipmentLogisticsBoxMark({
         shipmentId: values.record.id,
-        username: values.username,
-        password: values.password,
-        code: values.code,
-        uuid: values.uuid,
+        accessToken: values.accessToken,
       });
       messageApi.success(
         `${values.record.tracking_no?.trim() || ""}箱唛生成成功`,
       );
       tableActionRef.current?.reload();
     } catch (error) {
+      setRishenghuiAccessToken("");
+      Modal.warning({
+        title: "日升辉Token可能已过期",
+        content:
+          error instanceof Error
+            ? error.message
+            : "请重新获取日升辉Token后再操作",
+        okText: "去获取Token",
+        onOk: () => setRishenghuiAuthOpen(true),
+      });
       messageApi.error(
         error instanceof Error ? error.message : "物流箱唛生成失败",
       );
@@ -281,6 +323,36 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
     setRishenghuiOrderRecord(result.record ?? values.record);
     tableActionRef.current?.reload();
     return result;
+  }
+
+  async function handleSubmitRishenghuiOrder(values: {
+    shipmentId: string;
+    fileUrl: string;
+    fileName: string;
+    accessToken: string;
+  }) {
+    setSubmittingRishenghuiOrderId(values.shipmentId);
+    setRishenghuiOrderOpen(false);
+    setRishenghuiOrderRecord(undefined);
+
+    try {
+      const result = await submitRishenghuiOrderInvoice(values);
+      tableActionRef.current?.reload();
+      return result;
+    } catch (error) {
+      setSubmittingRishenghuiOrderId(null);
+      setRishenghuiAccessToken("");
+      Modal.warning({
+        title: "日升辉Token可能已过期",
+        content:
+          error instanceof Error
+            ? error.message
+            : "请重新获取日升辉Token后再操作",
+        okText: "去获取Token",
+        onOk: () => setRishenghuiAuthOpen(true),
+      });
+      throw error;
+    }
   }
 
   return (
@@ -309,11 +381,31 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
                 actionRef={tableActionRef}
                 formRef={searchFormRef}
                 onCreate={() => setCreateOpen(true)}
-                onBatchCartonLabels={() => setBatchCartonLabelOpen(true)}
-                onSelectedShipmentNosChange={setSelectedShipmentNos}
+                onClearCartonLabels={(ids) =>
+                  handleClearShipmentFiles(ids, "carton_label_url")
+                }
+                onClearLogisticsBoxMarks={(ids) =>
+                  handleClearShipmentFiles(ids, "logistics_box_mark_url")
+                }
+                onOpenRishenghuiAuth={() => setRishenghuiAuthOpen(true)}
+                hasRishenghuiAccessToken={Boolean(rishenghuiAccessToken)}
                 onGenerateLogisticsBoxMark={(record) => {
-                  setLogisticsBoxMarkRecord(record);
-                  setLogisticsBoxMarkOpen(true);
+                  const token = rishenghuiAccessToken.trim();
+                  if (!token) {
+                    Modal.warning({
+                      title: "请先获取日升辉Token",
+                      content:
+                        "当前没有可用的日升辉Token，请先在列表右上角获取Token。",
+                      okText: "去获取Token",
+                      onOk: () => setRishenghuiAuthOpen(true),
+                    });
+                    return;
+                  }
+
+                  void handleGenerateLogisticsBoxMark({
+                    record,
+                    accessToken: token,
+                  });
                 }}
                 onRishenghuiOrder={(record) => {
                   setRishenghuiOrderRecord(record);
@@ -345,6 +437,7 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
                 isDeleting={isDeleting}
                 isGeneratingCartonLabel={isGeneratingCartonLabel}
                 isGeneratingLogisticsBoxMark={isGeneratingLogisticsBoxMark}
+                isSubmittingRishenghuiOrder={isSubmittingRishenghuiOrder}
                 onStartGenerateCartonLabel={(record) =>
                   setGeneratingCartonLabelId(record.id)
                 }
@@ -374,46 +467,17 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
               setRishenghuiOrderRecord(undefined);
             }}
             onGenerateInvoice={handleGenerateRishenghuiOrderInvoice}
+            accessToken={rishenghuiAccessToken}
+            onSubmitOrder={handleSubmitRishenghuiOrder}
+            onTokenRequired={() => setRishenghuiAuthOpen(true)}
+          />
+        ) : null}
+        {mounted ? (
+          <RishenghuiAuthModal
+            open={rishenghuiAuthOpen}
+            onClose={() => setRishenghuiAuthOpen(false)}
+            onSaved={setRishenghuiAccessToken}
             onGetAccessToken={getRishenghuiAccessToken}
-            onSubmitOrder={submitRishenghuiOrderInvoice}
-            onSubmitSuccess={(record) => {
-              if (record) {
-                setRishenghuiOrderRecord(record);
-              }
-              tableActionRef.current?.reload();
-            }}
-          />
-        ) : null}
-        {mounted ? (
-          <ShipmentLogisticsBoxMarkModal
-            key={
-              logisticsBoxMarkRecord
-                ? `logistics-box-mark-${logisticsBoxMarkRecord.id}`
-                : "logistics-box-mark-closed"
-            }
-            open={logisticsBoxMarkOpen}
-            record={logisticsBoxMarkRecord}
-            logisticsOptions={logisticsOptions}
-            onClose={() => {
-              setLogisticsBoxMarkOpen(false);
-              setLogisticsBoxMarkRecord(undefined);
-            }}
-            onGenerate={(values) => void handleGenerateLogisticsBoxMark(values)}
-          />
-        ) : null}
-        {mounted ? (
-          <ShipmentBatchCartonLabelModal
-            key={
-              batchCartonLabelOpen
-                ? `batch-carton-label-${selectedShipmentNos.join("|")}`
-                : "batch-carton-label-closed"
-            }
-            open={batchCartonLabelOpen}
-            initialShipmentNos={selectedShipmentNos}
-            onClose={() => setBatchCartonLabelOpen(false)}
-            onFinished={() => {
-              tableActionRef.current?.reload();
-            }}
           />
         ) : null}
         {mounted ? (
@@ -431,6 +495,7 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
         ) : null}
         {mounted ? (
           <ShipmentEditDrawer
+            key={editingRecord?.id ?? "shipment-edit-closed"}
             open={editOpen}
             record={editingRecord}
             onClose={() => setEditOpen(false)}
