@@ -163,7 +163,6 @@ export default function ShipmentCreateDrawer({
   const appointmentTime = Form.useWatch("appointment_time", form);
   const isRelabel = Form.useWatch("is_relabel", form);
   const normalizedStoreName = selectedStoreName?.trim();
-  const isRishenghuiProvider = selectedLogisticsProvider?.trim() === "日升辉";
   const appointmentDisabled = !warehouseArrivedAt || isRelabel === "是";
 
   const storeSelectOptions = storeOptions.map((item) => ({
@@ -484,24 +483,22 @@ export default function ShipmentCreateDrawer({
               selectedLogisticsProvider ? "请输入运单编号" : "请先选择物流商"
             }
           />
-          {!isRishenghuiProvider ? (
-            <Form.Item label="物流箱唛">
-              <ShipmentLogisticsBoxMarkUpload
-                fileUrl={logisticsBoxMarkUrlState}
-                record={{
-                  id: "new",
-                  order_store: selectedStoreName,
-                  shipment_no: shipmentNo,
-                  product_name: productName,
-                  box_count: boxCount,
-                }}
-                storeOptions={storeOptions}
-                uploading={boxMarkUploading}
-                onUploadingChange={setBoxMarkUploading}
-                onUrlChange={handleLogisticsBoxMarkUrlChange}
-              />
-            </Form.Item>
-          ) : null}
+          <Form.Item label="物流箱唛">
+            <ShipmentLogisticsBoxMarkUpload
+              fileUrl={logisticsBoxMarkUrlState}
+              record={{
+                id: "new",
+                order_store: selectedStoreName,
+                shipment_no: shipmentNo,
+                product_name: productName,
+                box_count: boxCount,
+              }}
+              storeOptions={storeOptions}
+              uploading={boxMarkUploading}
+              onUploadingChange={setBoxMarkUploading}
+              onUrlChange={handleLogisticsBoxMarkUrlChange}
+            />
+          </Form.Item>
           <DateField
             label="到仓时间"
             name="overseas_warehouse_arrived_at"

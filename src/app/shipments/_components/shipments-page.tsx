@@ -33,7 +33,6 @@ import {
 } from "../_lib/shipments-request";
 import ShipmentCreateDrawer from "./shipment-create-drawer";
 import ShipmentEditDrawer from "./shipment-edit-drawer";
-import ShipmentRishenghuiOrderModal from "./shipment-rishenghui-order-modal";
 import RishenghuiAuthModal from "./rishenghui-auth-modal";
 import ShipmentsTable from "./shipments-table";
 import ShipmentsTableSkeleton from "./shipments-table-skeleton";
@@ -42,10 +41,10 @@ type ShipmentsPageProps = {
   embedded?: boolean;
 };
 
-type TongtuOrderStepKey = "invoice" | "order" | "boxMark";
+type LogisticsOrderStepKey = "invoice" | "order" | "boxMark";
 
-const tongtuOrderSteps: Array<{
-  key: TongtuOrderStepKey;
+const logisticsOrderSteps: Array<{
+  key: LogisticsOrderStepKey;
   title: string;
 }> = [
   { key: "invoice", title: "发票生成中" },
@@ -60,13 +59,9 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
   const [mounted, setMounted] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const [logisticsOrderOpen, setLogisticsOrderOpen] = useState(false);
   const [rishenghuiAuthOpen, setRishenghuiAuthOpen] = useState(false);
   const [rishenghuiAccessToken, setRishenghuiAccessToken] = useState("");
   const [editingRecord, setEditingRecord] = useState<
-    ShipmentRecord | undefined
-  >(undefined);
-  const [logisticsOrderRecord, setLogisticsOrderRecord] = useState<
     ShipmentRecord | undefined
   >(undefined);
   const [deletingShipmentId, setDeletingShipmentId] = useState<string | null>(null);
@@ -85,12 +80,14 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
     useState<string | null>(null);
   const [submittingLogisticsOrderId, setSubmittingLogisticsOrderId] =
     useState<string | null>(null);
-  const [tongtuOrderProgress, setTongtuOrderProgress] = useState<{
+  const [logisticsOrderProgress, setLogisticsOrderProgress] = useState<{
     open: boolean;
+    providerName: string;
     shipmentNo: string;
-    step: TongtuOrderStepKey;
+    step: LogisticsOrderStepKey;
   }>({
     open: false,
+    providerName: "",
     shipmentNo: "",
     step: "invoice",
   });
@@ -197,12 +194,29 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
     return submittingLogisticsOrderId === record.id;
   }
 
-  function getTongtuOrderProgressCurrent() {
+  function getLogisticsOrderProgressCurrent() {
     return Math.max(
       0,
-      tongtuOrderSteps.findIndex(
-        (item) => item.key === tongtuOrderProgress.step,
+      logisticsOrderSteps.findIndex(
+        (item) => item.key === logisticsOrderProgress.step,
       ),
+    );
+  }
+
+  function showRishenghuiTokenRequiredModal(content?: string) {
+    setRishenghuiAccessToken("");
+    modalApi.warning({
+      title: "请先获取日升辉Token",
+      content: content?.trim() || "当前没有可用的日升辉Token，请先在列表右上角获取Token。",
+      okText: "去获取Token",
+      onOk: () => setRishenghuiAuthOpen(true),
+    });
+  }
+
+  function isRishenghuiTokenError(error: unknown) {
+    const message = error instanceof Error ? error.message : "";
+    return /token|access.?token|authorization|unauthorized|401|403|登录|认证|过期|失效|无效|未授权|权限|身份/i.test(
+      message,
     );
   }
 
@@ -378,16 +392,9 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
       );
       tableActionRef.current?.reload();
     } catch (error) {
-      setRishenghuiAccessToken("");
-      Modal.warning({
-        title: "日升辉Token可能已过期",
-        content:
-          error instanceof Error
-            ? error.message
-            : "请重新获取日升辉Token后再操作",
-        okText: "去获取Token",
-        onOk: () => setRishenghuiAuthOpen(true),
-      });
+      showRishenghuiTokenRequiredModal(
+        error instanceof Error ? error.message : "请重新获取日升辉Token后再操作",
+      );
       messageApi.error(
         error instanceof Error ? error.message : "物流箱唛生成失败",
       );
@@ -415,58 +422,74 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
     }
   }
 
-  async function handleGenerateRishenghuiOrderInvoice(values: {
-    record: ShipmentRecord;
-  }) {
-    const logisticsProviderName = values.record.logistics_provider?.trim();
-    const generator =
-      logisticsProviderName === "通途"
-        ? generateShipmentTongtuOrderInvoice
-        : generateShipmentRishenghuiOrderInvoice;
-    const result = await generator({
-      shipmentId: values.record.id,
-      shipmentNo: values.record.shipment_no,
-    });
-    setLogisticsOrderRecord(result.record ?? values.record);
-    tableActionRef.current?.reload();
-    return result;
-  }
-
-  async function handleTongtuLogisticsOrder(record: ShipmentRecord) {
+  async function runLogisticsOrder(record: ShipmentRecord) {
+    const providerName = record.logistics_provider?.trim() || "";
     const shipmentNo = record.shipment_no?.trim() || "";
+    const isRishenghui = providerName === "日升辉";
+    const isTongtu = providerName === "通途";
+
+    if (!isRishenghui && !isTongtu) {
+      return;
+    }
+
+    const token = rishenghuiAccessToken.trim();
+    if (isRishenghui && !token) {
+      showRishenghuiTokenRequiredModal();
+      return;
+    }
 
     try {
       setSubmittingLogisticsOrderId(record.id);
-      setTongtuOrderProgress({
+      setLogisticsOrderProgress({
         open: true,
+        providerName,
         shipmentNo,
         step: "invoice",
       });
 
-      await generateShipmentTongtuOrderInvoice({
+      const invoiceResult = await (isTongtu
+        ? generateShipmentTongtuOrderInvoice
+        : generateShipmentRishenghuiOrderInvoice)({
         shipmentId: record.id,
         shipmentNo: record.shipment_no,
       });
       tableActionRef.current?.reload();
 
-      setTongtuOrderProgress({
+      setLogisticsOrderProgress({
         open: true,
+        providerName,
         shipmentNo,
         step: "order",
       });
-      const orderResult = await submitTongtuOrderInvoice({
-        shipmentId: record.id,
-      });
+      const orderResult = isTongtu
+        ? await submitTongtuOrderInvoice({
+            shipmentId: record.id,
+          })
+        : await submitRishenghuiOrderInvoice({
+            shipmentId: record.id,
+            fileUrl: invoiceResult.fileUrl,
+            fileName: invoiceResult.fileName,
+            accessToken: token,
+          });
       tableActionRef.current?.reload();
 
-      setTongtuOrderProgress({
+      setLogisticsOrderProgress({
         open: true,
+        providerName,
         shipmentNo,
         step: "boxMark",
       });
-      const boxMarkResult = await generateShipmentTongtuLogisticsBoxMark({
-        shipmentId: record.id,
-      });
+      const boxMarkResult = isTongtu
+        ? await generateShipmentTongtuLogisticsBoxMark({
+            shipmentId: record.id,
+          })
+        : {
+            record: await generateShipmentLogisticsBoxMark({
+              shipmentId: record.id,
+              accessToken: token,
+            }),
+            trackingNo: "",
+          };
       const trackingNo =
         boxMarkResult.trackingNo ||
         orderResult.packno ||
@@ -476,15 +499,19 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
       messageApi.success(
         trackingNo
           ? `${trackingNo}物流下单成功，箱唛已生成`
-          : "通途物流下单成功，箱唛已生成",
+          : `${providerName}物流下单成功，箱唛已生成`,
       );
       tableActionRef.current?.reload();
     } catch (error) {
       const description =
-        error instanceof Error ? error.message : "通途物流下单失败";
+        error instanceof Error ? error.message : `${providerName}物流下单失败`;
       messageApi.error(description);
+
+      if (isRishenghui && isRishenghuiTokenError(error)) {
+        showRishenghuiTokenRequiredModal(description);
+      }
     } finally {
-      setTongtuOrderProgress((previous) => ({
+      setLogisticsOrderProgress((previous) => ({
         ...previous,
         open: false,
       }));
@@ -492,49 +519,25 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
     }
   }
 
-  async function handleSubmitLogisticsOrder(values: {
-    shipmentId: string;
-    fileUrl?: string;
-    fileName?: string;
-    accessToken?: string;
-  }) {
-    const logisticsProviderName = logisticsOrderRecord?.logistics_provider?.trim();
-    setSubmittingLogisticsOrderId(values.shipmentId);
-    setLogisticsOrderOpen(false);
-    setLogisticsOrderRecord(undefined);
+  function handleLogisticsOrder(record: ShipmentRecord) {
+    const providerName = record.logistics_provider?.trim() || "";
 
-    try {
-      const result =
-        logisticsProviderName === "通途"
-          ? await submitTongtuOrderInvoice({
-              shipmentId: values.shipmentId,
-            })
-          : await submitRishenghuiOrderInvoice({
-              shipmentId: values.shipmentId,
-              fileUrl: values.fileUrl || "",
-              fileName: values.fileName || "",
-              accessToken: values.accessToken || "",
-            });
-      tableActionRef.current?.reload();
-      return result;
-    } catch (error) {
-      if (logisticsProviderName !== "通途") {
-        setRishenghuiAccessToken("");
-        Modal.warning({
-          title: "日升辉Token可能已过期",
-          content:
-            error instanceof Error
-              ? error.message
-              : "请重新获取日升辉Token后再操作",
-          okText: "去获取Token",
-          onOk: () => setRishenghuiAuthOpen(true),
-        });
-      }
-
-      throw error;
-    } finally {
-      setSubmittingLogisticsOrderId(null);
+    if (providerName === "日升辉" && !rishenghuiAccessToken.trim()) {
+      showRishenghuiTokenRequiredModal();
+      return;
     }
+
+    modalApi.confirm({
+      title: "是否确认下单",
+      icon: <ExclamationCircleFilled className="!text-amber-500" />,
+      content: `确认对货件 ${record.shipment_no?.trim() || record.id} 执行${providerName || "物流"}下单吗？`,
+      okText: "确认",
+      cancelText: "取消",
+      centered: true,
+      onOk: () => {
+        void runLogisticsOrder(record);
+      },
+    });
   }
 
   return (
@@ -596,13 +599,7 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
                   });
                 }}
                 onLogisticsOrder={(record) => {
-                  if (record.logistics_provider?.trim() === "通途") {
-                    void handleTongtuLogisticsOrder(record);
-                    return;
-                  }
-
-                  setLogisticsOrderRecord(record);
-                  setLogisticsOrderOpen(true);
+                  handleLogisticsOrder(record);
                 }}
                 onEdit={(record) => {
                   setEditingRecord(record);
@@ -647,51 +644,31 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
           </section>
         </main>
         {mounted ? (
-          <ShipmentRishenghuiOrderModal
-            key={
-              logisticsOrderRecord
-                ? `logistics-order-${logisticsOrderRecord.id}`
-                : "logistics-order-closed"
-            }
-            open={logisticsOrderOpen}
-            record={logisticsOrderRecord}
-            providerName={logisticsOrderRecord?.logistics_provider ?? undefined}
-            onClose={() => {
-              setLogisticsOrderOpen(false);
-              setLogisticsOrderRecord(undefined);
-            }}
-            onGenerateInvoice={handleGenerateRishenghuiOrderInvoice}
-            accessToken={rishenghuiAccessToken}
-            onSubmitOrder={handleSubmitLogisticsOrder}
-            onTokenRequired={() => setRishenghuiAuthOpen(true)}
-          />
-        ) : null}
-        {mounted ? (
           <Modal
-            open={tongtuOrderProgress.open}
-            title="通途物流下单"
+            open={logisticsOrderProgress.open}
+            title={`${logisticsOrderProgress.providerName || "物流"}物流下单`}
             footer={null}
             closable={false}
             maskClosable={false}
             centered
           >
             <div className="flex flex-col gap-4 py-2">
-              {tongtuOrderProgress.shipmentNo ? (
+              {logisticsOrderProgress.shipmentNo ? (
                 <div className="text-sm text-slate-500">
-                  货件号：{tongtuOrderProgress.shipmentNo}
+                  货件号：{logisticsOrderProgress.shipmentNo}
                 </div>
               ) : null}
               <Steps
                 direction="vertical"
-                current={getTongtuOrderProgressCurrent()}
-                items={tongtuOrderSteps.map((item) => ({
+                current={getLogisticsOrderProgressCurrent()}
+                items={logisticsOrderSteps.map((item) => ({
                   title: item.title,
                 }))}
               />
               <Progress
                 percent={Math.round(
-                  ((getTongtuOrderProgressCurrent() + 1) /
-                    tongtuOrderSteps.length) *
+                  ((getLogisticsOrderProgressCurrent() + 1) /
+                    logisticsOrderSteps.length) *
                     100,
                 )}
                 showInfo={false}
