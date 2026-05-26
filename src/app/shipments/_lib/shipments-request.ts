@@ -613,6 +613,37 @@ export async function generateShipmentRishenghuiOrderInvoice(values: {
   };
 }
 
+export async function generateShipmentTongtuOrderInvoice(values: {
+  shipmentId: string;
+  shipmentNo?: string | null;
+}) {
+  const response = await fetch("/api/shipments/tongtu-order-invoice", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(values),
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        data?: ShipmentRecord;
+        fileUrl?: string;
+        fileName?: string;
+        error?: string;
+      }
+    | null;
+
+  if (!response.ok || !payload?.fileUrl || !payload.fileName) {
+    throw new Error(payload?.error || "通途下单发票生成失败");
+  }
+
+  return {
+    record: payload.data,
+    fileUrl: payload.fileUrl,
+    fileName: payload.fileName,
+  };
+}
+
 export async function getRishenghuiAccessToken(values: {
   code: string;
   uuid: string;
@@ -666,6 +697,68 @@ export async function submitRishenghuiOrderInvoice(values: {
   return {
     record: payload?.data,
     packno: payload?.packno?.trim() || "",
+  };
+}
+
+export async function submitTongtuOrderInvoice(values: { shipmentId: string }) {
+  const response = await fetch("/api/shipments/tongtu-order-submit", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(values),
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        data?: ShipmentRecord;
+        trackingNo?: string;
+        waybillId?: string;
+        taskId?: string;
+        error?: string;
+      }
+    | null;
+
+  if (!response.ok) {
+    throw new Error(payload?.error || "通途导入运单失败");
+  }
+
+  return {
+    record: payload?.data,
+    packno: payload?.trackingNo?.trim() || "",
+    waybillId: payload?.waybillId?.trim() || "",
+    taskId: payload?.taskId?.trim() || "",
+  };
+}
+
+export async function generateShipmentTongtuLogisticsBoxMark(values: {
+  shipmentId: string;
+}) {
+  const response = await fetch("/api/shipments/tongtu-logistics-box-mark", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(values),
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        data?: ShipmentRecord;
+        fileurl?: string;
+        trackingNo?: string;
+        waybillId?: string;
+        error?: string;
+      }
+    | null;
+
+  if (!response.ok || !payload?.data) {
+    throw new Error(payload?.error || "通途物流箱唛生成失败");
+  }
+
+  return {
+    record: payload.data,
+    fileurl: payload.fileurl?.trim() || "",
+    trackingNo: payload.trackingNo?.trim() || "",
+    waybillId: payload.waybillId?.trim() || "",
   };
 }
 

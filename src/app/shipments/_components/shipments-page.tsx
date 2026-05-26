@@ -3,7 +3,7 @@
 import type { ActionType } from "@ant-design/pro-components";
 import { ExclamationCircleFilled } from "@ant-design/icons";
 import type { FormInstance } from "antd";
-import { App as AntApp, ConfigProvider, Modal, message } from "antd";
+import { App as AntApp, ConfigProvider, Modal, Progress, Steps, message } from "antd";
 import zhCN from "antd/locale/zh_CN";
 import dayjs from "dayjs";
 import "dayjs/locale/zh-cn";
@@ -23,8 +23,11 @@ import {
   deleteShipmentRecord,
   generateShipmentLogisticsBoxMark,
   generateShipmentRishenghuiOrderInvoice,
+  generateShipmentTongtuLogisticsBoxMark,
+  generateShipmentTongtuOrderInvoice,
   getRishenghuiAccessToken,
   submitRishenghuiOrderInvoice,
+  submitTongtuOrderInvoice,
   updateShipmentDeliveryStatus,
   updateShipmentRelabelStatus,
 } from "../_lib/shipments-request";
@@ -39,6 +42,17 @@ type ShipmentsPageProps = {
   embedded?: boolean;
 };
 
+type TongtuOrderStepKey = "invoice" | "order" | "boxMark";
+
+const tongtuOrderSteps: Array<{
+  key: TongtuOrderStepKey;
+  title: string;
+}> = [
+  { key: "invoice", title: "发票生成中" },
+  { key: "order", title: "物流下单中" },
+  { key: "boxMark", title: "箱唛生成中" },
+];
+
 dayjs.locale("zh-cn");
 
 export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) {
@@ -46,13 +60,13 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
   const [mounted, setMounted] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const [rishenghuiOrderOpen, setRishenghuiOrderOpen] = useState(false);
+  const [logisticsOrderOpen, setLogisticsOrderOpen] = useState(false);
   const [rishenghuiAuthOpen, setRishenghuiAuthOpen] = useState(false);
   const [rishenghuiAccessToken, setRishenghuiAccessToken] = useState("");
   const [editingRecord, setEditingRecord] = useState<
     ShipmentRecord | undefined
   >(undefined);
-  const [rishenghuiOrderRecord, setRishenghuiOrderRecord] = useState<
+  const [logisticsOrderRecord, setLogisticsOrderRecord] = useState<
     ShipmentRecord | undefined
   >(undefined);
   const [deletingShipmentId, setDeletingShipmentId] = useState<string | null>(null);
@@ -69,8 +83,17 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
   >(null);
   const [generatingLogisticsBoxMarkId, setGeneratingLogisticsBoxMarkId] =
     useState<string | null>(null);
-  const [submittingRishenghuiOrderId, setSubmittingRishenghuiOrderId] =
+  const [submittingLogisticsOrderId, setSubmittingLogisticsOrderId] =
     useState<string | null>(null);
+  const [tongtuOrderProgress, setTongtuOrderProgress] = useState<{
+    open: boolean;
+    shipmentNo: string;
+    step: TongtuOrderStepKey;
+  }>({
+    open: false,
+    shipmentNo: "",
+    step: "invoice",
+  });
   const [storeOptions, setStoreOptions] = useState<StoreOption[]>([]);
   const [productOptions, setProductOptions] = useState<ProductShipmentOption[]>(
     [],
@@ -170,8 +193,17 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
     return generatingLogisticsBoxMarkId === record.id;
   }
 
-  function isSubmittingRishenghuiOrder(record: ShipmentRecord) {
-    return submittingRishenghuiOrderId === record.id;
+  function isSubmittingLogisticsOrder(record: ShipmentRecord) {
+    return submittingLogisticsOrderId === record.id;
+  }
+
+  function getTongtuOrderProgressCurrent() {
+    return Math.max(
+      0,
+      tongtuOrderSteps.findIndex(
+        (item) => item.key === tongtuOrderProgress.step,
+      ),
+    );
   }
 
   async function handleChangeDeliveryStatus(
@@ -364,45 +396,144 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
     }
   }
 
+  async function handleGenerateTongtuLogisticsBoxMark(record: ShipmentRecord) {
+    try {
+      setGeneratingLogisticsBoxMarkId(record.id);
+      const result = await generateShipmentTongtuLogisticsBoxMark({
+        shipmentId: record.id,
+      });
+      messageApi.success(
+        `${result.trackingNo || record.tracking_no?.trim() || ""}箱唛生成成功`,
+      );
+      tableActionRef.current?.reload();
+    } catch (error) {
+      messageApi.error(
+        error instanceof Error ? error.message : "通途物流箱唛生成失败",
+      );
+    } finally {
+      setGeneratingLogisticsBoxMarkId(null);
+    }
+  }
+
   async function handleGenerateRishenghuiOrderInvoice(values: {
     record: ShipmentRecord;
   }) {
-    const result = await generateShipmentRishenghuiOrderInvoice({
+    const logisticsProviderName = values.record.logistics_provider?.trim();
+    const generator =
+      logisticsProviderName === "通途"
+        ? generateShipmentTongtuOrderInvoice
+        : generateShipmentRishenghuiOrderInvoice;
+    const result = await generator({
       shipmentId: values.record.id,
       shipmentNo: values.record.shipment_no,
     });
-    setRishenghuiOrderRecord(result.record ?? values.record);
+    setLogisticsOrderRecord(result.record ?? values.record);
     tableActionRef.current?.reload();
     return result;
   }
 
-  async function handleSubmitRishenghuiOrder(values: {
-    shipmentId: string;
-    fileUrl: string;
-    fileName: string;
-    accessToken: string;
-  }) {
-    setSubmittingRishenghuiOrderId(values.shipmentId);
-    setRishenghuiOrderOpen(false);
-    setRishenghuiOrderRecord(undefined);
+  async function handleTongtuLogisticsOrder(record: ShipmentRecord) {
+    const shipmentNo = record.shipment_no?.trim() || "";
 
     try {
-      const result = await submitRishenghuiOrderInvoice(values);
+      setSubmittingLogisticsOrderId(record.id);
+      setTongtuOrderProgress({
+        open: true,
+        shipmentNo,
+        step: "invoice",
+      });
+
+      await generateShipmentTongtuOrderInvoice({
+        shipmentId: record.id,
+        shipmentNo: record.shipment_no,
+      });
+      tableActionRef.current?.reload();
+
+      setTongtuOrderProgress({
+        open: true,
+        shipmentNo,
+        step: "order",
+      });
+      const orderResult = await submitTongtuOrderInvoice({
+        shipmentId: record.id,
+      });
+      tableActionRef.current?.reload();
+
+      setTongtuOrderProgress({
+        open: true,
+        shipmentNo,
+        step: "boxMark",
+      });
+      const boxMarkResult = await generateShipmentTongtuLogisticsBoxMark({
+        shipmentId: record.id,
+      });
+      const trackingNo =
+        boxMarkResult.trackingNo ||
+        orderResult.packno ||
+        boxMarkResult.record?.tracking_no?.trim() ||
+        "";
+
+      messageApi.success(
+        trackingNo
+          ? `${trackingNo}物流下单成功，箱唛已生成`
+          : "通途物流下单成功，箱唛已生成",
+      );
+      tableActionRef.current?.reload();
+    } catch (error) {
+      const description =
+        error instanceof Error ? error.message : "通途物流下单失败";
+      messageApi.error(description);
+    } finally {
+      setTongtuOrderProgress((previous) => ({
+        ...previous,
+        open: false,
+      }));
+      setSubmittingLogisticsOrderId(null);
+    }
+  }
+
+  async function handleSubmitLogisticsOrder(values: {
+    shipmentId: string;
+    fileUrl?: string;
+    fileName?: string;
+    accessToken?: string;
+  }) {
+    const logisticsProviderName = logisticsOrderRecord?.logistics_provider?.trim();
+    setSubmittingLogisticsOrderId(values.shipmentId);
+    setLogisticsOrderOpen(false);
+    setLogisticsOrderRecord(undefined);
+
+    try {
+      const result =
+        logisticsProviderName === "通途"
+          ? await submitTongtuOrderInvoice({
+              shipmentId: values.shipmentId,
+            })
+          : await submitRishenghuiOrderInvoice({
+              shipmentId: values.shipmentId,
+              fileUrl: values.fileUrl || "",
+              fileName: values.fileName || "",
+              accessToken: values.accessToken || "",
+            });
       tableActionRef.current?.reload();
       return result;
     } catch (error) {
-      setSubmittingRishenghuiOrderId(null);
-      setRishenghuiAccessToken("");
-      Modal.warning({
-        title: "日升辉Token可能已过期",
-        content:
-          error instanceof Error
-            ? error.message
-            : "请重新获取日升辉Token后再操作",
-        okText: "去获取Token",
-        onOk: () => setRishenghuiAuthOpen(true),
-      });
+      if (logisticsProviderName !== "通途") {
+        setRishenghuiAccessToken("");
+        Modal.warning({
+          title: "日升辉Token可能已过期",
+          content:
+            error instanceof Error
+              ? error.message
+              : "请重新获取日升辉Token后再操作",
+          okText: "去获取Token",
+          onOk: () => setRishenghuiAuthOpen(true),
+        });
+      }
+
       throw error;
+    } finally {
+      setSubmittingLogisticsOrderId(null);
     }
   }
 
@@ -442,6 +573,11 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
                 onOpenRishenghuiAuth={() => setRishenghuiAuthOpen(true)}
                 hasRishenghuiAccessToken={Boolean(rishenghuiAccessToken)}
                 onGenerateLogisticsBoxMark={(record) => {
+                  if (record.logistics_provider?.trim() === "通途") {
+                    void handleGenerateTongtuLogisticsBoxMark(record);
+                    return;
+                  }
+
                   const token = rishenghuiAccessToken.trim();
                   if (!token) {
                     Modal.warning({
@@ -459,9 +595,14 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
                     accessToken: token,
                   });
                 }}
-                onRishenghuiOrder={(record) => {
-                  setRishenghuiOrderRecord(record);
-                  setRishenghuiOrderOpen(true);
+                onLogisticsOrder={(record) => {
+                  if (record.logistics_provider?.trim() === "通途") {
+                    void handleTongtuLogisticsOrder(record);
+                    return;
+                  }
+
+                  setLogisticsOrderRecord(record);
+                  setLogisticsOrderOpen(true);
                 }}
                 onEdit={(record) => {
                   setEditingRecord(record);
@@ -489,7 +630,7 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
                 isDeleting={isDeleting}
                 isGeneratingCartonLabel={isGeneratingCartonLabel}
                 isGeneratingLogisticsBoxMark={isGeneratingLogisticsBoxMark}
-                isSubmittingRishenghuiOrder={isSubmittingRishenghuiOrder}
+                isSubmittingLogisticsOrder={isSubmittingLogisticsOrder}
                 onStartGenerateCartonLabel={(record) =>
                   setGeneratingCartonLabelId(record.id)
                 }
@@ -508,21 +649,55 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
         {mounted ? (
           <ShipmentRishenghuiOrderModal
             key={
-              rishenghuiOrderRecord
-                ? `rishenghui-order-${rishenghuiOrderRecord.id}`
-                : "rishenghui-order-closed"
+              logisticsOrderRecord
+                ? `logistics-order-${logisticsOrderRecord.id}`
+                : "logistics-order-closed"
             }
-            open={rishenghuiOrderOpen}
-            record={rishenghuiOrderRecord}
+            open={logisticsOrderOpen}
+            record={logisticsOrderRecord}
+            providerName={logisticsOrderRecord?.logistics_provider ?? undefined}
             onClose={() => {
-              setRishenghuiOrderOpen(false);
-              setRishenghuiOrderRecord(undefined);
+              setLogisticsOrderOpen(false);
+              setLogisticsOrderRecord(undefined);
             }}
             onGenerateInvoice={handleGenerateRishenghuiOrderInvoice}
             accessToken={rishenghuiAccessToken}
-            onSubmitOrder={handleSubmitRishenghuiOrder}
+            onSubmitOrder={handleSubmitLogisticsOrder}
             onTokenRequired={() => setRishenghuiAuthOpen(true)}
           />
+        ) : null}
+        {mounted ? (
+          <Modal
+            open={tongtuOrderProgress.open}
+            title="通途物流下单"
+            footer={null}
+            closable={false}
+            maskClosable={false}
+            centered
+          >
+            <div className="flex flex-col gap-4 py-2">
+              {tongtuOrderProgress.shipmentNo ? (
+                <div className="text-sm text-slate-500">
+                  货件号：{tongtuOrderProgress.shipmentNo}
+                </div>
+              ) : null}
+              <Steps
+                direction="vertical"
+                current={getTongtuOrderProgressCurrent()}
+                items={tongtuOrderSteps.map((item) => ({
+                  title: item.title,
+                }))}
+              />
+              <Progress
+                percent={Math.round(
+                  ((getTongtuOrderProgressCurrent() + 1) /
+                    tongtuOrderSteps.length) *
+                    100,
+                )}
+                showInfo={false}
+              />
+            </div>
+          </Modal>
         ) : null}
         {mounted ? (
           <RishenghuiAuthModal

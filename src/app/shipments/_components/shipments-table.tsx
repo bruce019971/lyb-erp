@@ -42,7 +42,7 @@ type ShipmentsTableProps = {
   onOpenRishenghuiAuth: () => void;
   hasRishenghuiAccessToken: boolean;
   onGenerateLogisticsBoxMark: (record: ShipmentRecord) => void;
-  onRishenghuiOrder: (record: ShipmentRecord) => void;
+  onLogisticsOrder: (record: ShipmentRecord) => void;
   onEdit: (record: ShipmentRecord) => void;
   onDelete: (record: ShipmentRecord) => void;
   onStartDeliveryStatusEdit: (record: ShipmentRecord) => void;
@@ -58,7 +58,7 @@ type ShipmentsTableProps = {
   isDeleting: (record: ShipmentRecord) => boolean;
   isGeneratingCartonLabel: (record: ShipmentRecord) => boolean;
   isGeneratingLogisticsBoxMark: (record: ShipmentRecord) => boolean;
-  isSubmittingRishenghuiOrder: (record: ShipmentRecord) => boolean;
+  isSubmittingLogisticsOrder: (record: ShipmentRecord) => boolean;
   onStartGenerateCartonLabel: (record: ShipmentRecord) => void;
   onFinishGenerateCartonLabel: () => void;
   storeOptions: StoreOption[];
@@ -105,7 +105,7 @@ export default function ShipmentsTable({
   onOpenRishenghuiAuth,
   hasRishenghuiAccessToken,
   onGenerateLogisticsBoxMark,
-  onRishenghuiOrder,
+  onLogisticsOrder,
   onEdit,
   onDelete,
   onStartDeliveryStatusEdit,
@@ -121,7 +121,7 @@ export default function ShipmentsTable({
   isDeleting,
   isGeneratingCartonLabel,
   isGeneratingLogisticsBoxMark,
-  isSubmittingRishenghuiOrder,
+  isSubmittingLogisticsOrder,
   onStartGenerateCartonLabel,
   onFinishGenerateCartonLabel,
   storeOptions,
@@ -279,7 +279,7 @@ export default function ShipmentsTable({
         handleDownloadLogisticsBoxMark,
         handleGenerateCartonLabel,
         onGenerateLogisticsBoxMark,
-        onRishenghuiOrder,
+        onLogisticsOrder,
         onDelete,
         onStartDeliveryStatusEdit,
         onCancelDeliveryStatusEdit,
@@ -294,7 +294,7 @@ export default function ShipmentsTable({
         isDeleting,
         isGeneratingCartonLabel,
         isGeneratingLogisticsBoxMark,
-        isSubmittingRishenghuiOrder,
+        isSubmittingLogisticsOrder,
         storeOptions,
         productOptions,
         logisticsOptions,
@@ -311,7 +311,7 @@ export default function ShipmentsTable({
       handleGenerateCartonLabel,
       isGeneratingCartonLabel,
       isGeneratingLogisticsBoxMark,
-      isSubmittingRishenghuiOrder,
+      isSubmittingLogisticsOrder,
       onCancelDeliveryStatusEdit,
       onCancelRelabelEdit,
       onChangeDeliveryStatus,
@@ -319,7 +319,7 @@ export default function ShipmentsTable({
       onDelete,
       onEdit,
       onGenerateLogisticsBoxMark,
-      onRishenghuiOrder,
+      onLogisticsOrder,
       onStartDeliveryStatusEdit,
       onStartRelabelEdit,
       productOptions,

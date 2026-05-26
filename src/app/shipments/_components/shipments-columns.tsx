@@ -63,7 +63,7 @@ export function getShipmentColumns(
   onDownloadLogisticsBoxMark: (record: ShipmentRecord) => void,
   onGenerateCartonLabel: (record: ShipmentRecord) => void,
   onGenerateLogisticsBoxMark: (record: ShipmentRecord) => void,
-  onRishenghuiOrder: (record: ShipmentRecord) => void,
+  onLogisticsOrder: (record: ShipmentRecord) => void,
   onDelete: (record: ShipmentRecord) => void,
   onStartDeliveryStatusEdit: (record: ShipmentRecord) => void,
   onCancelDeliveryStatusEdit: () => void,
@@ -78,7 +78,7 @@ export function getShipmentColumns(
   isDeleting: (record: ShipmentRecord) => boolean,
   isGeneratingCartonLabel: (record: ShipmentRecord) => boolean,
   isGeneratingLogisticsBoxMark: (record: ShipmentRecord) => boolean,
-  isSubmittingRishenghuiOrder: (record: ShipmentRecord) => boolean,
+  isSubmittingLogisticsOrder: (record: ShipmentRecord) => boolean,
   storeOptions: StoreOption[],
   productOptions: ProductShipmentOption[],
   logisticsOptions: LogisticsProviderOption[],
@@ -493,7 +493,11 @@ export function getShipmentColumns(
         const hasLogisticsBoxMarkUrl = Boolean(
           record.logistics_box_mark_url?.trim(),
         );
-        const isRishenghui = record.logistics_provider?.trim() === "日升辉";
+        const logisticsProviderName = record.logistics_provider?.trim();
+        const canGenerateLogisticsBoxMark =
+          logisticsProviderName === "日升辉" || logisticsProviderName === "通途";
+        const canOpenLogisticsOrder =
+          logisticsProviderName === "日升辉" || logisticsProviderName === "通途";
 
         return [
           !hasCartonLabelUrl ? (
@@ -507,18 +511,18 @@ export function getShipmentColumns(
               />
             </Tooltip>
           ) : null,
-          isRishenghui && !hasTrackingNo ? (
-            <Tooltip key="rishenghui-order" title="物流下单">
+          canOpenLogisticsOrder && !hasTrackingNo ? (
+            <Tooltip key="logistics-order" title="物流下单">
               <Button
                 type="text"
                 size="small"
                 icon={<ShoppingCartOutlined />}
-                loading={isSubmittingRishenghuiOrder(record)}
-                onClick={() => onRishenghuiOrder(record)}
+                loading={isSubmittingLogisticsOrder(record)}
+                onClick={() => onLogisticsOrder(record)}
               />
             </Tooltip>
           ) : null,
-          isRishenghui && hasTrackingNo && !hasLogisticsBoxMarkUrl ? (
+          canGenerateLogisticsBoxMark && hasTrackingNo && !hasLogisticsBoxMarkUrl ? (
             <Tooltip key="generate-logistics-box-mark" title="生成物流箱唛">
               <Button
                 type="text"

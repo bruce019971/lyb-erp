@@ -9,6 +9,7 @@ import type { ShipmentRecord } from "../_lib/shipments";
 type ShipmentRishenghuiOrderModalProps = {
   open: boolean;
   record?: ShipmentRecord;
+  providerName?: string;
   onClose: () => void;
   onGenerateInvoice: (values: {
     record: ShipmentRecord;
@@ -20,12 +21,13 @@ type ShipmentRishenghuiOrderModalProps = {
   accessToken?: string;
   onSubmitOrder: (values: {
     shipmentId: string;
-    fileUrl: string;
-    fileName: string;
-    accessToken: string;
+    fileUrl?: string;
+    fileName?: string;
+    accessToken?: string;
   }) => Promise<{
     record?: ShipmentRecord;
-    packno: string;
+    packno?: string;
+    taskId?: string;
   }>;
   onTokenRequired: () => void;
 };
@@ -36,12 +38,18 @@ function getInvoiceFileFromRecord(record?: ShipmentRecord) {
 
   return {
     fileUrl,
-    fileName: `RSH_${record.shipment_no?.trim() || record.id}_发票.xlsx`,
+    fileName: `${getInvoiceFilePrefix(record)}_${
+      record.shipment_no?.trim() || record.id
+    }_发票.xlsx`,
   };
 }
 
+function getInvoiceFilePrefix(record?: ShipmentRecord) {
+  return record?.logistics_provider?.trim() === "通途" ? "TT" : "RSH";
+}
+
 async function downloadFile(fileUrl: string, fileName: string) {
-  const response = await fetch(fileUrl);
+  const response = await fetch(fileUrl, { cache: "no-store" });
   if (!response.ok) {
     throw new Error("下单发票文件读取失败");
   }
@@ -69,6 +77,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 export default function ShipmentRishenghuiOrderModal({
   open,
   record,
+  providerName,
   onClose,
   onGenerateInvoice,
   accessToken,
@@ -83,7 +92,11 @@ export default function ShipmentRishenghuiOrderModal({
   } | null>(() => getInvoiceFileFromRecord(record));
   const [invoiceDownloading, setInvoiceDownloading] = useState(false);
   const [orderSubmitting, setOrderSubmitting] = useState(false);
-  const canSubmitOrder = Boolean(invoiceFile);
+  const normalizedProviderName =
+    providerName?.trim() || record?.logistics_provider?.trim() || "";
+  const canSubmitOrder =
+    (normalizedProviderName === "日升辉" || normalizedProviderName === "通途") &&
+    Boolean(invoiceFile);
 
   function resetState() {
     setInvoiceGenerating(false);
@@ -147,8 +160,12 @@ export default function ShipmentRishenghuiOrderModal({
       return;
     }
 
+    const isRishenghui = normalizedProviderName === "日升辉";
+    const isTongtu = normalizedProviderName === "通途";
+    if (!isRishenghui && !isTongtu) return;
+
     const token = accessToken?.trim();
-    if (!token) {
+    if (isRishenghui && !token) {
       Modal.warning({
         title: "请先获取日升辉Token",
         content: "当前没有可用的日升辉Token，请先在列表右上角获取Token。",
@@ -161,13 +178,19 @@ export default function ShipmentRishenghuiOrderModal({
     try {
       setOrderSubmitting(true);
 
-      await onSubmitOrder({
+      const result = await onSubmitOrder({
         shipmentId: record.id,
         fileUrl: invoiceFile.fileUrl,
         fileName: invoiceFile.fileName,
-        accessToken: token,
+        accessToken: token || undefined,
       });
-      message.success(`${record.shipment_no?.trim() || record.id}下单成功`);
+      message.success(
+        result.packno
+          ? `${record.shipment_no?.trim() || record.id}下单成功`
+          : result.taskId
+            ? `${record.shipment_no?.trim() || record.id}导入任务已提交`
+            : `${record.shipment_no?.trim() || record.id}下单成功`,
+      );
       handleClose();
     } catch (error) {
       Modal.error({
@@ -201,16 +224,22 @@ export default function ShipmentRishenghuiOrderModal({
       maskClosable={false}
       onCancel={handleClose}
       footer={
-        <div className="flex justify-end">
-          <Button
-            type="primary"
-            disabled={!canSubmitOrder}
-            loading={orderSubmitting}
-            onClick={() => void handleSubmitOrder()}
-          >
-            下单
-          </Button>
-        </div>
+        normalizedProviderName === "日升辉" || normalizedProviderName === "通途" ? (
+          <div className="flex justify-end">
+            <Button
+              type="primary"
+              disabled={!canSubmitOrder}
+              loading={orderSubmitting}
+              onClick={() => void handleSubmitOrder()}
+            >
+              下单
+            </Button>
+          </div>
+        ) : (
+          <div className="flex justify-end">
+            <Button onClick={handleClose}>关闭</Button>
+          </div>
+        )
       }
     >
       <div className="flex flex-col gap-4">
@@ -219,11 +248,17 @@ export default function ShipmentRishenghuiOrderModal({
           <Typography.Text>{record?.shipment_no?.trim() || "-"}</Typography.Text>
         </div>
         <div className="flex items-center gap-3">
-          <label className="w-16 shrink-0 text-sm text-slate-700">Token</label>
-          <Typography.Text type={accessToken ? "success" : "danger"}>
-            {accessToken ? "已获取" : "未获取"}
-          </Typography.Text>
+          <label className="w-16 shrink-0 text-sm text-slate-700">物流商</label>
+          <Typography.Text>{normalizedProviderName || "-"}</Typography.Text>
         </div>
+        {normalizedProviderName === "日升辉" ? (
+          <div className="flex items-center gap-3">
+            <label className="w-16 shrink-0 text-sm text-slate-700">Token</label>
+            <Typography.Text type={accessToken ? "success" : "danger"}>
+              {accessToken ? "已获取" : "未获取"}
+            </Typography.Text>
+          </div>
+        ) : null}
         <div className="flex items-center gap-3">
           <Button
             icon={<FileExcelOutlined />}
