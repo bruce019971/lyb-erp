@@ -15,7 +15,17 @@ export type TongtuWaybillQueryResult = {
   trackingNo: string;
   waybillId: string;
   row?: unknown;
+  matchedCount?: number;
+  matchedShipmentNo?: boolean;
   error?: string;
+};
+
+export type TongtuVolumeBox = {
+  packno: string;
+  width: number | null;
+  length: number | null;
+  height: number | null;
+  yjf_weit: number | null;
 };
 
 const DEFAULT_TONGTU_BASE_URL = "https://szttgj.itdida.com";
@@ -277,6 +287,351 @@ function normalizeTongtuFieldKey(key: string) {
   return normalized.endsWith("normalize")
     ? normalized.slice(0, -"normalize".length)
     : normalized;
+}
+
+function parseTongtuNumber(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+
+  if (typeof value !== "string" || !value.trim()) return null;
+
+  const trimmed = value.trim().replace(/,/g, "");
+  const directValue = Number(trimmed);
+
+  if (Number.isFinite(directValue)) return directValue;
+
+  const matchedValue = trimmed.match(/-?\d+(?:\.\d+)?/);
+  if (!matchedValue) return null;
+
+  const numericValue = Number(matchedValue[0]);
+  return Number.isFinite(numericValue) ? numericValue : null;
+}
+
+function roundTongtuNumber(value: number, digits = 6) {
+  const factor = 10 ** digits;
+  return Math.round(value * factor) / factor;
+}
+
+function getTongtuNumberField(
+  record: Record<string, unknown>,
+  matcher: (key: string) => boolean,
+) {
+  for (const [key, value] of Object.entries(record)) {
+    if (!matcher(key)) continue;
+
+    const numericValue = parseTongtuNumber(value);
+    if (numericValue !== null) return numericValue;
+  }
+
+  return null;
+}
+
+function getTongtuTextField(
+  record: Record<string, unknown>,
+  matcher: (key: string) => boolean,
+) {
+  for (const [key, value] of Object.entries(record)) {
+    if (!matcher(key)) continue;
+
+    const text = normalizeTrackingValue(value);
+    if (text) return text;
+  }
+
+  return "";
+}
+
+function parseTongtuDimensionsText(value: unknown) {
+  const text = normalizeTrackingValue(value);
+  if (!text) return null;
+
+  const matchedValues = text.match(/\d+(?:\.\d+)?/g);
+  if (!matchedValues || matchedValues.length < 3) return null;
+
+  const [length, width, height] = matchedValues
+    .slice(0, 3)
+    .map((item) => Number(item));
+
+  if (
+    !Number.isFinite(length) ||
+    !Number.isFinite(width) ||
+    !Number.isFinite(height)
+  ) {
+    return null;
+  }
+
+  return {
+    length,
+    width,
+    height,
+  };
+}
+
+function isReceivedChargeWeightFieldName(key: string) {
+  const normalized = normalizeTongtuFieldKey(key);
+  return (
+    [
+      "shouhuojifeizhong",
+      "shouhuojifeizhongliang",
+      "receivedchargeweight",
+      "receivechargeweight",
+      "receivingchargeweight",
+      "receiptchargeweight",
+      "receivedbillingweight",
+      "receivebillingweight",
+      "receivingbillingweight",
+      "receiptbillingweight",
+    ].includes(normalized) ||
+    key.includes("收货计费重")
+  );
+}
+
+function isTongtuBoxNoFieldName(key: string) {
+  const normalized = normalizeTongtuFieldKey(key);
+  return (
+    [
+      "packno",
+      "packnumber",
+      "boxno",
+      "boxnumber",
+      "cartonno",
+      "cartonnumber",
+      "xianghao",
+      "xiangzihao",
+    ].includes(normalized) ||
+    key.includes("箱号") ||
+    key.includes("箱唛号") ||
+    key.includes("包裹号")
+  );
+}
+
+function isTongtuLengthFieldName(key: string) {
+  if (isTongtuDimensionTextFieldName(key)) return false;
+
+  const normalized = normalizeTongtuFieldKey(key);
+  return (
+    [
+      "length",
+      "boxlength",
+      "cartonlength",
+      "goodslength",
+      "chang",
+      "changdu",
+    ].includes(normalized) ||
+    key.includes("长")
+  );
+}
+
+function isTongtuWidthFieldName(key: string) {
+  if (isTongtuDimensionTextFieldName(key)) return false;
+
+  const normalized = normalizeTongtuFieldKey(key);
+  return (
+    [
+      "width",
+      "boxwidth",
+      "cartonwidth",
+      "goodswidth",
+      "kuan",
+      "kuandu",
+    ].includes(normalized) ||
+    key.includes("宽")
+  );
+}
+
+function isTongtuHeightFieldName(key: string) {
+  if (isTongtuDimensionTextFieldName(key)) return false;
+
+  const normalized = normalizeTongtuFieldKey(key);
+  return (
+    [
+      "height",
+      "boxheight",
+      "cartonheight",
+      "goodsheight",
+      "gao",
+      "gaodu",
+    ].includes(normalized) ||
+    key.includes("高")
+  );
+}
+
+function isTongtuDimensionTextFieldName(key: string) {
+  const normalized = normalizeTongtuFieldKey(key);
+  return (
+    [
+      "size",
+      "boxsize",
+      "cartonsize",
+      "dimension",
+      "dimensions",
+      "boxdimension",
+      "boxdimensions",
+      "measure",
+      "guige",
+    ].includes(normalized) ||
+    key.includes("尺寸") ||
+    key.includes("规格") ||
+    key.includes("长宽高")
+  );
+}
+
+function isTongtuSingleBoxVolumeFieldName(key: string) {
+  const normalized = normalizeTongtuFieldKey(key);
+  return (
+    [
+      "yjfweit",
+      "singlevolume",
+      "boxvolume",
+      "cartonvolume",
+      "volume",
+      "cbm",
+      "fangshu",
+      "tiji",
+      "jitiji",
+      "jifeizhong",
+    ].includes(normalized) ||
+    isReceivedChargeWeightFieldName(key) ||
+    key.includes("单箱方数") ||
+    key.includes("方数") ||
+    key.includes("体积")
+  );
+}
+
+function getTongtuDimensionText(record: Record<string, unknown>) {
+  for (const [key, value] of Object.entries(record)) {
+    if (!isTongtuDimensionTextFieldName(key)) continue;
+
+    const dimensions = parseTongtuDimensionsText(value);
+    if (dimensions) return dimensions;
+  }
+
+  return null;
+}
+
+function normalizeTongtuVolumeBox(
+  record: Record<string, unknown>,
+): TongtuVolumeBox | null {
+  const dimensions = getTongtuDimensionText(record);
+  const length =
+    getTongtuNumberField(record, isTongtuLengthFieldName) ??
+    dimensions?.length ??
+    null;
+  const width =
+    getTongtuNumberField(record, isTongtuWidthFieldName) ??
+    dimensions?.width ??
+    null;
+  const height =
+    getTongtuNumberField(record, isTongtuHeightFieldName) ??
+    dimensions?.height ??
+    null;
+  const calculatedVolume =
+    length !== null && width !== null && height !== null
+      ? roundTongtuNumber((length * width * height) / 1_000_000)
+      : null;
+  const singleBoxVolume =
+    getTongtuNumberField(record, isTongtuSingleBoxVolumeFieldName) ??
+    calculatedVolume;
+  const packno = getTongtuTextField(record, isTongtuBoxNoFieldName);
+
+  if (
+    length === null &&
+    width === null &&
+    height === null &&
+    singleBoxVolume === null
+  ) {
+    return null;
+  }
+
+  return {
+    packno,
+    width,
+    length,
+    height,
+    yjf_weit:
+      singleBoxVolume === null ? null : roundTongtuNumber(singleBoxVolume),
+  };
+}
+
+function dedupeTongtuVolumeBoxes(boxes: TongtuVolumeBox[]) {
+  const seen = new Set<string>();
+  const result: TongtuVolumeBox[] = [];
+
+  boxes.forEach((box) => {
+    const key = [
+      box.packno,
+      box.length,
+      box.width,
+      box.height,
+      box.yjf_weit,
+    ].join("|");
+
+    if (seen.has(key)) return;
+
+    seen.add(key);
+    result.push(box);
+  });
+
+  return result;
+}
+
+export function extractTongtuVolumeBoxes(
+  value: unknown,
+  depth = 0,
+): TongtuVolumeBox[] {
+  if (!value || depth > 6) return [];
+
+  if (Array.isArray(value)) {
+    return dedupeTongtuVolumeBoxes(
+      value.flatMap((item) => extractTongtuVolumeBoxes(item, depth + 1)),
+    );
+  }
+
+  if (typeof value !== "object") return [];
+
+  const record = value as Record<string, unknown>;
+  const nestedBoxes = Object.values(record).flatMap((item) =>
+    extractTongtuVolumeBoxes(item, depth + 1),
+  );
+
+  if (nestedBoxes.length > 0) {
+    return dedupeTongtuVolumeBoxes(nestedBoxes);
+  }
+
+  const box = normalizeTongtuVolumeBox(record);
+  return box ? [box] : [];
+}
+
+export function extractTongtuReceivedChargeWeight(
+  value: unknown,
+  depth = 0,
+): number | null {
+  if (!value || depth > 6) return null;
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const numericValue = extractTongtuReceivedChargeWeight(item, depth + 1);
+      if (numericValue !== null) return numericValue;
+    }
+
+    return null;
+  }
+
+  if (typeof value !== "object") return null;
+
+  const record = value as Record<string, unknown>;
+
+  for (const [key, item] of Object.entries(record)) {
+    if (!isReceivedChargeWeightFieldName(key)) continue;
+
+    const numericValue = parseTongtuNumber(item);
+    if (numericValue !== null) return numericValue;
+  }
+
+  for (const item of Object.values(record)) {
+    const numericValue = extractTongtuReceivedChargeWeight(item, depth + 1);
+    if (numericValue !== null) return numericValue;
+  }
+
+  return null;
 }
 
 function isTrackingFieldName(key: string) {
@@ -575,6 +930,9 @@ function extractMatchingTongtuWaybill(params: {
   shipmentNo: string;
   trackingNo?: string;
 }) {
+  const shipmentNoMatchedRows = params.rows.filter((row) =>
+    recordMatchesShipmentNo(row, params.shipmentNo),
+  );
   const matchedRows = params.rows.filter((row) =>
     rowMatchesIdentifiers(row, params.shipmentNo, params.trackingNo),
   );
@@ -600,14 +958,20 @@ function extractMatchingTongtuWaybill(params: {
         row,
         trackingNo: effectiveTrackingNo,
         waybillId,
+        matchedCount: shipmentNoMatchedRows.length || matchedRows.length,
+        matchedShipmentNo: recordMatchesShipmentNo(row, params.shipmentNo),
       };
     }
   }
 
   return {
-    row: undefined,
+    row: sortedRows[0],
     trackingNo: "",
     waybillId: "",
+    matchedCount: shipmentNoMatchedRows.length || matchedRows.length,
+    matchedShipmentNo: sortedRows[0]
+      ? recordMatchesShipmentNo(sortedRows[0], params.shipmentNo)
+      : false,
   };
 }
 
@@ -689,6 +1053,7 @@ export async function queryTongtuWaybill(params: {
   websocketToken: string;
   visitorId: string;
   logScope: string;
+  returnMatchedRowWithoutWaybill?: boolean;
 }): Promise<TongtuWaybillQueryResult> {
   let lastRowCount = 0;
   let lastError = "";
@@ -719,13 +1084,19 @@ export async function queryTongtuWaybill(params: {
         trackingNo: params.trackingNo,
       });
 
-      if (waybill.trackingNo || waybill.waybillId) {
+      if (
+        waybill.trackingNo ||
+        waybill.waybillId ||
+        (params.returnMatchedRowWithoutWaybill && waybill.row)
+      ) {
         return {
           attempts: attempt,
           rowCount: rows.length,
           trackingNo: waybill.trackingNo,
           waybillId: waybill.waybillId,
           row: waybill.row,
+          matchedCount: waybill.matchedCount,
+          matchedShipmentNo: waybill.matchedShipmentNo,
         };
       }
     } catch (error) {
@@ -744,5 +1115,7 @@ export async function queryTongtuWaybill(params: {
     rowCount: lastRowCount,
     trackingNo: "",
     waybillId: "",
+    matchedCount: 0,
+    matchedShipmentNo: false,
   };
 }

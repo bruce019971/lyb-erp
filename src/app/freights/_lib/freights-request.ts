@@ -9,9 +9,25 @@ type FreightRequestParams = {
   pageSize?: number;
 } & Record<string, unknown>;
 
+export type FreightVolumeBox = {
+  packno?: string;
+  width?: number | null;
+  length?: number | null;
+  height?: number | null;
+  yjf_weit?: number | null;
+};
+
 function normalizeMultiSelectValues(value: unknown) {
   if (!Array.isArray(value)) return [];
   return value
+    .map((item) => (typeof item === "string" ? item.trim() : ""))
+    .filter(Boolean);
+}
+
+function normalizeSelectValues(value: unknown) {
+  const values = Array.isArray(value) ? value : [value];
+
+  return values
     .map((item) => (typeof item === "string" ? item.trim() : ""))
     .filter(Boolean);
 }
@@ -44,6 +60,9 @@ export async function requestFreightRecords(params: FreightRequestParams) {
   });
   normalizeMultiSelectValues(params.logistics_provider).forEach((value) => {
     searchParams.append("logistics_provider", value);
+  });
+  normalizeSelectValues(params.bill_issued).forEach((value) => {
+    searchParams.append("bill_issued", value);
   });
 
   const response = await fetch(`/api/freights?${searchParams.toString()}`);
@@ -79,20 +98,25 @@ export async function updateFreightRecord(
   const volume = normalizeNumberValue(values.volume);
   const extraFee = normalizeNumberValue(values.extra_fee);
   const totalFee = normalizeNumberValue(values.total_fee);
+  const requestPayload: Record<string, unknown> = {
+    id,
+    freight_unit_price: freightUnitPrice,
+    volume,
+    extra_fee: extraFee,
+    total_fee: totalFee,
+  };
+  const freightPaidStatus = normalizeTextValue(values.freight_paid_status);
+
+  if (freightPaidStatus) {
+    requestPayload.freight_paid_status = freightPaidStatus;
+  }
 
   const response = await fetch("/api/freights", {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      id,
-      freight_unit_price: freightUnitPrice,
-      volume,
-      extra_fee: extraFee,
-      total_fee: totalFee,
-      freight_paid_status: normalizeTextValue(values.freight_paid_status) ?? "否",
-    }),
+    body: JSON.stringify(requestPayload),
   });
 
   const payload = (await response.json().catch(() => null)) as
@@ -109,5 +133,155 @@ export async function updateFreightRecord(
       payload.data.total_fee,
       payload.data.total_qty,
     ),
+  };
+}
+
+export async function fetchRishenghuiFreightVolume(values: {
+  freightId: string;
+  accessToken: string;
+}) {
+  const response = await fetch("/api/freights/rishenghui-volume", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(values),
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        volume?: number;
+        matchedCount?: number;
+        boxes?: FreightVolumeBox[];
+        error?: string;
+      }
+    | null;
+
+  if (!response.ok || typeof payload?.volume !== "number") {
+    throw new Error(payload?.error || "日升辉方数获取失败");
+  }
+
+  return {
+    volume: payload.volume,
+    matchedCount: payload.matchedCount ?? 0,
+    boxes: payload.boxes ?? [],
+  };
+}
+
+export async function fetchTongtuFreightVolume(values: { freightId: string }) {
+  const response = await fetch("/api/freights/tongtu-volume", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(values),
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        volume?: number;
+        matchedCount?: number;
+        boxes?: FreightVolumeBox[];
+        error?: string;
+      }
+    | null;
+
+  if (!response.ok || typeof payload?.volume !== "number") {
+    throw new Error(payload?.error || "通途方数获取失败");
+  }
+
+  return {
+    volume: payload.volume,
+    matchedCount: payload.matchedCount ?? 0,
+    boxes: payload.boxes ?? [],
+  };
+}
+
+export async function fetchSaleasyFreightVolume(values: { freightId: string }) {
+  const response = await fetch("/api/freights/saleasy-volume", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(values),
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        volume?: number;
+        matchedCount?: number;
+        boxes?: FreightVolumeBox[];
+        error?: string;
+      }
+    | null;
+
+  if (!response.ok || typeof payload?.volume !== "number") {
+    throw new Error(payload?.error || "赛易方数获取失败");
+  }
+
+  return {
+    volume: payload.volume,
+    matchedCount: payload.matchedCount ?? 0,
+    boxes: payload.boxes ?? [],
+  };
+}
+
+export async function fetchRishenghuiFreightBill(values: {
+  freightId: string;
+  accessToken: string;
+}) {
+  const response = await fetch("/api/freights/rishenghui-bill", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(values),
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        billAmount?: number;
+        totalFee?: number;
+        isConsistent?: boolean;
+        matchedCount?: number;
+        error?: string;
+      }
+    | null;
+
+  if (!response.ok || typeof payload?.billAmount !== "number") {
+    throw new Error(payload?.error || "日升辉账单获取失败");
+  }
+
+  return {
+    billAmount: payload.billAmount,
+    totalFee: payload.totalFee,
+    isConsistent: payload.isConsistent ?? false,
+    matchedCount: payload.matchedCount ?? 0,
+  };
+}
+
+export async function fetchSaleasyFreightBill(values: { freightId: string }) {
+  const response = await fetch("/api/freights/saleasy-bill", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(values),
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        billAmount?: number;
+        totalFee?: number;
+        isConsistent?: boolean;
+        matchedCount?: number;
+        error?: string;
+      }
+    | null;
+
+  if (!response.ok || typeof payload?.billAmount !== "number") {
+    throw new Error(payload?.error || "赛易账单获取失败");
+  }
+
+  return {
+    billAmount: payload.billAmount,
+    totalFee: payload.totalFee,
+    isConsistent: payload.isConsistent ?? false,
+    matchedCount: payload.matchedCount ?? 0,
   };
 }

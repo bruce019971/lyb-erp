@@ -181,6 +181,43 @@ td.shipment-delivery-done-cell:hover,
   background: #eaffd0 !important;
 }
 
+.freight-paid-row > td {
+  background: #f8fafc !important;
+  color: #94a3b8 !important;
+}
+
+.freight-paid-row:hover > td {
+  background: #f1f5f9 !important;
+  color: #94a3b8 !important;
+}
+
+.freight-paid-row .ant-typography,
+.freight-paid-row .ant-typography-copy,
+.freight-paid-row .ant-btn,
+.freight-paid-row .ant-btn-link,
+.freight-paid-row .ant-select-selection-item,
+.freight-paid-row a {
+  color: #94a3b8 !important;
+}
+
+.freight-paid-row .ant-tag {
+  border-color: #cbd5e1 !important;
+  background: #f1f5f9 !important;
+  color: #94a3b8 !important;
+}
+
+.freight-unpaid-billed-row > td {
+  font-weight: 600;
+}
+
+.freight-unpaid-billed-row .ant-typography,
+.freight-unpaid-billed-row .ant-btn,
+.freight-unpaid-billed-row .ant-btn-link,
+.freight-unpaid-billed-row .ant-select-selection-item,
+.freight-unpaid-billed-row a {
+  font-weight: 600;
+}
+
 .role-status-group .ant-radio-button-wrapper {
   min-width: 148px;
   height: 56px;

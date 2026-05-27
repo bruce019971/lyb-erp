@@ -41,6 +41,8 @@ export const SALEASY_WAYBILL_LIST_PATH =
   "/api/WarehouseService/WaybillPlan/GetPagedList";
 export const SALEASY_PRINT_WAYBILL_PLAN_PATH =
   "/api/WarehouseService/WaybillPlan/PrintWaybillPlan";
+export const SALEASY_COST_LOG_LIST_PATH =
+  "/api/ProductService/CostLog/GetListPaged";
 
 export function getRequiredText(value: unknown, message: string) {
   const text = getOptionalText(value);

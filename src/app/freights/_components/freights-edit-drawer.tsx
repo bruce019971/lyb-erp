@@ -1,6 +1,6 @@
 "use client";
 
-import { App, Button, Drawer, Form, InputNumber, Select, Space } from "antd";
+import { App, Button, Drawer, Form, InputNumber, Space } from "antd";
 import type { FormProps } from "antd";
 import { useEffect, useState } from "react";
 
@@ -43,7 +43,6 @@ export default function FreightsEditDrawer({
       volume: record.volume,
       extra_fee: record.extra_fee,
       total_fee: record.total_fee,
-      freight_paid_status: record.freight_paid_status ?? "否",
     });
   }, [form, open, record]);
 
@@ -124,15 +123,6 @@ export default function FreightsEditDrawer({
 
         <Form.Item label="总费用" name="total_fee">
           <InputNumber className="!w-full" min={0} precision={2} />
-        </Form.Item>
-
-        <Form.Item label="是否支付" name="freight_paid_status">
-          <Select
-            options={[
-              { label: "否", value: "否" },
-              { label: "是", value: "是" },
-            ]}
-          />
         </Form.Item>
       </Form>
     </Drawer>

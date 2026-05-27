@@ -1,6 +1,11 @@
-import { CalculatorOutlined, EditOutlined } from "@ant-design/icons";
+import {
+  CalculatorOutlined,
+  CloudDownloadOutlined,
+  FileSearchOutlined,
+  EditOutlined,
+} from "@ant-design/icons";
 import type { ProColumns } from "@ant-design/pro-components";
-import { Button, Tag, Tooltip, Typography } from "antd";
+import { Button, Select, Tag, Tooltip, Typography } from "antd";
 
 import type { FreightRecord } from "../_lib/freights";
 import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
@@ -22,11 +27,36 @@ function PaymentTag({ value }: { value?: string | null }) {
 
 export function getFreightColumns(
   onEdit: (record: FreightRecord) => void,
+  onFetchVolume: (record: FreightRecord) => void,
+  onFetchBill: (record: FreightRecord) => void,
   onCalculateFreight: (record: FreightRecord) => void,
+  onStartPaidStatusEdit: (record: FreightRecord) => void,
+  onCancelPaidStatusEdit: () => void,
+  onChangePaidStatus: (record: FreightRecord, value: string) => void,
+  isFetchingVolume: (record: FreightRecord) => boolean,
+  isFetchingBill: (record: FreightRecord) => boolean,
   isCalculatingFreight: (record: FreightRecord) => boolean,
+  isPaidStatusEditing: (record: FreightRecord) => boolean,
+  isPaidStatusUpdating: (record: FreightRecord) => boolean,
   shipmentOptions: ShipmentOption[],
   logisticsOptions: LogisticsProviderOption[],
 ): ProColumns<FreightRecord>[] {
+  function canFetchVolume(record: FreightRecord) {
+    const providerName = record.logistics_provider?.trim();
+    return (
+      providerName === "日升辉" ||
+      providerName === "通途" ||
+      providerName === "赛易"
+    );
+  }
+
+  function hasBillAmount(record: FreightRecord) {
+    return (
+      typeof record.bill_amount === "number" &&
+      Number.isFinite(record.bill_amount)
+    );
+  }
+
   const shipmentSelectOptions = Array.from(
     new Set(
       shipmentOptions
@@ -152,6 +182,19 @@ export function getFreightColumns(
       },
     },
     {
+      title: "账单已出",
+      dataIndex: "bill_issued",
+      valueType: "select",
+      hideInTable: true,
+      fieldProps: {
+        placeholder: "请选择账单状态",
+        options: [
+          { label: "是", value: "是" },
+          { label: "否", value: "否" },
+        ],
+      },
+    },
+    {
       title: "运费单价",
       dataIndex: "freight_unit_price",
       valueType: "money",
@@ -204,7 +247,49 @@ export function getFreightColumns(
       title: "是否支付",
       dataIndex: "freight_paid_status",
       width: 120,
-      render: (_, record) => <PaymentTag value={record.freight_paid_status} />,
+      onCell: (record) => ({
+        onDoubleClick: () => {
+          if (
+            hasBillAmount(record) &&
+            record.freight_paid_status !== "是" &&
+            !isPaidStatusUpdating(record)
+          ) {
+            onStartPaidStatusEdit(record);
+          }
+        },
+      }),
+      render: (_, record) => {
+        if (isPaidStatusEditing(record)) {
+          return (
+            <Select
+              autoFocus
+              size="small"
+              value={record.freight_paid_status ?? "否"}
+              className="w-[88px]"
+              loading={isPaidStatusUpdating(record)}
+              disabled={isPaidStatusUpdating(record)}
+              options={[
+                { label: "否", value: "否" },
+                { label: "是", value: "是" },
+              ]}
+              onChange={(value) => onChangePaidStatus(record, value)}
+              onBlur={onCancelPaidStatusEdit}
+            />
+          );
+        }
+
+        return (
+          <span
+            className={
+              hasBillAmount(record) && record.freight_paid_status !== "是"
+                ? "inline-flex cursor-pointer"
+                : "inline-flex"
+            }
+          >
+            <PaymentTag value={record.freight_paid_status} />
+          </span>
+        );
+      },
       valueEnum: {
         是: { text: "是" },
         否: { text: "否" },
@@ -213,28 +298,67 @@ export function getFreightColumns(
     {
       title: "操作",
       valueType: "option",
-      width: 96,
+      width: 168,
       fixed: "right",
       search: false,
-      render: (_, record) => [
-        <Tooltip key="calculate" title="计算运费">
-          <Button
-            type="text"
-            size="small"
-            icon={<CalculatorOutlined />}
-            loading={isCalculatingFreight(record)}
-            onClick={() => onCalculateFreight(record)}
-          />
-        </Tooltip>,
-        <Tooltip key="edit" title="编辑">
-          <Button
-            type="text"
-            size="small"
-            icon={<EditOutlined />}
-            onClick={() => onEdit(record)}
-          />
-        </Tooltip>,
-      ],
+      render: (_, record) => {
+        const locked = hasBillAmount(record);
+
+        return [
+          typeof record.total_fee === "number" &&
+          Number.isFinite(record.total_fee) ? (
+            <Tooltip key="fetch-bill" title="获取账单">
+              <Button
+                type="text"
+                size="small"
+                icon={<FileSearchOutlined />}
+                loading={isFetchingBill(record)}
+                onClick={() => onFetchBill(record)}
+              />
+            </Tooltip>
+          ) : null,
+          locked ? null : (
+            <Tooltip
+              key="fetch-volume"
+              title={
+                canFetchVolume(record)
+                  ? "获取方数"
+                  : "仅日升辉/通途/赛易货件可获取方数"
+              }
+            >
+              <Button
+                type="text"
+                size="small"
+                icon={<CloudDownloadOutlined />}
+                loading={isFetchingVolume(record)}
+                disabled={!canFetchVolume(record)}
+                onClick={() => onFetchVolume(record)}
+              />
+            </Tooltip>
+          ),
+          locked ? null : (
+            <Tooltip key="calculate" title="计算运费">
+              <Button
+                type="text"
+                size="small"
+                icon={<CalculatorOutlined />}
+                loading={isCalculatingFreight(record)}
+                onClick={() => onCalculateFreight(record)}
+              />
+            </Tooltip>
+          ),
+          locked ? null : (
+            <Tooltip key="edit" title="编辑">
+              <Button
+                type="text"
+                size="small"
+                icon={<EditOutlined />}
+                onClick={() => onEdit(record)}
+              />
+            </Tooltip>
+          ),
+        ];
+      },
     },
   ];
 }

@@ -17,11 +17,24 @@ type FreightsTableProps = {
   shipmentOptions: ShipmentOption[];
   logisticsOptions: LogisticsProviderOption[];
   onEdit: (record: FreightRecord) => void;
+  onFetchVolume: (record: FreightRecord) => void;
+  onFetchBill: (record: FreightRecord) => void;
   onCalculateFreight: (record: FreightRecord) => void;
+  onStartPaidStatusEdit: (record: FreightRecord) => void;
+  onCancelPaidStatusEdit: () => void;
+  onChangePaidStatus: (record: FreightRecord, value: string) => void;
+  isFetchingVolume: (record: FreightRecord) => boolean;
+  isFetchingBill: (record: FreightRecord) => boolean;
   isCalculatingFreight: (record: FreightRecord) => boolean;
+  isPaidStatusEditing: (record: FreightRecord) => boolean;
+  isPaidStatusUpdating: (record: FreightRecord) => boolean;
 };
 
 const PAGE_SIZE = 40;
+
+function hasBillAmount(value?: number | null) {
+  return typeof value === "number" && Number.isFinite(value);
+}
 
 function mergeFreightsById(current: FreightRecord[], incoming: FreightRecord[]) {
   const merged = new Map<string, FreightRecord>();
@@ -42,23 +55,50 @@ export default function FreightsTable({
   shipmentOptions,
   logisticsOptions,
   onEdit,
+  onFetchVolume,
+  onFetchBill,
   onCalculateFreight,
+  onStartPaidStatusEdit,
+  onCancelPaidStatusEdit,
+  onChangePaidStatus,
+  isFetchingVolume,
+  isFetchingBill,
   isCalculatingFreight,
+  isPaidStatusEditing,
+  isPaidStatusUpdating,
 }: FreightsTableProps) {
   const columns = useMemo(
     () =>
       getFreightColumns(
         onEdit,
+        onFetchVolume,
+        onFetchBill,
         onCalculateFreight,
+        onStartPaidStatusEdit,
+        onCancelPaidStatusEdit,
+        onChangePaidStatus,
+        isFetchingVolume,
+        isFetchingBill,
         isCalculatingFreight,
+        isPaidStatusEditing,
+        isPaidStatusUpdating,
         shipmentOptions,
         logisticsOptions,
       ),
     [
       isCalculatingFreight,
+      isFetchingVolume,
+      isFetchingBill,
       logisticsOptions,
       onCalculateFreight,
+      onCancelPaidStatusEdit,
+      onChangePaidStatus,
       onEdit,
+      onFetchBill,
+      onFetchVolume,
+      onStartPaidStatusEdit,
+      isPaidStatusEditing,
+      isPaidStatusUpdating,
       shipmentOptions,
     ],
   );
@@ -157,6 +197,11 @@ export default function FreightsTable({
       columns={columns}
       dataSource={dataSource}
       loading={loading}
+      rowClassName={(record) => {
+        if (record.freight_paid_status === "是") return "freight-paid-row";
+        if (hasBillAmount(record.bill_amount)) return "freight-unpaid-billed-row";
+        return "";
+      }}
       search={{
         labelWidth: "auto",
         defaultCollapsed: false,

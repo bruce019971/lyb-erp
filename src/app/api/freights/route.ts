@@ -98,6 +98,22 @@ function normalizeTextValue(value: unknown) {
   return trimmed || null;
 }
 
+function hasBillAmount(value: unknown) {
+  if (typeof value === "number") return Number.isFinite(value);
+  if (typeof value !== "string") return false;
+
+  const trimmed = value.trim();
+  return trimmed !== "" && Number.isFinite(Number(trimmed));
+}
+
+function normalizeFreightPaidStatus(value: unknown) {
+  return normalizeTextValue(value) ?? "否";
+}
+
+function hasOwnKey(record: Record<string, unknown>, key: string) {
+  return Object.prototype.hasOwnProperty.call(record, key);
+}
+
 function normalizeMultiSelectValues(values: string[]) {
   return values.map((item) => item.trim()).filter(Boolean);
 }
@@ -168,6 +184,9 @@ export async function GET(request: Request) {
     );
     const logisticsProviderValues = normalizeMultiSelectValues(
       searchParams.getAll("logistics_provider"),
+    );
+    const billIssuedValues = normalizeMultiSelectValues(
+      searchParams.getAll("bill_issued"),
     );
     const allowedOrderFields = new Set([
       "created_at",
@@ -244,6 +263,15 @@ export async function GET(request: Request) {
       query = query.in("shipment_record_id", matchedShipmentIds);
     }
 
+    if (billIssuedValues.includes("是") && !billIssuedValues.includes("否")) {
+      query = query.not("bill_amount", "is", null);
+    } else if (
+      billIssuedValues.includes("否") &&
+      !billIssuedValues.includes("是")
+    ) {
+      query = query.is("bill_amount", null);
+    }
+
     query = query.order(
       allowedOrderFields.has(orderField) ? orderField : "created_at",
       {
@@ -284,6 +312,37 @@ export async function PATCH(request: Request) {
     const volume = normalizeNumberValue(body.volume);
     const extraFee = normalizeNumberValue(body.extra_fee);
     const totalFee = normalizeNumberValue(body.total_fee);
+    const hasPaidStatusInput = hasOwnKey(body, "freight_paid_status");
+    const { data: currentFreight, error: currentFreightError } =
+      await adminClient
+        .from("freight_records")
+        .select("bill_amount, freight_paid_status")
+        .eq("id", id)
+        .single();
+
+    if (currentFreightError) {
+      throw currentFreightError;
+    }
+
+    const currentPaidStatus = normalizeFreightPaidStatus(
+      (currentFreight as Pick<FreightRow, "freight_paid_status">)
+        .freight_paid_status,
+    );
+    const freightPaidStatus = hasPaidStatusInput
+      ? normalizeFreightPaidStatus(body.freight_paid_status)
+      : currentPaidStatus;
+
+    if (
+      freightPaidStatus !== currentPaidStatus &&
+      !hasBillAmount((currentFreight as Pick<FreightRow, "bill_amount">).bill_amount)
+    ) {
+      throw new Error("账单金额为空时不能更改是否支付");
+    }
+
+    if (currentPaidStatus === "是" && freightPaidStatus !== "是") {
+      throw new Error("已支付状态不可更改");
+    }
+
     const { data, error } = await adminClient
       .from("freight_records")
       .update({
@@ -291,8 +350,7 @@ export async function PATCH(request: Request) {
         volume,
         extra_fee: extraFee,
         total_fee: totalFee,
-        freight_paid_status:
-          normalizeTextValue(body.freight_paid_status) ?? "否",
+        freight_paid_status: freightPaidStatus,
       })
       .eq("id", id)
       .select(
