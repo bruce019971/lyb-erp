@@ -306,7 +306,8 @@ export function getFreightColumns(
 
         return [
           typeof record.total_fee === "number" &&
-          Number.isFinite(record.total_fee) ? (
+          Number.isFinite(record.total_fee) &&
+          record.freight_paid_status !== "是" ? (
             <Tooltip key="fetch-bill" title="获取账单">
               <Button
                 type="text"

@@ -36,6 +36,7 @@ type FreightBillRequestBody = {
 type FreightRow = {
   id: string;
   total_fee: number | null;
+  freight_paid_status: string | null;
   shipment:
     | {
         tracking_no: string | null;
@@ -120,7 +121,7 @@ export async function POST(request: Request) {
     const { data, error } = await adminClient
       .from("freight_records")
       .select(
-        "id, total_fee, shipment:shipment_records!inner(tracking_no, logistics_provider)",
+        "id, total_fee, freight_paid_status, shipment:shipment_records!inner(tracking_no, logistics_provider)",
       )
       .eq("id", freightId)
       .eq("shipment.status", "有效")
@@ -146,6 +147,10 @@ export async function POST(request: Request) {
 
     if (!isFiniteNumber(freight.total_fee)) {
       throw new Error("当前货件总费用为空，不能获取账单");
+    }
+
+    if (freight.freight_paid_status === "是") {
+      throw new Error("已支付的货件不能再次获取账单");
     }
 
     const { data: logisticsData, error: logisticsError } = await adminClient

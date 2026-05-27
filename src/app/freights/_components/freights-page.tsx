@@ -293,6 +293,11 @@ export default function FreightsPage() {
       return;
     }
 
+    if (record.freight_paid_status === "是") {
+      messageApi.warning("已支付的货件不能再次获取账单");
+      return;
+    }
+
     if (providerName !== "日升辉" && providerName !== "赛易") {
       messageApi.warning("当前仅日升辉/赛易货件支持获取账单");
       return;
