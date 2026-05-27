@@ -19,6 +19,12 @@ function getInvoiceTemplateName(providerName?: string | null) {
   return `${providerName?.trim() || "物流商"}发票模板`;
 }
 
+function formatPrice(value?: number | null) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? value.toFixed(2)
+    : "-";
+}
+
 export function getLogisticsProviderColumns(
   onEdit: (record: LogisticsProviderRecord) => void,
 ): ProColumns<LogisticsProviderRecord>[] {
@@ -63,13 +69,15 @@ export function getLogisticsProviderColumns(
     },
     {
       title: "运费单价",
-      dataIndex: "freight_unit_price",
-      width: 120,
+      dataIndex: "general_freight_unit_price",
+      width: 160,
       search: false,
-      render: (_, record) =>
-        typeof record.freight_unit_price === "number"
-          ? record.freight_unit_price.toFixed(2)
-          : "",
+      render: (_, record) => (
+        <div className="flex flex-col whitespace-nowrap leading-6">
+          <span>普货: {formatPrice(record.general_freight_unit_price)}</span>
+          <span>纺织品: {formatPrice(record.textile_freight_unit_price)}</span>
+        </div>
+      ),
     },
     {
       title: "产品标单价",

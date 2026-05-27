@@ -5,7 +5,8 @@ export type LogisticsProviderRecord = {
   username: string | null;
   password: string | null;
   invoice_template_url: string | null;
-  freight_unit_price: number | null;
+  general_freight_unit_price: number | null;
+  textile_freight_unit_price: number | null;
   product_label_unit_price: number | null;
   carton_label_unit_price: number | null;
   created_at: string | null;
@@ -18,7 +19,8 @@ export type LogisticsProviderCreateValues = {
   username?: string | null;
   password?: string | null;
   invoice_template_url?: string | null;
-  freight_unit_price?: number | null;
+  general_freight_unit_price?: number | null;
+  textile_freight_unit_price?: number | null;
   product_label_unit_price?: number | null;
   carton_label_unit_price?: number | null;
 };
@@ -32,7 +34,8 @@ export type LogisticsProviderOption = {
   username?: string | null;
   password?: string | null;
   invoice_template_url?: string | null;
-  freight_unit_price?: number | null;
+  general_freight_unit_price?: number | null;
+  textile_freight_unit_price?: number | null;
   product_label_unit_price?: number | null;
   carton_label_unit_price?: number | null;
 };
