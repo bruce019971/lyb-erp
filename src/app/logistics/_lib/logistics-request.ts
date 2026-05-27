@@ -85,6 +85,7 @@ export async function createLogisticsProviderRecord(
     username: normalizeTextValue(values.username),
     password: normalizeTextValue(values.password),
     invoice_template_url: normalizeTextValue(values.invoice_template_url),
+    freight_unit_price: normalizeNumberValue(values.freight_unit_price),
     product_label_unit_price: normalizeNumberValue(
       values.product_label_unit_price,
     ),
@@ -116,6 +117,7 @@ export async function updateLogisticsProviderRecord(
     username: normalizeTextValue(values.username),
     password: normalizeTextValue(values.password),
     invoice_template_url: normalizeTextValue(values.invoice_template_url),
+    freight_unit_price: normalizeNumberValue(values.freight_unit_price),
     product_label_unit_price: normalizeNumberValue(
       values.product_label_unit_price,
     ),
@@ -142,7 +144,7 @@ export async function requestLogisticsProviderOptions() {
   const { data, error } = await supabase
     .from("logistics_providers")
     .select(
-      "id, provider_name, system_url, username, password, invoice_template_url, product_label_unit_price, carton_label_unit_price",
+      "id, provider_name, system_url, username, password, invoice_template_url, freight_unit_price, product_label_unit_price, carton_label_unit_price",
     )
     .order("provider_name", { ascending: true });
 

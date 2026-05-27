@@ -62,6 +62,16 @@ export function getLogisticsProviderColumns(
         ),
     },
     {
+      title: "运费单价",
+      dataIndex: "freight_unit_price",
+      width: 120,
+      search: false,
+      render: (_, record) =>
+        typeof record.freight_unit_price === "number"
+          ? record.freight_unit_price.toFixed(2)
+          : "",
+    },
+    {
       title: "产品标单价",
       dataIndex: "product_label_unit_price",
       width: 120,

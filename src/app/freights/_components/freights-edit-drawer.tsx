@@ -42,6 +42,7 @@ export default function FreightsEditDrawer({
       freight_unit_price: record.freight_unit_price,
       volume: record.volume,
       extra_fee: record.extra_fee,
+      total_fee: record.total_fee,
       freight_paid_status: record.freight_paid_status ?? "否",
     });
   }, [form, open, record]);
@@ -118,6 +119,10 @@ export default function FreightsEditDrawer({
         </Form.Item>
 
         <Form.Item label="额外费用" name="extra_fee">
+          <InputNumber className="!w-full" min={0} precision={2} />
+        </Form.Item>
+
+        <Form.Item label="总费用" name="total_fee">
           <InputNumber className="!w-full" min={0} precision={2} />
         </Form.Item>
 

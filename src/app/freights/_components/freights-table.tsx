@@ -17,6 +17,8 @@ type FreightsTableProps = {
   shipmentOptions: ShipmentOption[];
   logisticsOptions: LogisticsProviderOption[];
   onEdit: (record: FreightRecord) => void;
+  onCalculateFreight: (record: FreightRecord) => void;
+  isCalculatingFreight: (record: FreightRecord) => boolean;
 };
 
 const PAGE_SIZE = 40;
@@ -40,10 +42,25 @@ export default function FreightsTable({
   shipmentOptions,
   logisticsOptions,
   onEdit,
+  onCalculateFreight,
+  isCalculatingFreight,
 }: FreightsTableProps) {
   const columns = useMemo(
-    () => getFreightColumns(onEdit, shipmentOptions, logisticsOptions),
-    [logisticsOptions, onEdit, shipmentOptions],
+    () =>
+      getFreightColumns(
+        onEdit,
+        onCalculateFreight,
+        isCalculatingFreight,
+        shipmentOptions,
+        logisticsOptions,
+      ),
+    [
+      isCalculatingFreight,
+      logisticsOptions,
+      onCalculateFreight,
+      onEdit,
+      shipmentOptions,
+    ],
   );
   const searchParamsRef = useRef<Record<string, unknown>>({});
   const loadingRef = useRef(true);

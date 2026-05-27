@@ -69,6 +69,7 @@ export default function LogisticsEditDrawer({
       system_url: record.system_url ?? "",
       username: record.username ?? "",
       password: record.password ?? "",
+      freight_unit_price: toNumberInputValue(record.freight_unit_price),
       product_label_unit_price: toNumberInputValue(
         record.product_label_unit_price,
       ),
@@ -177,6 +178,28 @@ export default function LogisticsEditDrawer({
             uploading={invoiceTemplateUploading}
             onUploadingChange={setInvoiceTemplateUploading}
             onUrlChange={handleInvoiceTemplateUrlChange}
+          />
+        </Form.Item>
+
+        <Form.Item
+          label="运费单价"
+          name="freight_unit_price"
+          rules={[
+            {
+              validator: async (_, value?: number | null) => {
+                if (value === undefined || value === null) return;
+                if (!Number.isFinite(value) || value < 0) {
+                  throw new Error("运费单价不能小于0");
+                }
+              },
+            },
+          ]}
+        >
+          <InputNumber
+            className="!w-full"
+            min={0}
+            precision={2}
+            placeholder="请输入运费单价"
           />
         </Form.Item>
 

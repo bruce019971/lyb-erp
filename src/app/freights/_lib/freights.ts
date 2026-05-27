@@ -11,6 +11,7 @@ export type FreightRecord = {
   box_count: number | null;
   total_qty: number | null;
   total_fee: number | null;
+  bill_amount: number | null;
   unit_fee: number | null;
   freight_paid_status: string | null;
   created_at: string | null;
@@ -21,32 +22,9 @@ export type FreightUpdateValues = {
   freight_unit_price?: number | null;
   volume?: number | null;
   extra_fee?: number | null;
+  total_fee?: number | null;
   freight_paid_status?: string | null;
 };
-
-export function roundMoney(value: number) {
-  return Number(value.toFixed(2));
-}
-
-export function calculateFreightTotalFee(
-  freightUnitPrice?: number | null,
-  volume?: number | null,
-  extraFee?: number | null,
-) {
-  if (
-    typeof freightUnitPrice !== "number" ||
-    !Number.isFinite(freightUnitPrice) ||
-    typeof volume !== "number" ||
-    !Number.isFinite(volume)
-  ) {
-    return null;
-  }
-
-  const normalizedExtraFee =
-    typeof extraFee === "number" && Number.isFinite(extraFee) ? extraFee : 0;
-
-  return roundMoney(freightUnitPrice * volume + normalizedExtraFee);
-}
 
 export function calculateFreightUnitFee(
   totalFee?: number | null,
@@ -62,5 +40,5 @@ export function calculateFreightUnitFee(
     return null;
   }
 
-  return roundMoney(totalFee / totalQty);
+  return Number((totalFee / totalQty).toFixed(2));
 }

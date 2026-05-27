@@ -1,4 +1,4 @@
-import { EditOutlined } from "@ant-design/icons";
+import { CalculatorOutlined, EditOutlined } from "@ant-design/icons";
 import type { ProColumns } from "@ant-design/pro-components";
 import { Button, Tag, Tooltip, Typography } from "antd";
 
@@ -22,6 +22,8 @@ function PaymentTag({ value }: { value?: string | null }) {
 
 export function getFreightColumns(
   onEdit: (record: FreightRecord) => void,
+  onCalculateFreight: (record: FreightRecord) => void,
+  isCalculatingFreight: (record: FreightRecord) => boolean,
   shipmentOptions: ShipmentOption[],
   logisticsOptions: LogisticsProviderOption[],
 ): ProColumns<FreightRecord>[] {
@@ -178,6 +180,13 @@ export function getFreightColumns(
       search: false,
     },
     {
+      title: "账单金额",
+      dataIndex: "bill_amount",
+      valueType: "money",
+      width: 140,
+      search: false,
+    },
+    {
       title: "单个运费",
       dataIndex: "unit_fee",
       valueType: "money",
@@ -204,19 +213,28 @@ export function getFreightColumns(
     {
       title: "操作",
       valueType: "option",
-      width: 64,
+      width: 96,
       fixed: "right",
       search: false,
-      render: (_, record) => (
-        <Tooltip title="编辑">
+      render: (_, record) => [
+        <Tooltip key="calculate" title="计算运费">
+          <Button
+            type="text"
+            size="small"
+            icon={<CalculatorOutlined />}
+            loading={isCalculatingFreight(record)}
+            onClick={() => onCalculateFreight(record)}
+          />
+        </Tooltip>,
+        <Tooltip key="edit" title="编辑">
           <Button
             type="text"
             size="small"
             icon={<EditOutlined />}
             onClick={() => onEdit(record)}
           />
-        </Tooltip>
-      ),
+        </Tooltip>,
+      ],
     },
   ];
 }

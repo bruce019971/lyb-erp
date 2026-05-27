@@ -23,6 +23,8 @@ type FreightRow = {
   freight_unit_price: number | null;
   volume: number | null;
   extra_fee: number | null;
+  total_fee: number | null;
+  bill_amount: number | null;
   freight_paid_status: string | null;
   created_at: string | null;
   updated_at: string | null;
@@ -46,30 +48,6 @@ type FreightRow = {
     | null;
 };
 
-function roundMoney(value: number) {
-  return Number(value.toFixed(2));
-}
-
-function calculateFreightTotalFee(
-  freightUnitPrice?: number | null,
-  volume?: number | null,
-  extraFee?: number | null,
-) {
-  if (
-    typeof freightUnitPrice !== "number" ||
-    !Number.isFinite(freightUnitPrice) ||
-    typeof volume !== "number" ||
-    !Number.isFinite(volume)
-  ) {
-    return null;
-  }
-
-  const normalizedExtraFee =
-    typeof extraFee === "number" && Number.isFinite(extraFee) ? extraFee : 0;
-
-  return roundMoney(freightUnitPrice * volume + normalizedExtraFee);
-}
-
 function calculateFreightUnitFee(
   totalFee?: number | null,
   totalQty?: number | null,
@@ -84,16 +62,11 @@ function calculateFreightUnitFee(
     return null;
   }
 
-  return roundMoney(totalFee / totalQty);
+  return Number((totalFee / totalQty).toFixed(2));
 }
 
 function normalizeFreightRow(row: FreightRow) {
   const shipment = Array.isArray(row.shipment) ? row.shipment[0] : row.shipment;
-  const totalFee = calculateFreightTotalFee(
-    row.freight_unit_price,
-    row.volume,
-    row.extra_fee,
-  );
 
   return {
     id: row.id,
@@ -107,8 +80,9 @@ function normalizeFreightRow(row: FreightRow) {
     extra_fee: row.extra_fee,
     box_count: shipment?.box_count ?? null,
     total_qty: shipment?.total_qty ?? null,
-    total_fee: totalFee,
-    unit_fee: calculateFreightUnitFee(totalFee, shipment?.total_qty ?? null),
+    total_fee: row.total_fee,
+    bill_amount: row.bill_amount,
+    unit_fee: calculateFreightUnitFee(row.total_fee, shipment?.total_qty ?? null),
     freight_paid_status: row.freight_paid_status ?? "否",
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -201,6 +175,8 @@ export async function GET(request: Request) {
       "freight_unit_price",
       "volume",
       "extra_fee",
+      "total_fee",
+      "bill_amount",
       "freight_paid_status",
     ]);
 
@@ -258,7 +234,7 @@ export async function GET(request: Request) {
     let query = adminClient
       .from("freight_records")
       .select(
-        "id, shipment_record_id, freight_unit_price, volume, extra_fee, freight_paid_status, created_at, updated_at, shipment:shipment_records!inner(shipment_no, tracking_no, logistics_provider, product_name, box_count, total_qty)",
+        "id, shipment_record_id, freight_unit_price, volume, extra_fee, total_fee, bill_amount, freight_paid_status, created_at, updated_at, shipment:shipment_records!inner(shipment_no, tracking_no, logistics_provider, product_name, box_count, total_qty)",
         { count: "exact" },
       )
       .eq("shipment.status", "有效")
@@ -304,18 +280,23 @@ export async function PATCH(request: Request) {
     }
 
     const adminClient = createSupabaseAdminClient();
+    const freightUnitPrice = normalizeNumberValue(body.freight_unit_price);
+    const volume = normalizeNumberValue(body.volume);
+    const extraFee = normalizeNumberValue(body.extra_fee);
+    const totalFee = normalizeNumberValue(body.total_fee);
     const { data, error } = await adminClient
       .from("freight_records")
       .update({
-        freight_unit_price: normalizeNumberValue(body.freight_unit_price),
-        volume: normalizeNumberValue(body.volume),
-        extra_fee: normalizeNumberValue(body.extra_fee),
+        freight_unit_price: freightUnitPrice,
+        volume,
+        extra_fee: extraFee,
+        total_fee: totalFee,
         freight_paid_status:
           normalizeTextValue(body.freight_paid_status) ?? "否",
       })
       .eq("id", id)
       .select(
-        "id, shipment_record_id, freight_unit_price, volume, extra_fee, freight_paid_status, created_at, updated_at, shipment:shipment_records(shipment_no, tracking_no, logistics_provider, product_name, box_count, total_qty)",
+        "id, shipment_record_id, freight_unit_price, volume, extra_fee, total_fee, bill_amount, freight_paid_status, created_at, updated_at, shipment:shipment_records(shipment_no, tracking_no, logistics_provider, product_name, box_count, total_qty)",
       )
       .single();
 

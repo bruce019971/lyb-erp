@@ -1,7 +1,7 @@
 "use client";
 
 import type { ActionType } from "@ant-design/pro-components";
-import { App, ConfigProvider } from "antd";
+import { App, ConfigProvider, Modal, message } from "antd";
 import zhCN from "antd/locale/zh_CN";
 import dayjs from "dayjs";
 import "dayjs/locale/zh-cn";
@@ -13,6 +13,7 @@ import type { ShipmentOption } from "../../shipments/_lib/shipments";
 import { requestShipmentOptions } from "../../shipments/_lib/shipments-request";
 import ShipmentsTableSkeleton from "../../shipments/_components/shipments-table-skeleton";
 import type { FreightRecord } from "../_lib/freights";
+import { updateFreightRecord } from "../_lib/freights-request";
 import FreightsEditDrawer from "./freights-edit-drawer";
 import FreightsTable from "./freights-table";
 
@@ -24,11 +25,16 @@ export default function FreightsPage() {
   const [editingRecord, setEditingRecord] = useState<FreightRecord | undefined>(
     undefined,
   );
+  const [calculatingFreightId, setCalculatingFreightId] = useState<string | null>(
+    null,
+  );
   const [shipmentOptions, setShipmentOptions] = useState<ShipmentOption[]>([]);
   const [logisticsOptions, setLogisticsOptions] = useState<
     LogisticsProviderOption[]
   >([]);
   const tableActionRef = useRef<ActionType>(undefined);
+  const [messageApi, contextHolder] = message.useMessage();
+  const [modalApi, modalContextHolder] = Modal.useModal();
 
   useEffect(() => {
     const timer = window.setTimeout(() => setMounted(true), 0);
@@ -75,6 +81,66 @@ export default function FreightsPage() {
     };
   }, [mounted]);
 
+  function calculateTotalFee(record: FreightRecord) {
+    const freightUnitPrice = record.freight_unit_price;
+    const volume = record.volume;
+
+    if (
+      typeof freightUnitPrice !== "number" ||
+      !Number.isFinite(freightUnitPrice) ||
+      typeof volume !== "number" ||
+      !Number.isFinite(volume)
+    ) {
+      return null;
+    }
+
+    return Number((freightUnitPrice * volume).toFixed(2));
+  }
+
+  async function calculateAndSaveFreight(record: FreightRecord, totalFee: number) {
+    try {
+      setCalculatingFreightId(record.id);
+      await updateFreightRecord(record.id, {
+        freight_unit_price: record.freight_unit_price,
+        volume: record.volume,
+        extra_fee: record.extra_fee,
+        total_fee: totalFee,
+        freight_paid_status: record.freight_paid_status ?? "否",
+      });
+      messageApi.success("总费用已计算并保存");
+      tableActionRef.current?.reload();
+    } catch (error) {
+      const description =
+        error instanceof Error ? error.message : "请检查数据库权限或字段内容";
+      messageApi.error(`总费用计算失败：${description}`);
+    } finally {
+      setCalculatingFreightId(null);
+    }
+  }
+
+  function handleCalculateFreight(record: FreightRecord) {
+    const totalFee = calculateTotalFee(record);
+
+    if (totalFee === null) {
+      messageApi.warning("请先填写运费单价和方数");
+      return;
+    }
+
+    if (typeof record.total_fee === "number" && Number.isFinite(record.total_fee)) {
+      modalApi.confirm({
+        title: "是否覆盖总费用？",
+        content: `当前总费用已有值 ${record.total_fee}，是否覆盖为 ${totalFee}？`,
+        okText: "覆盖",
+        cancelText: "取消",
+        centered: true,
+        onOk: () => calculateAndSaveFreight(record, totalFee),
+      });
+      return;
+    }
+
+    void calculateAndSaveFreight(record, totalFee);
+  }
+
   return (
     <ConfigProvider
       locale={zhCN}
@@ -86,6 +152,8 @@ export default function FreightsPage() {
       }}
     >
       <App>
+        {contextHolder}
+        {modalContextHolder}
         <main className="h-full overflow-hidden bg-slate-100 px-6 py-6">
           <section className="mx-auto flex h-full min-h-0 max-w-[1600px] flex-col gap-4">
             {mounted ? (
@@ -97,6 +165,10 @@ export default function FreightsPage() {
                   setEditingRecord(record);
                   setEditOpen(true);
                 }}
+                onCalculateFreight={handleCalculateFreight}
+                isCalculatingFreight={(record) =>
+                  calculatingFreightId === record.id
+                }
               />
             ) : (
               <ShipmentsTableSkeleton />

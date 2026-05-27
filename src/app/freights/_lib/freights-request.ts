@@ -1,5 +1,4 @@
 import {
-  calculateFreightTotalFee,
   calculateFreightUnitFee,
   type FreightRecord,
   type FreightUpdateValues,
@@ -79,6 +78,7 @@ export async function updateFreightRecord(
   const freightUnitPrice = normalizeNumberValue(values.freight_unit_price);
   const volume = normalizeNumberValue(values.volume);
   const extraFee = normalizeNumberValue(values.extra_fee);
+  const totalFee = normalizeNumberValue(values.total_fee);
 
   const response = await fetch("/api/freights", {
     method: "PATCH",
@@ -90,6 +90,7 @@ export async function updateFreightRecord(
       freight_unit_price: freightUnitPrice,
       volume,
       extra_fee: extraFee,
+      total_fee: totalFee,
       freight_paid_status: normalizeTextValue(values.freight_paid_status) ?? "否",
     }),
   });
@@ -104,17 +105,8 @@ export async function updateFreightRecord(
 
   return {
     ...payload.data,
-    total_fee: calculateFreightTotalFee(
-      payload.data.freight_unit_price,
-      payload.data.volume,
-      payload.data.extra_fee,
-    ),
     unit_fee: calculateFreightUnitFee(
-      calculateFreightTotalFee(
-        payload.data.freight_unit_price,
-        payload.data.volume,
-        payload.data.extra_fee,
-      ),
+      payload.data.total_fee,
       payload.data.total_qty,
     ),
   };
