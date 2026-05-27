@@ -20,18 +20,6 @@ function PaymentTag({ value }: { value?: string | null }) {
   return <span />;
 }
 
-function openShipmentPage(shipmentNo?: string | null) {
-  const trimmedShipmentNo = shipmentNo?.trim();
-  const params = new URLSearchParams();
-
-  if (trimmedShipmentNo) {
-    params.set("shipment_no", trimmedShipmentNo);
-  }
-
-  const href = params.size ? `/shipments?${params.toString()}` : "/shipments";
-  window.history.pushState(null, "", href);
-}
-
 export function getFreightColumns(
   onEdit: (record: FreightRecord) => void,
   shipmentOptions: ShipmentOption[],
@@ -119,9 +107,7 @@ export function getFreightColumns(
             className="whitespace-nowrap"
             copyable={record.shipment_no ? { text: record.shipment_no } : false}
           >
-            <Typography.Link onClick={() => openShipmentPage(record.shipment_no)}>
-              {record.shipment_no ?? ""}
-            </Typography.Link>
+            {record.shipment_no ?? ""}
           </Typography.Text>
           <Typography.Text
             className="whitespace-nowrap"

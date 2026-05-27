@@ -22,11 +22,13 @@ import {
   clearShipmentFileUrls,
   deleteShipmentRecord,
   generateShipmentLogisticsBoxMark,
+  generateShipmentSaleasyLogisticsBoxMark,
   generateShipmentRishenghuiOrderInvoice,
   generateShipmentTongtuLogisticsBoxMark,
   generateShipmentTongtuOrderInvoice,
   getRishenghuiAccessToken,
   submitRishenghuiOrderInvoice,
+  submitSaleasyLogisticsOrder,
   submitTongtuOrderInvoice,
   updateShipmentDeliveryStatus,
   updateShipmentRelabelStatus,
@@ -53,6 +55,12 @@ const logisticsOrderSteps: Array<{
 ];
 
 dayjs.locale("zh-cn");
+
+function waitForProgressStep(ms = 300) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
 
 export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) {
   const searchParams = useSearchParams();
@@ -194,12 +202,32 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
     return submittingLogisticsOrderId === record.id;
   }
 
+  function getLogisticsOrderVisibleSteps() {
+    if (logisticsOrderProgress.providerName === "赛易") {
+      return logisticsOrderSteps.filter((item) => item.key !== "invoice");
+    }
+
+    return logisticsOrderSteps;
+  }
+
   function getLogisticsOrderProgressCurrent() {
+    const visibleSteps = getLogisticsOrderVisibleSteps();
+
     return Math.max(
       0,
-      logisticsOrderSteps.findIndex(
+      visibleSteps.findIndex(
         (item) => item.key === logisticsOrderProgress.step,
       ),
+    );
+  }
+
+  function getLogisticsOrderProgressPercent() {
+    const visibleSteps = getLogisticsOrderVisibleSteps();
+
+    if (!visibleSteps.length) return 0;
+
+    return Math.round(
+      ((getLogisticsOrderProgressCurrent() + 1) / visibleSteps.length) * 100,
     );
   }
 
@@ -422,13 +450,33 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
     }
   }
 
+  async function handleGenerateSaleasyLogisticsBoxMark(record: ShipmentRecord) {
+    try {
+      setGeneratingLogisticsBoxMarkId(record.id);
+      const result = await generateShipmentSaleasyLogisticsBoxMark({
+        shipmentId: record.id,
+      });
+      messageApi.success(
+        `${result.trackingNo || record.tracking_no?.trim() || ""}箱唛生成成功`,
+      );
+      tableActionRef.current?.reload();
+    } catch (error) {
+      messageApi.error(
+        error instanceof Error ? error.message : "赛易物流箱唛生成失败",
+      );
+    } finally {
+      setGeneratingLogisticsBoxMarkId(null);
+    }
+  }
+
   async function runLogisticsOrder(record: ShipmentRecord) {
     const providerName = record.logistics_provider?.trim() || "";
     const shipmentNo = record.shipment_no?.trim() || "";
     const isRishenghui = providerName === "日升辉";
     const isTongtu = providerName === "通途";
+    const isSaleasy = providerName === "赛易";
 
-    if (!isRishenghui && !isTongtu) {
+    if (!isRishenghui && !isTongtu && !isSaleasy) {
       return;
     }
 
@@ -444,8 +492,30 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
         open: true,
         providerName,
         shipmentNo,
-        step: "invoice",
+        step: isSaleasy ? "order" : "invoice",
       });
+
+      if (isSaleasy) {
+        const orderResult = await submitSaleasyLogisticsOrder({
+          shipmentId: record.id,
+        });
+        tableActionRef.current?.reload();
+
+        setLogisticsOrderProgress({
+          open: true,
+          providerName,
+          shipmentNo,
+          step: "boxMark",
+        });
+        await waitForProgressStep();
+        messageApi.success(
+          orderResult.packno
+            ? `${orderResult.packno}物流下单成功，箱唛已生成`
+            : "赛易物流下单成功，箱唛已生成",
+        );
+        tableActionRef.current?.reload();
+        return;
+      }
 
       const invoiceResult = await (isTongtu
         ? generateShipmentTongtuOrderInvoice
@@ -581,6 +651,11 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
                     return;
                   }
 
+                  if (record.logistics_provider?.trim() === "赛易") {
+                    void handleGenerateSaleasyLogisticsBoxMark(record);
+                    return;
+                  }
+
                   const token = rishenghuiAccessToken.trim();
                   if (!token) {
                     Modal.warning({
@@ -661,16 +736,12 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
               <Steps
                 direction="vertical"
                 current={getLogisticsOrderProgressCurrent()}
-                items={logisticsOrderSteps.map((item) => ({
+                items={getLogisticsOrderVisibleSteps().map((item) => ({
                   title: item.title,
                 }))}
               />
               <Progress
-                percent={Math.round(
-                  ((getLogisticsOrderProgressCurrent() + 1) /
-                    logisticsOrderSteps.length) *
-                    100,
-                )}
+                percent={getLogisticsOrderProgressPercent()}
                 showInfo={false}
               />
             </div>

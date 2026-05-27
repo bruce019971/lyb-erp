@@ -730,6 +730,68 @@ export async function submitTongtuOrderInvoice(values: { shipmentId: string }) {
   };
 }
 
+export async function submitSaleasyLogisticsOrder(values: { shipmentId: string }) {
+  const response = await fetch("/api/shipments/saleasy-order-submit", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(values),
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        data?: ShipmentRecord;
+        trackingNo?: string;
+        waybillId?: string;
+        fileurl?: string;
+        error?: string;
+      }
+    | null;
+
+  if (!response.ok || !payload?.data) {
+    throw new Error(payload?.error || "赛易物流下单失败");
+  }
+
+  return {
+    record: payload.data,
+    packno: payload.trackingNo?.trim() || "",
+    waybillId: payload.waybillId?.trim() || "",
+    fileurl: payload.fileurl?.trim() || "",
+  };
+}
+
+export async function generateShipmentSaleasyLogisticsBoxMark(values: {
+  shipmentId: string;
+}) {
+  const response = await fetch("/api/shipments/saleasy-logistics-box-mark", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(values),
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        data?: ShipmentRecord;
+        fileurl?: string;
+        trackingNo?: string;
+        waybillId?: string;
+        error?: string;
+      }
+    | null;
+
+  if (!response.ok || !payload?.data) {
+    throw new Error(payload?.error || "赛易物流箱唛生成失败");
+  }
+
+  return {
+    record: payload.data,
+    fileurl: payload.fileurl?.trim() || "",
+    trackingNo: payload.trackingNo?.trim() || "",
+    waybillId: payload.waybillId?.trim() || "",
+  };
+}
+
 export async function generateShipmentTongtuLogisticsBoxMark(values: {
   shipmentId: string;
 }) {

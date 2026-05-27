@@ -495,9 +495,13 @@ export function getShipmentColumns(
         );
         const logisticsProviderName = record.logistics_provider?.trim();
         const canGenerateLogisticsBoxMark =
-          logisticsProviderName === "日升辉" || logisticsProviderName === "通途";
+          logisticsProviderName === "日升辉" ||
+          logisticsProviderName === "通途" ||
+          logisticsProviderName === "赛易";
         const canOpenLogisticsOrder =
-          logisticsProviderName === "日升辉" || logisticsProviderName === "通途";
+          logisticsProviderName === "日升辉" ||
+          logisticsProviderName === "通途" ||
+          logisticsProviderName === "赛易";
 
         return [
           !hasCartonLabelUrl ? (
