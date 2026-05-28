@@ -6,7 +6,9 @@ import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import {
   createTongtuId,
   extractTongtuReceivedChargeWeight,
+  extractTongtuUnitVolumeBoxes,
   extractTongtuVolumeBoxes,
+  fetchTongtuWaybillDetail,
   getOptionalText,
   getRequiredText,
   loginTongtu,
@@ -182,13 +184,38 @@ export async function POST(request: Request) {
       throw new Error(`通途已下单货件中未找到客户单号为 ${shipmentNo} 的数据`);
     }
 
-    const volume = extractTongtuReceivedChargeWeight(queryResult.row);
+    const waybillDetail = queryResult.waybillId
+      ? await fetchTongtuWaybillDetail({
+          baseUrl,
+          token,
+          waybillId: queryResult.waybillId,
+          websocketToken,
+          visitorId,
+          logScope: LOG_SCOPE,
+        })
+      : null;
+    const detailBoxes = extractTongtuUnitVolumeBoxes(waybillDetail);
+    const receivedChargeWeight = extractTongtuReceivedChargeWeight(
+      queryResult.row,
+    );
+    const volume =
+      receivedChargeWeight ??
+      (detailBoxes.length > 0
+        ? Number(
+            detailBoxes
+              .reduce((total, box) => total + (box.yjf_weit ?? 0), 0)
+              .toFixed(6),
+          )
+        : null);
 
     if (volume === null) {
       throw new Error("通途货件数据未查询到收货计费重");
     }
 
-    const boxes = extractTongtuVolumeBoxes(queryResult.row);
+    const boxes =
+      detailBoxes.length > 0
+        ? detailBoxes
+        : extractTongtuVolumeBoxes(queryResult.row);
 
     return NextResponse.json({
       volume,

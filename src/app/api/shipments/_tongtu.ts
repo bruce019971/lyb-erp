@@ -31,6 +31,7 @@ export type TongtuVolumeBox = {
 const DEFAULT_TONGTU_BASE_URL = "https://szttgj.itdida.com";
 const TONGTU_LOGIN_PATH = "/itdida-api/login";
 const TONGTU_FETCH_WAYBILL_ROWS_PATH = "/itdida-api/flash/waybill/fetchRows";
+const TONGTU_WAYBILL_DETAIL_PATH_PREFIX = "/itdida-api/flash/waybill/detail";
 const TONGTU_DEDICATED_LINE_BUSINESS_TYPE = 2;
 const TONGTU_DEDICATED_LINE_TABLE_ID = "caoZuoYunDanTable_ke_hu_zx";
 const TONGTU_WAYBILL_QUERY_ATTEMPTS = 6;
@@ -512,14 +513,29 @@ function normalizeTongtuVolumeBox(
 ): TongtuVolumeBox | null {
   const dimensions = getTongtuDimensionText(record);
   const length =
+    getTongtuNumberField(record, (key) =>
+      ["recipientlength", "receiptlength", "receivedlength"].includes(
+        normalizeTongtuFieldKey(key),
+      ),
+    ) ??
     getTongtuNumberField(record, isTongtuLengthFieldName) ??
     dimensions?.length ??
     null;
   const width =
+    getTongtuNumberField(record, (key) =>
+      ["recipientwidth", "receiptwidth", "receivedwidth"].includes(
+        normalizeTongtuFieldKey(key),
+      ),
+    ) ??
     getTongtuNumberField(record, isTongtuWidthFieldName) ??
     dimensions?.width ??
     null;
   const height =
+    getTongtuNumberField(record, (key) =>
+      ["recipientheight", "receiptheight", "receivedheight"].includes(
+        normalizeTongtuFieldKey(key),
+      ),
+    ) ??
     getTongtuNumberField(record, isTongtuHeightFieldName) ??
     dimensions?.height ??
     null;
@@ -528,6 +544,13 @@ function normalizeTongtuVolumeBox(
       ? roundTongtuNumber((length * width * height) / 1_000_000)
       : null;
   const singleBoxVolume =
+    getTongtuNumberField(record, (key) =>
+      [
+        "recipientsquarenumber",
+        "receiptsquarenumber",
+        "receivedsquarenumber",
+      ].includes(normalizeTongtuFieldKey(key)),
+    ) ??
     getTongtuNumberField(record, isTongtuSingleBoxVolumeFieldName) ??
     calculatedVolume;
   const packno = getTongtuTextField(record, isTongtuBoxNoFieldName);
@@ -632,6 +655,75 @@ export function extractTongtuReceivedChargeWeight(
   }
 
   return null;
+}
+
+function getTongtuUnitModelList(value: unknown): unknown[] {
+  if (!value || typeof value !== "object") return [];
+
+  const record = value as Record<string, unknown>;
+  const data = record.data && typeof record.data === "object"
+    ? (record.data as Record<string, unknown>)
+    : record;
+  const unitModelList = data.unitModelList;
+
+  return Array.isArray(unitModelList) ? unitModelList : [];
+}
+
+export function extractTongtuUnitVolumeBoxes(value: unknown): TongtuVolumeBox[] {
+  const unitModelList = getTongtuUnitModelList(value);
+  return dedupeTongtuVolumeBoxes(
+    unitModelList
+      .map((item) =>
+        item && typeof item === "object"
+          ? normalizeTongtuVolumeBox(item as Record<string, unknown>)
+          : null,
+      )
+      .filter((item): item is TongtuVolumeBox => Boolean(item)),
+  );
+}
+
+export async function fetchTongtuWaybillDetail(params: {
+  baseUrl: string;
+  token: string;
+  waybillId: string;
+  websocketToken: string;
+  visitorId: string;
+  logScope: string;
+}) {
+  const path = `${TONGTU_WAYBILL_DETAIL_PATH_PREFIX}/${encodeURIComponent(
+    params.waybillId,
+  )}`;
+  const response = await fetch(joinTongtuUrl(params.baseUrl, path), {
+    method: "GET",
+    headers: buildTongtuHeaders({
+      baseUrl: params.baseUrl,
+      token: params.token,
+      path,
+      websocketToken: params.websocketToken,
+      visitorId: params.visitorId,
+    }),
+  });
+  const result = (await response.json().catch(() => null)) as
+    | TongtuApiResponse
+    | null;
+
+  logTongtuResponse(params.logScope, "waybill detail response", {
+    request: {
+      waybillId: params.waybillId,
+    },
+    status: response.status,
+    statusText: response.statusText,
+    headers: getResponseHeaders(response),
+    payload: result,
+  });
+
+  if (!response.ok) {
+    throw new Error(getPayloadError(result) || "通途运单详情查询失败");
+  }
+
+  assertTongtuSuccess(result, "通途运单详情查询失败");
+
+  return result;
 }
 
 function isTrackingFieldName(key: string) {
