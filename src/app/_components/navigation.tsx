@@ -2,7 +2,6 @@
 
 import {
   AppstoreOutlined,
-  BarsOutlined,
   ControlOutlined,
   DollarOutlined,
   LogoutOutlined,
@@ -16,6 +15,7 @@ import {
 } from "@ant-design/icons";
 import type { MenuProps } from "antd";
 import { Menu, Typography } from "antd";
+import Image from "next/image";
 import type { ReactNode } from "react";
 import type { DataNode } from "antd/es/tree";
 
@@ -214,9 +214,14 @@ export function AppSidebar({
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-16 items-center gap-3 border-b border-white/10 px-5">
-        <span className="flex h-9 w-9 items-center justify-center rounded-md bg-blue-500 text-lg text-white">
-          <BarsOutlined />
-        </span>
+        <Image
+          src="/lyb-erp-sidebar-icon.svg"
+          alt="玲伊贝ERP"
+          width={36}
+          height={36}
+          priority
+          className="h-9 w-9"
+        />
         <div className="min-w-0">
           <Typography.Text className="block !text-base !font-semibold !text-white">
             玲伊贝ERP

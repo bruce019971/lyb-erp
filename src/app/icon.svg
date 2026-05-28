@@ -1,0 +1,19 @@
+<svg width="144" height="144" viewBox="0 0 144 144" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">玲伊贝ERP侧边栏图标</title>
+  <desc id="desc">适合小尺寸显示的跨境电商ERP图标。</desc>
+  <defs>
+    <linearGradient id="bg" x1="12" y1="10" x2="132" y2="134" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2E83FF"/>
+      <stop offset="1" stop-color="#1667F2"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="128" height="128" rx="28" fill="url(#bg)"/>
+  <path d="M34 76C34 55.01 51.01 38 72 38C88.08 38 101.83 47.98 107.38 62.08" stroke="#FFFFFF" stroke-width="9" stroke-linecap="round"/>
+  <path d="M109 67L117 55L103 54" stroke="#FFFFFF" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M110 72C110 92.99 92.99 110 72 110C55.92 110 42.17 100.02 36.62 85.92" stroke="#FFFFFF" stroke-width="9" stroke-linecap="round"/>
+  <path d="M35 77L27 89L41 90" stroke="#FFFFFF" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M54 50L72 40L90 50V70L72 80L54 70V50Z" fill="#FFFFFF"/>
+  <path d="M54 50L72 60L90 50" stroke="#1E72F5" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M72 60V80" stroke="#1E72F5" stroke-width="6" stroke-linecap="round"/>
+  <path d="M49 90H95" stroke="#FFFFFF" stroke-width="8" stroke-linecap="round" opacity="0.9"/>
+</svg>

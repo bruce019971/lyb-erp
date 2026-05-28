@@ -12,6 +12,7 @@ import {
   message,
 } from "antd";
 import zhCN from "antd/locale/zh_CN";
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -69,6 +70,14 @@ export default function LoginPage() {
             className="w-full max-w-[460px] shadow-[0_20px_60px_rgba(15,23,42,0.08)]"
           >
             <div className="mb-8 text-center">
+              <Image
+                src="/lyb-erp-sidebar-icon.svg"
+                alt="玲伊贝ERP"
+                width={64}
+                height={64}
+                priority
+                className="mx-auto mb-4 h-16 w-16"
+              />
               <Typography.Title level={2} className="!mb-2">
                 玲伊贝ERP
               </Typography.Title>

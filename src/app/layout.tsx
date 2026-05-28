@@ -17,6 +17,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "玲伊贝ERP-跨境电商管理系统",
   description: "跨境电商管理系统",
+  icons: {
+    icon: "/icon.svg",
+  },
 };
 
 export default function RootLayout({
