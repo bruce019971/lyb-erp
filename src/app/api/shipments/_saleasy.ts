@@ -35,6 +35,8 @@ export const SALEASY_CONFIRM_TRANSPORT_PLAN_PATH =
   "/api/WarehouseService/TransportPlan/Confirm";
 export const SALEASY_TRANSPORT_PLAN_LIST_PATH =
   "/api/WarehouseService/TransportPlan/GetPlanPaged";
+export const SALEASY_TRANSPORT_PLAN_QUERY_TRACKS_PATH =
+  "/api/WarehouseService/TransportPlan/QueryTracks";
 export const SALEASY_PRINT_TRANSPORT_PLAN_BOX_PATH =
   "/api/WarehouseService/TransportPlan/BatchPrint/TransportPlanBatchPrintBox.pdf";
 export const SALEASY_WAYBILL_LIST_PATH =
