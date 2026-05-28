@@ -175,7 +175,9 @@ export function getShipmentTrackColumns(
       render: (_, record) => {
         const providerName = record.logistics_provider?.trim();
         const canUpdateTrack =
-          providerName === "赛易" || providerName === "日升辉";
+          providerName === "赛易" ||
+          providerName === "日升辉" ||
+          providerName === "通途";
 
         return [
           <Tooltip
@@ -183,7 +185,7 @@ export function getShipmentTrackColumns(
             title={
               canUpdateTrack
                 ? "更新轨迹"
-                : "当前仅支持赛易/日升辉货件更新轨迹"
+                : "当前仅支持赛易/日升辉/通途货件更新轨迹"
             }
           >
             <Button

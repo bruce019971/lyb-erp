@@ -257,3 +257,31 @@ export async function updateRishenghuiShipmentTrack(values: {
     matchedCount: payload.matchedCount ?? 0,
   };
 }
+
+export async function updateTongtuShipmentTrack(values: { trackId: string }) {
+  const response = await fetch("/api/shipment-tracks/tongtu-update", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(values),
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        data?: ShipmentTrackRow;
+        trackEvents?: ShipmentTrackEvent[];
+        matchedCount?: number;
+        error?: string;
+      }
+    | null;
+
+  if (!response.ok || !payload?.data) {
+    throw new Error(payload?.error || "通途轨迹更新失败");
+  }
+
+  return {
+    record: normalizeTrackRow(payload.data),
+    trackEvents: payload.trackEvents ?? [],
+    matchedCount: payload.matchedCount ?? 0,
+  };
+}

@@ -11,6 +11,7 @@ import {
   requestShipmentTrackRecords,
   updateRishenghuiShipmentTrack,
   updateSaleasyShipmentTrack,
+  updateTongtuShipmentTrack,
 } from "../_lib/shipment-tracks-request";
 import {
   formatShipmentTrackDateTime,
@@ -96,6 +97,8 @@ export default function ShipmentTracksTable({
               trackId: record.id,
               accessToken: token,
             })
+          : providerName === "通途"
+            ? await updateTongtuShipmentTrack({ trackId: record.id })
           : await updateSaleasyShipmentTrack({ trackId: record.id });
 
       setDataSource((current) =>
@@ -254,7 +257,7 @@ export default function ShipmentTracksTable({
           setting: true,
         }}
         toolBarRender={false}
-        scroll={{ x: 1270 }}
+        scroll={{ x: 1270, y: "calc(100vh - 360px)" }}
         onScroll={(event) => {
           const target = event.currentTarget;
 
