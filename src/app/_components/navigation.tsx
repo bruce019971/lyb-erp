@@ -6,6 +6,7 @@ import {
   DollarOutlined,
   LogoutOutlined,
   ProfileOutlined,
+  RadarChartOutlined,
   SafetyCertificateOutlined,
   TagsOutlined,
   ShopOutlined,
@@ -26,6 +27,7 @@ export type PageKey =
   | "logistics"
   | "relabels"
   | "freights"
+  | "shipment_tracks"
   | "profile"
   | "users"
   | "roles";
@@ -62,6 +64,13 @@ export const pageConfigs: PageConfig[] = [
     label: "运费管理",
     icon: <DollarOutlined />,
     href: "/freights",
+    section: "core",
+  },
+  {
+    key: "shipment_tracks",
+    label: "货件轨迹",
+    icon: <RadarChartOutlined />,
+    href: "/shipment-tracks",
     section: "core",
   },
   {

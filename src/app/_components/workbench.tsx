@@ -12,6 +12,7 @@ import ProfilePage from "../profile/_components/profile-page";
 import ProductsPage from "../products/_components/products-page";
 import RelabelsPage from "../relabels/_components/relabels-page";
 import RolesPage from "../roles/_components/roles-page";
+import ShipmentTracksPage from "../shipment-tracks/_components/shipment-tracks-page";
 import ShipmentsPage from "../shipments/_components/shipments-page";
 import StoresPage from "../stores/_components/stores-page";
 import UsersPage from "../users/_components/users-page";
@@ -38,6 +39,7 @@ function renderPage(key: PageKey) {
   if (key === "stores") return <StoresPage />;
   if (key === "relabels") return <RelabelsPage />;
   if (key === "freights") return <FreightsPage />;
+  if (key === "shipment_tracks") return <ShipmentTracksPage />;
   if (key === "profile") return <ProfilePage />;
   if (key === "users") return <UsersPage />;
   if (key === "roles") return <RolesPage />;

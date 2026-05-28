@@ -12,8 +12,8 @@ create table if not exists public.system_roles (
 
 insert into public.system_roles (role_name, role_code, data_scope, menu_permissions, status)
 values
-  ('系统管理员', 'admin', '全部数据权限', '["core","products","shipments","stores","logistics","relabels","freights","system","users","roles"]'::jsonb, '启用'),
-  ('普通管理员', 'manager', '业务数据权限', '["core","products","shipments","stores","logistics","relabels","freights"]'::jsonb, '启用')
+  ('系统管理员', 'admin', '全部数据权限', '["core","products","shipments","stores","logistics","relabels","freights","shipment_tracks","system","users","roles"]'::jsonb, '启用'),
+  ('普通管理员', 'manager', '业务数据权限', '["core","products","shipments","stores","logistics","relabels","freights","shipment_tracks"]'::jsonb, '启用')
 on conflict (role_code) do update
 set
   role_name = excluded.role_name,
