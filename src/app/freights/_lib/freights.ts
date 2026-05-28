@@ -26,6 +26,12 @@ export type FreightUpdateValues = {
   freight_paid_status?: string | null;
 };
 
+export type FreightSummary = {
+  volume: number;
+  total_fee: number;
+  bill_amount: number;
+};
+
 export function calculateFreightTotalFee(values: {
   freight_unit_price?: number | null;
   volume?: number | null;

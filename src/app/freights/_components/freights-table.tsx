@@ -2,13 +2,13 @@
 
 import type { ActionType } from "@ant-design/pro-components";
 import { ProTable } from "@ant-design/pro-components";
-import { Spin } from "antd";
+import { Spin, Table } from "antd";
 import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
 import type { ShipmentOption } from "../../shipments/_lib/shipments";
-import type { FreightRecord } from "../_lib/freights";
+import type { FreightRecord, FreightSummary } from "../_lib/freights";
 import { requestFreightRecords } from "../_lib/freights-request";
 import { getFreightColumns } from "./freights-columns";
 
@@ -33,6 +33,19 @@ type FreightsTableProps = {
 };
 
 const PAGE_SIZE = 40;
+const FREIGHT_SUMMARY_COLUMN_KEYS = [
+  "shipment_no",
+  "product_name",
+  "logistics_provider",
+  "freight_unit_price",
+  "volume",
+  "extra_fee",
+  "total_fee",
+  "bill_amount",
+  "unit_fee",
+  "box_count",
+  "freight_paid_status",
+] as const;
 
 function hasBillAmount(value?: number | null) {
   return typeof value === "number" && Number.isFinite(value);
@@ -50,6 +63,22 @@ function mergeFreightsById(current: FreightRecord[], incoming: FreightRecord[]) 
   });
 
   return Array.from(merged.values());
+}
+
+function formatSummaryMoney(value?: number | null) {
+  const amount =
+    typeof value === "number" && Number.isFinite(value) ? value : 0;
+
+  return `¥${amount.toLocaleString("zh-CN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function formatSummaryVolume(value?: number | null) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? value.toFixed(3)
+    : "0.000";
 }
 
 export default function FreightsTable({
@@ -116,6 +145,7 @@ export default function FreightsTable({
   const hasMoreRef = useRef(true);
   const currentPageRef = useRef(1);
   const [dataSource, setDataSource] = useState<FreightRecord[]>([]);
+  const [summary, setSummary] = useState<FreightSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
 
@@ -146,6 +176,7 @@ export default function FreightsTable({
         setDataSource((current) =>
           append ? mergeFreightsById(current, nextData) : nextData,
         );
+        setSummary(result.summary ?? null);
         currentPageRef.current = page;
         hasMoreRef.current = nextData.length >= PAGE_SIZE;
       } finally {
@@ -200,6 +231,7 @@ export default function FreightsTable({
 
   return (
     <ProTable<FreightRecord>
+      className="freights-table-with-sticky-summary"
       rowKey="id"
       size="small"
       columns={columns}
@@ -220,7 +252,7 @@ export default function FreightsTable({
         reload: false,
         setting: true,
       }}
-      scroll={{ x: 1400, y: "calc(100vh - 360px)" }}
+      scroll={{ x: 1800, y: "calc(100vh - 360px)" }}
       onScroll={(event) => {
         const target = event.currentTarget;
         if (
@@ -240,6 +272,38 @@ export default function FreightsTable({
       }}
       pagination={false}
       dateFormatter="string"
+      summary={() => (
+        <Table.Summary fixed="bottom">
+          <Table.Summary.Row className="freight-summary-row">
+            {FREIGHT_SUMMARY_COLUMN_KEYS.map((key, index) => {
+              let content = null;
+
+              if (key === "shipment_no") {
+                content = "合计";
+              }
+
+              if (key === "volume") {
+                content = formatSummaryVolume(summary?.volume);
+              }
+
+              if (key === "total_fee") {
+                content = formatSummaryMoney(summary?.total_fee);
+              }
+
+              if (key === "bill_amount") {
+                content = formatSummaryMoney(summary?.bill_amount);
+              }
+
+              return (
+                <Table.Summary.Cell key={key} index={index}>
+                  {content}
+                </Table.Summary.Cell>
+              );
+            })}
+            <Table.Summary.Cell index={FREIGHT_SUMMARY_COLUMN_KEYS.length} />
+          </Table.Summary.Row>
+        </Table.Summary>
+      )}
       tableRender={(_, dom) => (
         <div className="relative">
           {dom}

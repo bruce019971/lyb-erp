@@ -218,6 +218,20 @@ td.shipment-delivery-done-cell:hover,
   font-weight: 600;
 }
 
+.shipments-table-with-sticky-summary .shipment-summary-row > td,
+.freights-table-with-sticky-summary .freight-summary-row > td {
+  background: #f8fafc !important;
+  box-shadow: 0 -1px 0 #e5e7eb;
+}
+
+.shipments-table-with-sticky-summary .shipment-summary-row > td {
+  font-weight: 600;
+}
+
+.freights-table-with-sticky-summary .freight-summary-row > td {
+  font-weight: 600;
+}
+
 .role-status-group .ant-radio-button-wrapper {
   min-width: 148px;
   height: 56px;

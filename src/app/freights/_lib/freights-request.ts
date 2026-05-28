@@ -2,6 +2,7 @@ import {
   calculateFreightTotalFee,
   calculateFreightUnitFee,
   type FreightRecord,
+  type FreightSummary,
   type FreightUpdateValues,
 } from "./freights";
 
@@ -33,6 +34,17 @@ function normalizeSelectValues(value: unknown) {
     .filter(Boolean);
 }
 
+function normalizeDateRangeValues(value: unknown) {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) =>
+      typeof item === "string" ? item.trim() : String(item ?? "").trim(),
+    )
+    .filter(Boolean)
+    .slice(0, 2);
+}
+
 function splitSearchTexts(value: unknown) {
   const values = Array.isArray(value) ? value : [value];
 
@@ -62,6 +74,9 @@ export async function requestFreightRecords(params: FreightRequestParams) {
   normalizeMultiSelectValues(params.logistics_provider).forEach((value) => {
     searchParams.append("logistics_provider", value);
   });
+  normalizeDateRangeValues(params.created_at).forEach((value) => {
+    searchParams.append("created_at", value);
+  });
   normalizeSelectValues(params.bill_issued).forEach((value) => {
     searchParams.append("bill_issued", value);
   });
@@ -71,17 +86,23 @@ export async function requestFreightRecords(params: FreightRequestParams) {
 
   const response = await fetch(`/api/freights?${searchParams.toString()}`);
   const payload = (await response.json().catch(() => null)) as
-    | { data?: FreightRecord[]; total?: number; error?: string }
+    | {
+        data?: FreightRecord[];
+        total?: number;
+        summary?: FreightSummary;
+        error?: string;
+      }
     | null;
 
   if (!response.ok) {
-    return { data: [], success: false, total: 0 };
+    return { data: [], success: false, total: 0, summary: null };
   }
 
   return {
     data: payload?.data ?? [],
     success: true,
     total: payload?.total ?? 0,
+    summary: payload?.summary ?? null,
   };
 }
 

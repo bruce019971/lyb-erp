@@ -189,6 +189,12 @@ export function getFreightColumns(
       },
     },
     {
+      title: "起始日期",
+      dataIndex: "created_at",
+      valueType: "dateRange",
+      hideInTable: true,
+    },
+    {
       title: "账单已出",
       dataIndex: "bill_issued",
       valueType: "select",

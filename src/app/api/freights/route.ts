@@ -48,6 +48,12 @@ type FreightRow = {
     | null;
 };
 
+type FreightSummary = {
+  volume: number;
+  total_fee: number;
+  bill_amount: number;
+};
+
 function calculateFreightUnitFee(
   totalFee?: number | null,
   totalQty?: number | null,
@@ -86,6 +92,31 @@ function normalizeFreightRow(row: FreightRow) {
     freight_paid_status: row.freight_paid_status ?? "否",
     created_at: row.created_at,
     updated_at: row.updated_at,
+  };
+}
+
+function getFiniteNumber(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value.trim().replace(/,/g, ""));
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  return 0;
+}
+
+function addSummaryValue(summary: FreightSummary, row: FreightRow) {
+  summary.volume += getFiniteNumber(row.volume);
+  summary.total_fee += getFiniteNumber(row.total_fee);
+  summary.bill_amount += getFiniteNumber(row.bill_amount);
+}
+
+function normalizeSummary(summary: FreightSummary): FreightSummary {
+  return {
+    volume: Number(summary.volume.toFixed(3)),
+    total_fee: Number(summary.total_fee.toFixed(2)),
+    bill_amount: Number(summary.bill_amount.toFixed(2)),
   };
 }
 
@@ -145,6 +176,16 @@ function splitSearchTexts(values: string[]) {
     .flatMap((item) => item.split(/[\s,，]+/))
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function normalizeDateRangeValues(values: string[]) {
+  return values.map((item) => item.trim()).filter(Boolean).slice(0, 2);
+}
+
+function normalizeCreatedAtBoundary(value: string, boundary: "start" | "end") {
+  return boundary === "start"
+    ? `${value}T00:00:00`
+    : `${value}T23:59:59.999`;
 }
 
 async function verifyOperator() {
@@ -207,6 +248,9 @@ export async function GET(request: Request) {
     const logisticsProviderValues = normalizeMultiSelectValues(
       searchParams.getAll("logistics_provider"),
     );
+    const [createdAtStart, createdAtEnd] = normalizeDateRangeValues(
+      searchParams.getAll("created_at"),
+    );
     const billIssuedValues = normalizeMultiSelectValues(
       searchParams.getAll("bill_issued"),
     );
@@ -231,7 +275,9 @@ export async function GET(request: Request) {
       shipmentNoValues.length > 0 ||
       trackingNoValues.length > 0 ||
       productNameValues.length > 0 ||
-      logisticsProviderValues.length > 0
+      logisticsProviderValues.length > 0 ||
+      Boolean(createdAtStart) ||
+      Boolean(createdAtEnd)
     ) {
       let shipmentQuery = adminClient
         .from("shipment_records")
@@ -257,6 +303,20 @@ export async function GET(request: Request) {
         );
       }
 
+      if (createdAtStart) {
+        shipmentQuery = shipmentQuery.gte(
+          "created_at",
+          normalizeCreatedAtBoundary(createdAtStart, "start"),
+        );
+      }
+
+      if (createdAtEnd) {
+        shipmentQuery = shipmentQuery.lte(
+          "created_at",
+          normalizeCreatedAtBoundary(createdAtEnd, "end"),
+        );
+      }
+
       const { data: shipmentRows, error: shipmentError } = await shipmentQuery;
 
       if (shipmentError) {
@@ -272,6 +332,11 @@ export async function GET(request: Request) {
       return NextResponse.json({
         data: [],
         total: 0,
+        summary: normalizeSummary({
+          volume: 0,
+          total_fee: 0,
+          bill_amount: 0,
+        }),
       });
     }
 
@@ -283,18 +348,27 @@ export async function GET(request: Request) {
       )
       .eq("shipment.status", "有效")
       .range(from, to);
+    let summaryQuery = adminClient
+      .from("freight_records")
+      .select(
+        "id, shipment_record_id, freight_unit_price, volume, extra_fee, total_fee, bill_amount, freight_paid_status, created_at, updated_at, shipment:shipment_records!inner(shipment_no, tracking_no, logistics_provider, product_name, box_count, total_qty)",
+      )
+      .eq("shipment.status", "有效");
 
     if (matchedShipmentIds && matchedShipmentIds.length > 0) {
       query = query.in("shipment_record_id", matchedShipmentIds);
+      summaryQuery = summaryQuery.in("shipment_record_id", matchedShipmentIds);
     }
 
     if (billIssuedValues.includes("是") && !billIssuedValues.includes("否")) {
       query = query.not("bill_amount", "is", null);
+      summaryQuery = summaryQuery.not("bill_amount", "is", null);
     } else if (
       billIssuedValues.includes("否") &&
       !billIssuedValues.includes("是")
     ) {
       query = query.is("bill_amount", null);
+      summaryQuery = summaryQuery.is("bill_amount", null);
     }
 
     if (
@@ -302,11 +376,15 @@ export async function GET(request: Request) {
       !freightPaidStatusValues.includes("否")
     ) {
       query = query.eq("freight_paid_status", "是");
+      summaryQuery = summaryQuery.eq("freight_paid_status", "是");
     } else if (
       freightPaidStatusValues.includes("否") &&
       !freightPaidStatusValues.includes("是")
     ) {
       query = query.or("freight_paid_status.is.null,freight_paid_status.eq.否");
+      summaryQuery = summaryQuery.or(
+        "freight_paid_status.is.null,freight_paid_status.eq.否",
+      );
     }
 
     query = query.order(
@@ -317,15 +395,33 @@ export async function GET(request: Request) {
       },
     );
 
-    const { data, error, count } = await query;
+    const [listResult, summaryResult] = await Promise.all([query, summaryQuery]);
+    const { data, error, count } = listResult;
 
     if (error) {
       throw error;
     }
 
+    if (summaryResult.error) {
+      throw summaryResult.error;
+    }
+
+    const summary = ((summaryResult.data ?? []) as FreightRow[]).reduce(
+      (result, row) => {
+        addSummaryValue(result, row);
+        return result;
+      },
+      {
+        volume: 0,
+        total_fee: 0,
+        bill_amount: 0,
+      },
+    );
+
     return NextResponse.json({
       data: ((data ?? []) as FreightRow[]).map(normalizeFreightRow),
       total: count ?? 0,
+      summary: normalizeSummary(summary),
     });
   } catch (error) {
     const message =
