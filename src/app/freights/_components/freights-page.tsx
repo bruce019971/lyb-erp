@@ -12,6 +12,11 @@ import { requestLogisticsProviderOptions } from "../../logistics/_lib/logistics-
 import type { ShipmentOption } from "../../shipments/_lib/shipments";
 import { requestShipmentOptions } from "../../shipments/_lib/shipments-request";
 import { getRishenghuiAccessToken } from "../../shipments/_lib/shipments-request";
+import {
+  clearStoredRishenghuiAccessToken,
+  getStoredRishenghuiAccessToken,
+  saveStoredRishenghuiAccessToken,
+} from "../../shipments/_lib/rishenghui-token-storage";
 import ShipmentsTableSkeleton from "../../shipments/_components/shipments-table-skeleton";
 import RishenghuiAuthModal from "../../shipments/_components/rishenghui-auth-modal";
 import { calculateFreightTotalFee, type FreightRecord } from "../_lib/freights";
@@ -30,6 +35,8 @@ import FreightsEditDrawer from "./freights-edit-drawer";
 import FreightsTable from "./freights-table";
 
 dayjs.locale("zh-cn");
+
+type PendingRishenghuiAction = (accessToken: string) => void | Promise<void>;
 
 export default function FreightsPage() {
   const [mounted, setMounted] = useState(false);
@@ -77,6 +84,9 @@ export default function FreightsPage() {
     LogisticsProviderOption[]
   >([]);
   const tableActionRef = useRef<ActionType>(undefined);
+  const pendingRishenghuiActionRef = useRef<PendingRishenghuiAction | null>(
+    null,
+  );
   const [messageApi, contextHolder] = message.useMessage();
   const [modalApi, modalContextHolder] = Modal.useModal();
 
@@ -84,6 +94,16 @@ export default function FreightsPage() {
     const timer = window.setTimeout(() => setMounted(true), 0);
     return () => window.clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+
+    const timer = window.setTimeout(() => {
+      setRishenghuiAccessToken(getStoredRishenghuiAccessToken());
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [mounted]);
 
   useEffect(() => {
     if (!mounted) return;
@@ -125,14 +145,33 @@ export default function FreightsPage() {
     };
   }, [mounted]);
 
-  function showRishenghuiTokenRequiredModal(content?: string) {
+  function showRishenghuiTokenRequiredModal(
+    content?: string,
+    pendingAction?: PendingRishenghuiAction,
+  ) {
     setRishenghuiAccessToken("");
+    clearStoredRishenghuiAccessToken();
+    if (pendingAction) {
+      pendingRishenghuiActionRef.current = pendingAction;
+    }
     modalApi.warning({
       title: "请先获取日升辉Token",
       content: content?.trim() || "当前没有可用的日升辉Token，请先获取Token。",
       okText: "去获取Token",
       onOk: () => setRishenghuiAuthOpen(true),
     });
+  }
+
+  function handleRishenghuiTokenSaved(accessToken: string) {
+    const token = accessToken.trim();
+    setRishenghuiAccessToken(token);
+    saveStoredRishenghuiAccessToken(token);
+    const pendingAction = pendingRishenghuiActionRef.current;
+    pendingRishenghuiActionRef.current = null;
+
+    if (pendingAction) {
+      void pendingAction(accessToken);
+    }
   }
 
   function isRishenghuiTokenError(error: unknown) {
@@ -241,14 +280,19 @@ export default function FreightsPage() {
     });
   }
 
-  async function fetchAndSaveBill(record: FreightRecord, providerName: string) {
+  async function fetchAndSaveBill(
+    record: FreightRecord,
+    providerName: string,
+    accessTokenOverride?: string,
+  ) {
     try {
       setFetchingBillId(record.id);
       const result =
         providerName === "日升辉"
           ? await fetchRishenghuiFreightBill({
               freightId: record.id,
-              accessToken: getRequiredRishenghuiAccessToken(),
+              accessToken:
+                accessTokenOverride?.trim() || getRequiredRishenghuiAccessToken(),
             })
           : providerName === "通途"
             ? await fetchTongtuFreightBill({
@@ -271,7 +315,9 @@ export default function FreightsPage() {
       messageApi.error(`账单获取失败：${description}`);
 
       if (providerName === "日升辉" && isRishenghuiTokenError(error)) {
-        showRishenghuiTokenRequiredModal(description);
+        showRishenghuiTokenRequiredModal(description, (accessToken) =>
+          fetchAndSaveBill(record, providerName, accessToken),
+        );
       }
     } finally {
       setFetchingBillId(null);
@@ -313,11 +359,6 @@ export default function FreightsPage() {
       return;
     }
 
-    if (providerName === "日升辉" && !rishenghuiAccessToken.trim()) {
-      showRishenghuiTokenRequiredModal();
-      return;
-    }
-
     if (typeof record.bill_amount === "number" && Number.isFinite(record.bill_amount)) {
       modalApi.confirm({
         title: "是否覆盖账单金额？",
@@ -325,8 +366,24 @@ export default function FreightsPage() {
         okText: "覆盖",
         cancelText: "取消",
         centered: true,
-        onOk: () => fetchAndSaveBill(record, providerName),
+        onOk: () => {
+          if (providerName === "日升辉" && !rishenghuiAccessToken.trim()) {
+            showRishenghuiTokenRequiredModal(undefined, (accessToken) =>
+              fetchAndSaveBill(record, providerName, accessToken),
+            );
+            return;
+          }
+
+          void fetchAndSaveBill(record, providerName);
+        },
       });
+      return;
+    }
+
+    if (providerName === "日升辉" && !rishenghuiAccessToken.trim()) {
+      showRishenghuiTokenRequiredModal(undefined, (accessToken) =>
+        fetchAndSaveBill(record, providerName, accessToken),
+      );
       return;
     }
 
@@ -343,13 +400,14 @@ export default function FreightsPage() {
 
   async function fetchAndSaveUnitPrice(
     record: FreightRecord,
-    options?: { overwrite?: boolean },
+    options?: { overwrite?: boolean; accessToken?: string },
   ) {
     try {
       setFetchingUnitPriceId(record.id);
       const result = await fetchRishenghuiFreightUnitPrice({
         freightId: record.id,
-        accessToken: getRequiredRishenghuiAccessToken(),
+        accessToken:
+          options?.accessToken?.trim() || getRequiredRishenghuiAccessToken(),
         overwrite: options?.overwrite,
       });
 
@@ -364,7 +422,11 @@ export default function FreightsPage() {
           okText: "覆盖",
           cancelText: "取消",
           centered: true,
-          onOk: () => fetchAndSaveUnitPrice(record, { overwrite: true }),
+          onOk: () =>
+            fetchAndSaveUnitPrice(record, {
+              overwrite: true,
+              accessToken: options?.accessToken,
+            }),
         });
         return;
       }
@@ -377,7 +439,12 @@ export default function FreightsPage() {
       messageApi.error(`运费单价获取失败：${description}`);
 
       if (isRishenghuiTokenError(error)) {
-        showRishenghuiTokenRequiredModal(description);
+        showRishenghuiTokenRequiredModal(description, (accessToken) =>
+          fetchAndSaveUnitPrice(record, {
+            ...options,
+            accessToken,
+          }),
+        );
       }
     } finally {
       setFetchingUnitPriceId(null);
@@ -403,7 +470,9 @@ export default function FreightsPage() {
     }
 
     if (!rishenghuiAccessToken.trim()) {
-      showRishenghuiTokenRequiredModal();
+      showRishenghuiTokenRequiredModal(undefined, (accessToken) =>
+        fetchAndSaveUnitPrice(record, { accessToken }),
+      );
       return;
     }
 
@@ -470,7 +539,10 @@ export default function FreightsPage() {
     await savePaidStatus();
   }
 
-  async function fetchAndSaveVolume(record: FreightRecord) {
+  async function fetchAndSaveVolume(
+    record: FreightRecord,
+    accessTokenOverride?: string,
+  ) {
     const providerName = record.logistics_provider?.trim();
 
     try {
@@ -479,7 +551,8 @@ export default function FreightsPage() {
       if (providerName === "日升辉") {
         const result = await fetchRishenghuiFreightVolume({
           freightId: record.id,
-          accessToken: getRequiredRishenghuiAccessToken(),
+          accessToken:
+            accessTokenOverride?.trim() || getRequiredRishenghuiAccessToken(),
         });
 
         setVolumeDetail({
@@ -529,7 +602,9 @@ export default function FreightsPage() {
       messageApi.error(`方数获取失败：${description}`);
 
       if (providerName === "日升辉" && isRishenghuiTokenError(error)) {
-        showRishenghuiTokenRequiredModal(description);
+        showRishenghuiTokenRequiredModal(description, (accessToken) =>
+          fetchAndSaveVolume(record, accessToken),
+        );
       }
     } finally {
       setFetchingVolumeId(null);
@@ -575,11 +650,6 @@ export default function FreightsPage() {
       return;
     }
 
-    if (providerName === "日升辉" && !rishenghuiAccessToken.trim()) {
-      showRishenghuiTokenRequiredModal();
-      return;
-    }
-
     if (typeof record.volume === "number" && Number.isFinite(record.volume)) {
       modalApi.confirm({
         title: "是否覆盖",
@@ -587,8 +657,24 @@ export default function FreightsPage() {
         okText: "覆盖",
         cancelText: "取消",
         centered: true,
-        onOk: () => fetchAndSaveVolume(record),
+        onOk: () => {
+          if (providerName === "日升辉" && !rishenghuiAccessToken.trim()) {
+            showRishenghuiTokenRequiredModal(undefined, (accessToken) =>
+              fetchAndSaveVolume(record, accessToken),
+            );
+            return;
+          }
+
+          void fetchAndSaveVolume(record);
+        },
       });
+      return;
+    }
+
+    if (providerName === "日升辉" && !rishenghuiAccessToken.trim()) {
+      showRishenghuiTokenRequiredModal(undefined, (accessToken) =>
+        fetchAndSaveVolume(record, accessToken),
+      );
       return;
     }
 
@@ -722,7 +808,7 @@ export default function FreightsPage() {
           <RishenghuiAuthModal
             open={rishenghuiAuthOpen}
             onClose={() => setRishenghuiAuthOpen(false)}
-            onSaved={setRishenghuiAccessToken}
+            onSaved={handleRishenghuiTokenSaved}
             onGetAccessToken={getRishenghuiAccessToken}
           />
         ) : null}

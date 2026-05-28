@@ -33,6 +33,11 @@ import {
   updateShipmentDeliveryStatus,
   updateShipmentRelabelStatus,
 } from "../_lib/shipments-request";
+import {
+  clearStoredRishenghuiAccessToken,
+  getStoredRishenghuiAccessToken,
+  saveStoredRishenghuiAccessToken,
+} from "../_lib/rishenghui-token-storage";
 import ShipmentCreateDrawer from "./shipment-create-drawer";
 import ShipmentEditDrawer from "./shipment-edit-drawer";
 import RishenghuiAuthModal from "./rishenghui-auth-modal";
@@ -44,6 +49,7 @@ type ShipmentsPageProps = {
 };
 
 type LogisticsOrderStepKey = "invoice" | "order" | "boxMark";
+type PendingRishenghuiAction = (accessToken: string) => void | Promise<void>;
 
 const logisticsOrderSteps: Array<{
   key: LogisticsOrderStepKey;
@@ -110,11 +116,24 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
   const [modalApi, modalContextHolder] = Modal.useModal();
   const tableActionRef = useRef<ActionType>(undefined);
   const searchFormRef = useRef<FormInstance>(undefined);
+  const pendingRishenghuiActionRef = useRef<PendingRishenghuiAction | null>(
+    null,
+  );
 
   useEffect(() => {
     const timer = window.setTimeout(() => setMounted(true), 0);
     return () => window.clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+
+    const timer = window.setTimeout(() => {
+      setRishenghuiAccessToken(getStoredRishenghuiAccessToken());
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [mounted]);
 
   useEffect(() => {
     if (!mounted) return;
@@ -233,8 +252,15 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
     );
   }
 
-  function showRishenghuiTokenRequiredModal(content?: string) {
+  function showRishenghuiTokenRequiredModal(
+    content?: string,
+    pendingAction?: PendingRishenghuiAction,
+  ) {
     setRishenghuiAccessToken("");
+    clearStoredRishenghuiAccessToken();
+    if (pendingAction) {
+      pendingRishenghuiActionRef.current = pendingAction;
+    }
     modalApi.warning({
       title: "请先获取日升辉Token",
       content: content?.trim() || "当前没有可用的日升辉Token，请先在列表右上角获取Token。",
@@ -248,6 +274,18 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
     return /token|access.?token|authorization|unauthorized|401|403|登录|认证|过期|失效|无效|未授权|权限|身份/i.test(
       message,
     );
+  }
+
+  function handleRishenghuiTokenSaved(accessToken: string) {
+    const token = accessToken.trim();
+    setRishenghuiAccessToken(token);
+    saveStoredRishenghuiAccessToken(token);
+    const pendingAction = pendingRishenghuiActionRef.current;
+    pendingRishenghuiActionRef.current = null;
+
+    if (pendingAction) {
+      void pendingAction(accessToken);
+    }
   }
 
   async function handleChangeDeliveryStatus(
@@ -422,12 +460,17 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
       );
       tableActionRef.current?.reload();
     } catch (error) {
-      showRishenghuiTokenRequiredModal(
-        error instanceof Error ? error.message : "请重新获取日升辉Token后再操作",
-      );
-      messageApi.error(
-        error instanceof Error ? error.message : "物流箱唛生成失败",
-      );
+      const description =
+        error instanceof Error ? error.message : "物流箱唛生成失败";
+      messageApi.error(description);
+      if (isRishenghuiTokenError(error)) {
+        showRishenghuiTokenRequiredModal(description, (accessToken) =>
+          handleGenerateLogisticsBoxMark({
+            record: values.record,
+            accessToken,
+          }),
+        );
+      }
     } finally {
       setGeneratingLogisticsBoxMarkId(null);
     }
@@ -471,7 +514,10 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
     }
   }
 
-  async function runLogisticsOrder(record: ShipmentRecord) {
+  async function runLogisticsOrder(
+    record: ShipmentRecord,
+    accessTokenOverride?: string,
+  ) {
     const providerName = record.logistics_provider?.trim() || "";
     const shipmentNo = record.shipment_no?.trim() || "";
     const isRishenghui = providerName === "日升辉";
@@ -482,9 +528,11 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
       return;
     }
 
-    const token = rishenghuiAccessToken.trim();
+    const token = accessTokenOverride?.trim() || rishenghuiAccessToken.trim();
     if (isRishenghui && !token) {
-      showRishenghuiTokenRequiredModal();
+      showRishenghuiTokenRequiredModal(undefined, (accessToken) =>
+        runLogisticsOrder(record, accessToken),
+      );
       return;
     }
 
@@ -580,7 +628,9 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
       messageApi.error(description);
 
       if (isRishenghui && isRishenghuiTokenError(error)) {
-        showRishenghuiTokenRequiredModal(description);
+        showRishenghuiTokenRequiredModal(description, (accessToken) =>
+          runLogisticsOrder(record, accessToken),
+        );
       }
     } finally {
       setLogisticsOrderProgress((previous) => ({
@@ -593,11 +643,6 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
 
   function handleLogisticsOrder(record: ShipmentRecord) {
     const providerName = record.logistics_provider?.trim() || "";
-
-    if (providerName === "日升辉" && !rishenghuiAccessToken.trim()) {
-      showRishenghuiTokenRequiredModal();
-      return;
-    }
 
     modalApi.confirm({
       title: "是否确认下单",
@@ -660,13 +705,12 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
 
                   const token = rishenghuiAccessToken.trim();
                   if (!token) {
-                    Modal.warning({
-                      title: "请先获取日升辉Token",
-                      content:
-                        "当前没有可用的日升辉Token，请先在列表右上角获取Token。",
-                      okText: "去获取Token",
-                      onOk: () => setRishenghuiAuthOpen(true),
-                    });
+                    showRishenghuiTokenRequiredModal(undefined, (accessToken) =>
+                      handleGenerateLogisticsBoxMark({
+                        record,
+                        accessToken,
+                      }),
+                    );
                     return;
                   }
 
@@ -753,7 +797,7 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
           <RishenghuiAuthModal
             open={rishenghuiAuthOpen}
             onClose={() => setRishenghuiAuthOpen(false)}
-            onSaved={setRishenghuiAccessToken}
+            onSaved={handleRishenghuiTokenSaved}
             onGetAccessToken={getRishenghuiAccessToken}
           />
         ) : null}
