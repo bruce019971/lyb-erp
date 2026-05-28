@@ -19,6 +19,163 @@ type ShipmentRequestParams = {
   keyword?: string;
 } & Record<string, unknown>;
 
+type DateLikeValue = {
+  format: (template: string) => string;
+};
+
+interface ShipmentSearchQuery {
+  ilike(field: string, value: string): this;
+  in(field: string, values: string[]): this;
+  not(field: string, operator: string, value: unknown): this;
+  is(field: string, value: unknown): this;
+  eq(field: string, value: string): this;
+  or(filters: string): this;
+  gte(field: string, value: unknown): this;
+  lte(field: string, value: unknown): this;
+}
+
+export type ShipmentSummary = {
+  boxCount: number;
+  totalQty: number;
+  goodsValue: number;
+  total: number;
+};
+
+function normalizeMultiSelectValues(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => (typeof item === "string" ? item.trim() : ""))
+    .filter(Boolean);
+}
+
+function splitSearchTexts(value: unknown): string[] {
+  const values = Array.isArray(value) ? value : [value];
+
+  return values
+    .flatMap((item) =>
+      typeof item === "string" ? item.split(/[\s,，]+/) : [],
+    )
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function normalizeDateRangeValue(
+  field: string,
+  value: unknown,
+  boundary: "start" | "end",
+) {
+  function isDateLikeValue(item: unknown): item is DateLikeValue {
+    return (
+      typeof item === "object" &&
+      item !== null &&
+      "format" in item &&
+      typeof item.format === "function"
+    );
+  }
+
+  const dateValue =
+    isDateLikeValue(value)
+      ? value.format("YYYY-MM-DD")
+      : value;
+  if (typeof dateValue !== "string" || !dateValue) return dateValue;
+  if (field !== "created_at") return dateValue;
+  return boundary === "start"
+    ? `${dateValue}T00:00:00`
+    : `${dateValue}T23:59:59.999`;
+}
+
+function applyShipmentSearchParams<TQuery extends ShipmentSearchQuery>(
+  query: TQuery,
+  params: ShipmentRequestParams,
+) {
+  let nextQuery = query;
+
+  shipmentKeywordFields.forEach((field) => {
+    if (field === "shipment_no" || field === "tracking_no") return;
+
+    const value = params[field];
+    if (typeof value === "string" && value.trim()) {
+      nextQuery = nextQuery.ilike(field, `%${value.trim()}%`);
+    }
+  });
+
+  const orderStoreValues = normalizeMultiSelectValues(params.order_store);
+  if (orderStoreValues.length > 0) {
+    nextQuery = nextQuery.in("order_store", orderStoreValues);
+  }
+
+  const shipmentNoValues = splitSearchTexts(params.shipment_no);
+  if (shipmentNoValues.length > 0) {
+    nextQuery = nextQuery.in("shipment_no", shipmentNoValues);
+  }
+
+  const trackingNoValues = splitSearchTexts(params.tracking_no);
+  if (trackingNoValues.length > 0) {
+    nextQuery = nextQuery.in("tracking_no", trackingNoValues);
+  }
+
+  const logisticsProviderValues = normalizeMultiSelectValues(
+    params.logistics_provider,
+  );
+  if (logisticsProviderValues.length > 0) {
+    nextQuery = nextQuery.in("logistics_provider", logisticsProviderValues);
+  }
+
+  const productNameValues = normalizeMultiSelectValues(params.product_name);
+  if (productNameValues.length > 0) {
+    nextQuery = nextQuery.in("product_name", productNameValues);
+  }
+
+  const warehouseArrivedStatus =
+    typeof params.warehouse_arrived_status === "string"
+      ? params.warehouse_arrived_status.trim()
+      : "";
+  if (warehouseArrivedStatus === "是") {
+    nextQuery = nextQuery.not("overseas_warehouse_arrived_at", "is", null);
+  } else if (warehouseArrivedStatus === "否") {
+    nextQuery = nextQuery.is("overseas_warehouse_arrived_at", null);
+  }
+
+  const deliveryStatus =
+    typeof params.delivery_status === "string"
+      ? params.delivery_status.trim()
+      : "";
+  if (deliveryStatus === "是" || deliveryStatus === "否") {
+    nextQuery = nextQuery.eq("delivery_status", deliveryStatus);
+  }
+
+  const isRelabel =
+    typeof params.is_relabel === "string" ? params.is_relabel.trim() : "";
+  if (isRelabel === "是") {
+    nextQuery = nextQuery.eq("is_relabel", isRelabel);
+  } else if (isRelabel === "否") {
+    nextQuery = nextQuery.or("is_relabel.is.null,is_relabel.eq.否");
+  }
+
+  shipmentDateFields.forEach((field) => {
+    const value = params[field];
+    if (!Array.isArray(value)) return;
+
+    const [start, end] = value;
+    const normalizedStart = normalizeDateRangeValue(field, start, "start");
+    const normalizedEnd = normalizeDateRangeValue(field, end, "end");
+    if (normalizedStart) nextQuery = nextQuery.gte(field, normalizedStart);
+    if (normalizedEnd) nextQuery = nextQuery.lte(field, normalizedEnd);
+  });
+
+  return nextQuery as TQuery;
+}
+
+function toFiniteNumber(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value.trim());
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  return 0;
+}
+
 export async function requestShipmentRecords(
   params: ShipmentRequestParams,
   sorter: Record<string, SortOrder>,
@@ -35,85 +192,7 @@ export async function requestShipmentRecords(
     .eq("status", "有效")
     .range(from, to);
 
-  shipmentKeywordFields.forEach((field) => {
-    if (field === "shipment_no" || field === "tracking_no") return;
-
-    const value = params[field];
-    if (typeof value === "string" && value.trim()) {
-      query = query.ilike(field, `%${value.trim()}%`);
-    }
-  });
-
-  function normalizeMultiSelectValues(value: unknown): string[] {
-    if (!Array.isArray(value)) return [];
-    return value
-      .map((item) => (typeof item === "string" ? item.trim() : ""))
-      .filter(Boolean);
-  }
-
-  function splitSearchTexts(value: unknown): string[] {
-    const values = Array.isArray(value) ? value : [value];
-
-    return values
-      .flatMap((item) =>
-        typeof item === "string" ? item.split(/[\s,，]+/) : [],
-      )
-      .map((item) => item.trim())
-      .filter(Boolean);
-  }
-
-  const orderStoreValues = normalizeMultiSelectValues(params.order_store);
-  if (orderStoreValues.length > 0) {
-    query = query.in("order_store", orderStoreValues);
-  }
-
-  const shipmentNoValues = splitSearchTexts(params.shipment_no);
-  if (shipmentNoValues.length > 0) {
-    query = query.in("shipment_no", shipmentNoValues);
-  }
-
-  const trackingNoValues = splitSearchTexts(params.tracking_no);
-  if (trackingNoValues.length > 0) {
-    query = query.in("tracking_no", trackingNoValues);
-  }
-
-  const logisticsProviderValues = normalizeMultiSelectValues(
-    params.logistics_provider,
-  );
-  if (logisticsProviderValues.length > 0) {
-    query = query.in("logistics_provider", logisticsProviderValues);
-  }
-
-  const productNameValues = normalizeMultiSelectValues(params.product_name);
-  if (productNameValues.length > 0) {
-    query = query.in("product_name", productNameValues);
-  }
-
-  const warehouseArrivedStatus =
-    typeof params.warehouse_arrived_status === "string"
-      ? params.warehouse_arrived_status.trim()
-      : "";
-  if (warehouseArrivedStatus === "是") {
-    query = query.not("overseas_warehouse_arrived_at", "is", null);
-  } else if (warehouseArrivedStatus === "否") {
-    query = query.is("overseas_warehouse_arrived_at", null);
-  }
-
-  const deliveryStatus =
-    typeof params.delivery_status === "string"
-      ? params.delivery_status.trim()
-      : "";
-  if (deliveryStatus === "是" || deliveryStatus === "否") {
-    query = query.eq("delivery_status", deliveryStatus);
-  }
-
-  const isRelabel =
-    typeof params.is_relabel === "string" ? params.is_relabel.trim() : "";
-  if (isRelabel === "是") {
-    query = query.eq("is_relabel", isRelabel);
-  } else if (isRelabel === "否") {
-    query = query.or("is_relabel.is.null,is_relabel.eq.否");
-  }
+  query = applyShipmentSearchParams(query, params);
 
   function splitFilterText(value?: string) {
     return (value ?? "")
@@ -148,18 +227,6 @@ export async function requestShipmentRecords(
     const [start, end] = value.split("|");
     if (!start && !end) return undefined;
     return { start, end };
-  }
-
-  function normalizeDateRangeValue(
-    field: string,
-    value: unknown,
-    boundary: "start" | "end",
-  ) {
-    if (typeof value !== "string" || !value) return value;
-    if (field !== "created_at") return value;
-    return boundary === "start"
-      ? `${value}T00:00:00`
-      : `${value}T23:59:59.999`;
   }
 
   const shipmentNoFilters = getFilterTexts("shipment_no");
@@ -270,6 +337,58 @@ export async function requestShipmentRecords(
     success: true,
     total: count ?? 0,
   };
+}
+
+export async function requestShipmentSummary(
+  params: ShipmentRequestParams,
+): Promise<ShipmentSummary> {
+  const pageSize = 1000;
+  let page = 0;
+  let summary: ShipmentSummary = {
+    boxCount: 0,
+    totalQty: 0,
+    goodsValue: 0,
+    total: 0,
+  };
+
+  while (true) {
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+    let query = supabase
+      .from("shipment_records")
+      .select("box_count, total_qty, goods_value")
+      .eq("status", "有效")
+      .range(from, to);
+
+    query = applyShipmentSearchParams(query, params);
+
+    const { data, error } = await query;
+
+    if (error) {
+      throw error;
+    }
+
+    const rows = data ?? [];
+    rows.forEach((item) => {
+      summary = {
+        boxCount: summary.boxCount + toFiniteNumber(item.box_count),
+        totalQty: summary.totalQty + toFiniteNumber(item.total_qty),
+        goodsValue: summary.goodsValue + toFiniteNumber(item.goods_value),
+        total: summary.total + 1,
+      };
+    });
+
+    if (rows.length < pageSize) {
+      return {
+        ...summary,
+        boxCount: Number(summary.boxCount.toFixed(2)),
+        totalQty: Number(summary.totalQty.toFixed(2)),
+        goodsValue: Number(summary.goodsValue.toFixed(2)),
+      };
+    }
+
+    page += 1;
+  }
 }
 
 function normalizeTextValue(value?: string | null) {

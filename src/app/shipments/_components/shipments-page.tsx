@@ -159,13 +159,15 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
     if (!mounted) return;
 
     const shipmentNo = searchParams.get("shipment_no")?.trim();
+    const productName = searchParams.get("product_name")?.trim();
 
-    if (!shipmentNo) {
+    if (!shipmentNo && !productName) {
       return;
     }
 
     searchFormRef.current?.setFieldsValue({
-      shipment_no: [shipmentNo],
+      shipment_no: shipmentNo ? [shipmentNo] : undefined,
+      product_name: productName ? [productName] : undefined,
     });
     searchFormRef.current?.submit?.();
   }, [mounted, searchParams]);

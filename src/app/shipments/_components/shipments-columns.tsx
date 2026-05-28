@@ -273,6 +273,12 @@ export function getShipmentColumns(
       },
     },
     {
+      title: "起始日期",
+      dataIndex: "created_at",
+      valueType: "dateRange",
+      hideInTable: true,
+    },
+    {
       title: "运单编号",
       dataIndex: "tracking_no",
       hideInTable: true,
@@ -293,7 +299,7 @@ export function getShipmentColumns(
       search: false,
     },
     {
-      title: "产品总数",
+      title: "产品数量",
       dataIndex: "total_qty",
       valueType: "digit",
       width: 72,

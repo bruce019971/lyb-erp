@@ -10,7 +10,7 @@ import {
 import type { ActionType } from "@ant-design/pro-components";
 import { ProTable } from "@ant-design/pro-components";
 import type { FormInstance } from "antd";
-import { App, Button, Spin, Tooltip } from "antd";
+import { App, Button, Spin, Table, Tooltip } from "antd";
 import type { Key } from "react";
 import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -18,6 +18,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   batchGenerateShipmentCartonLabels,
   requestShipmentRecords,
+  requestShipmentSummary,
+  type ShipmentSummary,
 } from "../_lib/shipments-request";
 import { getShipmentColumns } from "./shipments-columns";
 import {
@@ -69,6 +71,10 @@ type ShipmentsTableProps = {
 const STORAGE_PREFIX = "mercado-inbound-planning:shipments";
 const COLUMNS_STATE_STORAGE_KEY = `${STORAGE_PREFIX}:columns:v3`;
 const PAGE_SIZE = 40;
+const SHIPMENTS_TABLE_SCROLL_Y_COLLAPSED = "calc(100vh - 360px)";
+const SHIPMENTS_TABLE_SCROLL_Y_EXPANDED = "calc(100vh - 520px)";
+
+type ShipmentColumnsState = Record<string, { show?: boolean }>;
 
 function mergeShipmentsById(
   current: ShipmentRecord[],
@@ -93,6 +99,89 @@ function isWarehouseArrivedUndelivered(record: ShipmentRecord) {
     Boolean(record.overseas_warehouse_arrived_at);
 
   return isWarehouseArrived && record.delivery_status !== "是";
+}
+
+function hasSearchValue(value: unknown): boolean {
+  if (Array.isArray(value)) {
+    return value.some((item) => hasSearchValue(item));
+  }
+
+  return typeof value === "string" ? Boolean(value.trim()) : Boolean(value);
+}
+
+function mergeSearchValues(
+  values: Record<string, unknown>,
+  formValues?: Record<string, unknown>,
+) {
+  if (!formValues) return values;
+
+  return Object.entries(formValues).reduce(
+    (merged, [key, value]) => {
+      if (!hasSearchValue(merged[key]) && hasSearchValue(value)) {
+        merged[key] = value;
+      }
+
+      return merged;
+    },
+    { ...values },
+  );
+}
+
+function formatSummaryNumber(value: number) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2);
+}
+
+function formatSummaryMoney(value: number) {
+  return `¥${value.toLocaleString("zh-CN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+type ShipmentSummaryColumnKey =
+  | "shipment_no"
+  | "product_name"
+  | "order_store"
+  | "logistics_provider"
+  | "box_count"
+  | "pcs_per_box"
+  | "total_qty"
+  | "overseas_warehouse_arrived_at"
+  | "appointment_time"
+  | "is_relabel"
+  | "delivery_status"
+  | "goods_value"
+  | "remark"
+  | "created_at"
+  | "updated_at";
+
+const SHIPMENT_SUMMARY_COLUMN_KEYS: ShipmentSummaryColumnKey[] = [
+  "shipment_no",
+  "product_name",
+  "order_store",
+  "logistics_provider",
+  "box_count",
+  "pcs_per_box",
+  "total_qty",
+  "overseas_warehouse_arrived_at",
+  "appointment_time",
+  "is_relabel",
+  "delivery_status",
+  "goods_value",
+  "remark",
+  "created_at",
+  "updated_at",
+];
+
+function readShipmentColumnsState(): ShipmentColumnsState {
+  if (typeof window === "undefined") return {};
+
+  try {
+    const value = window.localStorage.getItem(COLUMNS_STATE_STORAGE_KEY);
+    return value ? (JSON.parse(value) as ShipmentColumnsState) : {};
+  } catch {
+    return {};
+  }
 }
 
 export default function ShipmentsTable({
@@ -163,6 +252,16 @@ export default function ShipmentsTable({
   const [loadingMore, setLoadingMore] = useState(false);
   const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
   const [reloadRequest, setReloadRequest] = useState(0);
+  const [summary, setSummary] = useState<ShipmentSummary | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [searchCollapsed, setSearchCollapsed] = useState(true);
+  const [columnsStateMap, setColumnsStateMap] = useState<ShipmentColumnsState>(
+    () => readShipmentColumnsState(),
+  );
+
+  function isColumnVisible(key: string) {
+    return columnsStateMap[key]?.show !== false;
+  }
 
   const updateShipmentRow = useCallback(
     (shipmentNo: string, values: Partial<ShipmentRecord>) => {
@@ -192,15 +291,27 @@ export default function ShipmentsTable({
       }
 
       try {
-        const result = await requestShipmentRecords(
-          {
-            ...params,
-            current: page,
-            pageSize: PAGE_SIZE,
-          },
-          {},
-          {},
-        );
+        if (!append) {
+          setSummaryLoading(true);
+        }
+
+        const [result, summaryResult] = await Promise.all([
+          requestShipmentRecords(
+            {
+              ...params,
+              current: page,
+              pageSize: PAGE_SIZE,
+            },
+            {},
+            {},
+          ),
+          append ? null : requestShipmentSummary(params),
+        ]);
+
+        if (!append) {
+          setSummary(summaryResult);
+          setSummaryLoading(false);
+        }
 
         const nextData = result.data ?? [];
         setDataSource((current) =>
@@ -216,6 +327,9 @@ export default function ShipmentsTable({
         loadingMoreRef.current = false;
         setLoading(false);
         setLoadingMore(false);
+        if (!append) {
+          setSummaryLoading(false);
+        }
       }
     },
     [],
@@ -371,6 +485,7 @@ export default function ShipmentsTable({
 
   return (
     <ProTable<ShipmentRecord>
+      className="shipments-table-with-sticky-summary"
       formRef={formRef}
       rowKey="id"
       size="small"
@@ -399,11 +514,66 @@ export default function ShipmentsTable({
       }}
       tableAlertRender={false}
       tableAlertOptionRender={false}
+      summary={() =>
+        summary
+          ? (() => {
+              let cellIndex = 0;
+              const visibleSummaryColumns =
+                SHIPMENT_SUMMARY_COLUMN_KEYS.filter(isColumnVisible);
+              const leadingColumnKey = visibleSummaryColumns[0];
+
+              return (
+                <Table.Summary fixed="bottom">
+                  <Table.Summary.Row className="shipment-summary-row">
+                    <Table.Summary.Cell index={cellIndex++} />
+                    {visibleSummaryColumns.map((key) => {
+                      let content = null;
+
+                      if (key === leadingColumnKey) {
+                        content = (
+                          <span className="text-slate-700">
+                            合计{summaryLoading ? "（计算中）" : ""}
+                          </span>
+                        );
+                      }
+
+                      if (key === "box_count") {
+                        content = formatSummaryNumber(summary.boxCount);
+                      }
+
+                      if (key === "total_qty") {
+                        content = formatSummaryNumber(summary.totalQty);
+                      }
+
+                      if (key === "goods_value") {
+                        content = formatSummaryMoney(summary.goodsValue);
+                      }
+
+                      return (
+                        <Table.Summary.Cell key={key} index={cellIndex++}>
+                          {content}
+                        </Table.Summary.Cell>
+                      );
+                    })}
+                    <Table.Summary.Cell index={cellIndex} />
+                  </Table.Summary.Row>
+                </Table.Summary>
+              );
+            })()
+          : null
+      }
       columnsState={{
         persistenceKey: COLUMNS_STATE_STORAGE_KEY,
         persistenceType: "localStorage",
+        onChange: (value) =>
+          setColumnsStateMap(value as ShipmentColumnsState),
       }}
-      scroll={{ x: 1800, y: "calc(100vh - 360px)" }}
+      scroll={{
+        x: 1800,
+        y: searchCollapsed
+          ? SHIPMENTS_TABLE_SCROLL_Y_COLLAPSED
+          : SHIPMENTS_TABLE_SCROLL_Y_EXPANDED,
+      }}
       onScroll={(event) => {
         const target = event.currentTarget;
         if (
@@ -417,10 +587,16 @@ export default function ShipmentsTable({
         labelWidth: "auto",
         defaultCollapsed: true,
         defaultColsNumber: 3,
+        onCollapse: (collapsed) => setSearchCollapsed(collapsed),
       }}
       onSubmit={(values) => {
-        searchParamsRef.current = values;
-        void loadPage(1, values, { append: false });
+        const nextValues = mergeSearchValues(
+          values,
+          formRef?.current?.getFieldsValue?.(),
+        );
+
+        searchParamsRef.current = nextValues;
+        void loadPage(1, nextValues, { append: false });
       }}
       onReset={() => {
         searchParamsRef.current = {};
