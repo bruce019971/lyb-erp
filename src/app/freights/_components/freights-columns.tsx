@@ -3,6 +3,7 @@ import {
   CloudDownloadOutlined,
   FileSearchOutlined,
   EditOutlined,
+  DollarOutlined,
 } from "@ant-design/icons";
 import type { ProColumns } from "@ant-design/pro-components";
 import { Button, Select, Tag, Tooltip, Typography } from "antd";
@@ -29,12 +30,14 @@ export function getFreightColumns(
   onEdit: (record: FreightRecord) => void,
   onFetchVolume: (record: FreightRecord) => void,
   onFetchBill: (record: FreightRecord) => void,
+  onFetchUnitPrice: (record: FreightRecord) => void,
   onCalculateFreight: (record: FreightRecord) => void,
   onStartPaidStatusEdit: (record: FreightRecord) => void,
   onCancelPaidStatusEdit: () => void,
   onChangePaidStatus: (record: FreightRecord, value: string) => void,
   isFetchingVolume: (record: FreightRecord) => boolean,
   isFetchingBill: (record: FreightRecord) => boolean,
+  isFetchingUnitPrice: (record: FreightRecord) => boolean,
   isCalculatingFreight: (record: FreightRecord) => boolean,
   isPaidStatusEditing: (record: FreightRecord) => boolean,
   isPaidStatusUpdating: (record: FreightRecord) => boolean,
@@ -55,6 +58,10 @@ export function getFreightColumns(
       typeof record.bill_amount === "number" &&
       Number.isFinite(record.bill_amount)
     );
+  }
+
+  function canFetchUnitPrice(record: FreightRecord) {
+    return record.logistics_provider?.trim() === "日升辉";
   }
 
   const shipmentSelectOptions = Array.from(
@@ -298,7 +305,7 @@ export function getFreightColumns(
     {
       title: "操作",
       valueType: "option",
-      width: 168,
+      width: 196,
       fixed: "right",
       search: false,
       render: (_, record) => {
@@ -306,8 +313,7 @@ export function getFreightColumns(
 
         return [
           typeof record.total_fee === "number" &&
-          Number.isFinite(record.total_fee) &&
-          record.freight_paid_status !== "是" ? (
+          Number.isFinite(record.total_fee) ? (
             <Tooltip key="fetch-bill" title="获取账单">
               <Button
                 type="text"
@@ -318,6 +324,17 @@ export function getFreightColumns(
               />
             </Tooltip>
           ) : null,
+          locked || !canFetchUnitPrice(record) ? null : (
+            <Tooltip key="fetch-unit-price" title="获取单价">
+              <Button
+                type="text"
+                size="small"
+                icon={<DollarOutlined />}
+                loading={isFetchingUnitPrice(record)}
+                onClick={() => onFetchUnitPrice(record)}
+              />
+            </Tooltip>
+          ),
           locked ? null : (
             <Tooltip
               key="fetch-volume"

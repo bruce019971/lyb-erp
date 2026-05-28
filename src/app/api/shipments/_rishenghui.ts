@@ -46,6 +46,13 @@ const RISHENGHUI_BILL_AMOUNT_PAYLOAD = {
   opentype: "find",
   colen: "find",
 } as const;
+const RISHENGHUI_BILL_DETAIL_PAYLOAD = {
+  pagesize: 0,
+  pageno: 0,
+  reportno: "FYQRMX",
+  opentype: "find",
+  colen: "find",
+} as const;
 
 function getPayloadError(payload: unknown) {
   if (!payload || typeof payload !== "object") return "";
@@ -328,5 +335,134 @@ export async function fetchRishenghuiBillAmount(params: {
     billAmount,
     row,
     payload: result,
+  };
+}
+
+export async function fetchRishenghuiFreightUnitPrice(params: {
+  accessToken: string;
+  trackingNo: string;
+}) {
+  const trackingNo = params.trackingNo.trim();
+  if (!trackingNo) {
+    return {
+      rows: [],
+      matchedRows: [],
+      detailRows: [],
+      billCode: "",
+      unitPrice: null,
+      billRow: null,
+      detailRow: null,
+      payload: null,
+      detailPayload: null,
+    };
+  }
+
+  const billResponse = await fetch(RISHENGHUI_TPL_LIST_VALUES_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${params.accessToken}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(RISHENGHUI_BILL_AMOUNT_PAYLOAD),
+  });
+  const billResult = (await billResponse.json().catch(() => null)) as
+    | RishenghuiDimensionPayload
+    | null;
+
+  console.log("[rishenghui-freight-unit-price] bill response", {
+    request: {
+      reportno: RISHENGHUI_BILL_AMOUNT_PAYLOAD.reportno,
+      trackingNo,
+    },
+    status: billResponse.status,
+    result: getPayloadSummary(billResult),
+  });
+
+  if (!billResponse.ok) {
+    throw new Error(getPayloadError(billResult) || "日升辉账单查询失败");
+  }
+
+  const rows = getRows(billResult);
+  const matchedRows = rows.filter((row) => getPackNo(row) === trackingNo);
+  const billRow = matchedRows[0] ?? null;
+  const billCode = billRow
+    ? getTextField(billRow, ["billcode", "账单id", "账单ID", "账单编号"])
+    : "";
+
+  if (!billCode) {
+    console.log("[rishenghui-freight-unit-price] empty bill code", {
+      request: RISHENGHUI_BILL_AMOUNT_PAYLOAD,
+      trackingNo,
+      response: getPayloadSummary(billResult),
+    });
+
+    return {
+      rows,
+      matchedRows,
+      detailRows: [],
+      billCode: "",
+      unitPrice: null,
+      billRow,
+      detailRow: null,
+      payload: billResult,
+      detailPayload: null,
+    };
+  }
+
+  const detailPayload = {
+    ...RISHENGHUI_BILL_DETAIL_PAYLOAD,
+    userquery1: billCode,
+  };
+  const detailResponse = await fetch(RISHENGHUI_TPL_LIST_VALUES_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${params.accessToken}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(detailPayload),
+  });
+  const detailResult = (await detailResponse.json().catch(() => null)) as
+    | RishenghuiDimensionPayload
+    | null;
+
+  console.log("[rishenghui-freight-unit-price] detail response", {
+    request: {
+      reportno: detailPayload.reportno,
+      trackingNo,
+      billCode,
+    },
+    status: detailResponse.status,
+    result: getPayloadSummary(detailResult),
+  });
+
+  if (!detailResponse.ok) {
+    throw new Error(getPayloadError(detailResult) || "日升辉账单明细查询失败");
+  }
+
+  const detailRows = getRows(detailResult);
+  const detailRow = detailRows[0] ?? null;
+  const unitPrice = detailRow
+    ? getNumberField(detailRow, ["zprice", "运费单价", "单价"])
+    : null;
+
+  if (!detailRows.length) {
+    console.log("[rishenghui-freight-unit-price] empty detail result", {
+      request: detailPayload,
+      trackingNo,
+      billCode,
+      response: getPayloadSummary(detailResult),
+    });
+  }
+
+  return {
+    rows,
+    matchedRows,
+    detailRows,
+    billCode,
+    unitPrice,
+    billRow,
+    detailRow,
+    payload: billResult,
+    detailPayload: detailResult,
   };
 }

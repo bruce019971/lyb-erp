@@ -19,12 +19,14 @@ type FreightsTableProps = {
   onEdit: (record: FreightRecord) => void;
   onFetchVolume: (record: FreightRecord) => void;
   onFetchBill: (record: FreightRecord) => void;
+  onFetchUnitPrice: (record: FreightRecord) => void;
   onCalculateFreight: (record: FreightRecord) => void;
   onStartPaidStatusEdit: (record: FreightRecord) => void;
   onCancelPaidStatusEdit: () => void;
   onChangePaidStatus: (record: FreightRecord, value: string) => void;
   isFetchingVolume: (record: FreightRecord) => boolean;
   isFetchingBill: (record: FreightRecord) => boolean;
+  isFetchingUnitPrice: (record: FreightRecord) => boolean;
   isCalculatingFreight: (record: FreightRecord) => boolean;
   isPaidStatusEditing: (record: FreightRecord) => boolean;
   isPaidStatusUpdating: (record: FreightRecord) => boolean;
@@ -57,12 +59,14 @@ export default function FreightsTable({
   onEdit,
   onFetchVolume,
   onFetchBill,
+  onFetchUnitPrice,
   onCalculateFreight,
   onStartPaidStatusEdit,
   onCancelPaidStatusEdit,
   onChangePaidStatus,
   isFetchingVolume,
   isFetchingBill,
+  isFetchingUnitPrice,
   isCalculatingFreight,
   isPaidStatusEditing,
   isPaidStatusUpdating,
@@ -73,12 +77,14 @@ export default function FreightsTable({
         onEdit,
         onFetchVolume,
         onFetchBill,
+        onFetchUnitPrice,
         onCalculateFreight,
         onStartPaidStatusEdit,
         onCancelPaidStatusEdit,
         onChangePaidStatus,
         isFetchingVolume,
         isFetchingBill,
+        isFetchingUnitPrice,
         isCalculatingFreight,
         isPaidStatusEditing,
         isPaidStatusUpdating,
@@ -89,12 +95,14 @@ export default function FreightsTable({
       isCalculatingFreight,
       isFetchingVolume,
       isFetchingBill,
+      isFetchingUnitPrice,
       logisticsOptions,
       onCalculateFreight,
       onCancelPaidStatusEdit,
       onChangePaidStatus,
       onEdit,
       onFetchBill,
+      onFetchUnitPrice,
       onFetchVolume,
       onStartPaidStatusEdit,
       isPaidStatusEditing,

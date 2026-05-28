@@ -110,6 +110,28 @@ function normalizeFreightPaidStatus(value: unknown) {
   return normalizeTextValue(value) ?? "否";
 }
 
+function calculateTotalFee(values: {
+  freight_unit_price: number | null;
+  volume: number | null;
+  extra_fee: number | null;
+}) {
+  if (
+    typeof values.freight_unit_price !== "number" ||
+    !Number.isFinite(values.freight_unit_price) ||
+    typeof values.volume !== "number" ||
+    !Number.isFinite(values.volume)
+  ) {
+    return null;
+  }
+
+  const extraFee =
+    typeof values.extra_fee === "number" && Number.isFinite(values.extra_fee)
+      ? values.extra_fee
+      : 0;
+
+  return Number((values.freight_unit_price * values.volume + extraFee).toFixed(2));
+}
+
 function hasOwnKey(record: Record<string, unknown>, key: string) {
   return Object.prototype.hasOwnProperty.call(record, key);
 }
@@ -187,6 +209,9 @@ export async function GET(request: Request) {
     );
     const billIssuedValues = normalizeMultiSelectValues(
       searchParams.getAll("bill_issued"),
+    );
+    const freightPaidStatusValues = normalizeMultiSelectValues(
+      searchParams.getAll("freight_paid_status"),
     );
     const allowedOrderFields = new Set([
       "created_at",
@@ -272,6 +297,18 @@ export async function GET(request: Request) {
       query = query.is("bill_amount", null);
     }
 
+    if (
+      freightPaidStatusValues.includes("是") &&
+      !freightPaidStatusValues.includes("否")
+    ) {
+      query = query.eq("freight_paid_status", "是");
+    } else if (
+      freightPaidStatusValues.includes("否") &&
+      !freightPaidStatusValues.includes("是")
+    ) {
+      query = query.or("freight_paid_status.is.null,freight_paid_status.eq.否");
+    }
+
     query = query.order(
       allowedOrderFields.has(orderField) ? orderField : "created_at",
       {
@@ -311,7 +348,12 @@ export async function PATCH(request: Request) {
     const freightUnitPrice = normalizeNumberValue(body.freight_unit_price);
     const volume = normalizeNumberValue(body.volume);
     const extraFee = normalizeNumberValue(body.extra_fee);
-    const totalFee = normalizeNumberValue(body.total_fee);
+    const totalFee =
+      calculateTotalFee({
+        freight_unit_price: freightUnitPrice,
+        volume,
+        extra_fee: extraFee,
+      }) ?? normalizeNumberValue(body.total_fee);
     const hasPaidStatusInput = hasOwnKey(body, "freight_paid_status");
     const { data: currentFreight, error: currentFreightError } =
       await adminClient

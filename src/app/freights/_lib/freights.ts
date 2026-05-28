@@ -26,6 +26,30 @@ export type FreightUpdateValues = {
   freight_paid_status?: string | null;
 };
 
+export function calculateFreightTotalFee(values: {
+  freight_unit_price?: number | null;
+  volume?: number | null;
+  extra_fee?: number | null;
+}) {
+  const freightUnitPrice = values.freight_unit_price;
+  const volume = values.volume;
+  const extraFee = values.extra_fee;
+
+  if (
+    typeof freightUnitPrice !== "number" ||
+    !Number.isFinite(freightUnitPrice) ||
+    typeof volume !== "number" ||
+    !Number.isFinite(volume)
+  ) {
+    return null;
+  }
+
+  const normalizedExtraFee =
+    typeof extraFee === "number" && Number.isFinite(extraFee) ? extraFee : 0;
+
+  return Number((freightUnitPrice * volume + normalizedExtraFee).toFixed(2));
+}
+
 export function calculateFreightUnitFee(
   totalFee?: number | null,
   totalQty?: number | null,

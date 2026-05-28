@@ -14,12 +14,14 @@ import { requestShipmentOptions } from "../../shipments/_lib/shipments-request";
 import { getRishenghuiAccessToken } from "../../shipments/_lib/shipments-request";
 import ShipmentsTableSkeleton from "../../shipments/_components/shipments-table-skeleton";
 import RishenghuiAuthModal from "../../shipments/_components/rishenghui-auth-modal";
-import type { FreightRecord } from "../_lib/freights";
+import { calculateFreightTotalFee, type FreightRecord } from "../_lib/freights";
 import {
   fetchRishenghuiFreightBill,
+  fetchRishenghuiFreightUnitPrice,
   fetchRishenghuiFreightVolume,
   fetchSaleasyFreightBill,
   fetchSaleasyFreightVolume,
+  fetchTongtuFreightBill,
   fetchTongtuFreightVolume,
   type FreightVolumeBox,
   updateFreightRecord,
@@ -39,6 +41,9 @@ export default function FreightsPage() {
   );
   const [fetchingVolumeId, setFetchingVolumeId] = useState<string | null>(null);
   const [fetchingBillId, setFetchingBillId] = useState<string | null>(null);
+  const [fetchingUnitPriceId, setFetchingUnitPriceId] = useState<string | null>(
+    null,
+  );
   const [editingPaidStatusId, setEditingPaidStatusId] = useState<string | null>(
     null,
   );
@@ -152,22 +157,6 @@ export default function FreightsPage() {
     return updatingPaidStatusId === record.id;
   }
 
-  function calculateTotalFee(record: FreightRecord) {
-    const freightUnitPrice = record.freight_unit_price;
-    const volume = record.volume;
-
-    if (
-      typeof freightUnitPrice !== "number" ||
-      !Number.isFinite(freightUnitPrice) ||
-      typeof volume !== "number" ||
-      !Number.isFinite(volume)
-    ) {
-      return null;
-    }
-
-    return Number((freightUnitPrice * volume).toFixed(2));
-  }
-
   async function calculateAndSaveFreight(record: FreightRecord, totalFee: number) {
     try {
       setCalculatingFreightId(record.id);
@@ -195,7 +184,7 @@ export default function FreightsPage() {
       return;
     }
 
-    const totalFee = calculateTotalFee(record);
+    const totalFee = calculateFreightTotalFee(record);
 
     if (totalFee === null) {
       messageApi.warning("请先填写运费单价和方数");
@@ -261,9 +250,13 @@ export default function FreightsPage() {
               freightId: record.id,
               accessToken: getRequiredRishenghuiAccessToken(),
             })
-          : await fetchSaleasyFreightBill({
-              freightId: record.id,
-            });
+          : providerName === "通途"
+            ? await fetchTongtuFreightBill({
+                freightId: record.id,
+              })
+            : await fetchSaleasyFreightBill({
+                freightId: record.id,
+              });
 
       showBillResultModal({
         record,
@@ -277,7 +270,7 @@ export default function FreightsPage() {
         error instanceof Error ? error.message : "日升辉账单获取失败";
       messageApi.error(`账单获取失败：${description}`);
 
-      if (isRishenghuiTokenError(error)) {
+      if (providerName === "日升辉" && isRishenghuiTokenError(error)) {
         showRishenghuiTokenRequiredModal(description);
       }
     } finally {
@@ -298,13 +291,25 @@ export default function FreightsPage() {
       return;
     }
 
-    if (providerName !== "日升辉" && providerName !== "赛易") {
-      messageApi.warning("当前仅日升辉/赛易货件支持获取账单");
+    if (
+      providerName !== "日升辉" &&
+      providerName !== "通途" &&
+      providerName !== "赛易"
+    ) {
+      messageApi.warning("当前仅日升辉/通途/赛易货件支持获取账单");
       return;
     }
 
-    if (!record.tracking_no?.trim()) {
+    if (
+      (providerName === "日升辉" || providerName === "赛易") &&
+      !record.tracking_no?.trim()
+    ) {
       messageApi.warning("当前货件缺少运单编号");
+      return;
+    }
+
+    if (providerName === "通途" && !record.shipment_no?.trim()) {
+      messageApi.warning("当前货件缺少货件号");
       return;
     }
 
@@ -326,6 +331,83 @@ export default function FreightsPage() {
     }
 
     void fetchAndSaveBill(record, providerName);
+  }
+
+  function showUnitPriceSavedMessage(totalFee?: number | null) {
+    messageApi.success(
+      typeof totalFee === "number" && Number.isFinite(totalFee)
+        ? `运费单价已获取，总费用已更新为 ${totalFee}`
+        : "运费单价已获取",
+    );
+  }
+
+  async function fetchAndSaveUnitPrice(
+    record: FreightRecord,
+    options?: { overwrite?: boolean },
+  ) {
+    try {
+      setFetchingUnitPriceId(record.id);
+      const result = await fetchRishenghuiFreightUnitPrice({
+        freightId: record.id,
+        accessToken: getRequiredRishenghuiAccessToken(),
+        overwrite: options?.overwrite,
+      });
+
+      if (
+        result.requiresOverwrite &&
+        typeof result.currentUnitPrice === "number" &&
+        Number.isFinite(result.currentUnitPrice)
+      ) {
+        modalApi.confirm({
+          title: "运费单价不一致",
+          content: `日升辉单价为 ${result.unitPrice}，当前数据库单价为 ${result.currentUnitPrice}，是否覆盖并重新计算总运费？`,
+          okText: "覆盖",
+          cancelText: "取消",
+          centered: true,
+          onOk: () => fetchAndSaveUnitPrice(record, { overwrite: true }),
+        });
+        return;
+      }
+
+      showUnitPriceSavedMessage(result.totalFee);
+      tableActionRef.current?.reload();
+    } catch (error) {
+      const description =
+        error instanceof Error ? error.message : "日升辉运费单价获取失败";
+      messageApi.error(`运费单价获取失败：${description}`);
+
+      if (isRishenghuiTokenError(error)) {
+        showRishenghuiTokenRequiredModal(description);
+      }
+    } finally {
+      setFetchingUnitPriceId(null);
+    }
+  }
+
+  function handleFetchUnitPrice(record: FreightRecord) {
+    const providerName = record.logistics_provider?.trim();
+
+    if (hasBillAmount(record)) {
+      messageApi.warning("账单金额已存在，不能获取单价");
+      return;
+    }
+
+    if (providerName !== "日升辉") {
+      messageApi.warning("当前仅日升辉货件支持获取单价");
+      return;
+    }
+
+    if (!record.tracking_no?.trim()) {
+      messageApi.warning("当前货件缺少运单编号");
+      return;
+    }
+
+    if (!rishenghuiAccessToken.trim()) {
+      showRishenghuiTokenRequiredModal();
+      return;
+    }
+
+    void fetchAndSaveUnitPrice(record);
   }
 
   async function handleChangePaidStatus(record: FreightRecord, value: string) {
@@ -591,6 +673,7 @@ export default function FreightsPage() {
                 }}
                 onFetchVolume={handleFetchVolume}
                 onFetchBill={handleFetchBill}
+                onFetchUnitPrice={handleFetchUnitPrice}
                 onCalculateFreight={handleCalculateFreight}
                 onStartPaidStatusEdit={(record) => {
                   if (!hasBillAmount(record)) {
@@ -606,6 +689,9 @@ export default function FreightsPage() {
                 }
                 isFetchingVolume={(record) => fetchingVolumeId === record.id}
                 isFetchingBill={(record) => fetchingBillId === record.id}
+                isFetchingUnitPrice={(record) =>
+                  fetchingUnitPriceId === record.id
+                }
                 isCalculatingFreight={(record) =>
                   calculatingFreightId === record.id
                 }

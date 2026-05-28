@@ -149,10 +149,6 @@ export async function POST(request: Request) {
       throw new Error("当前货件总费用为空，不能获取账单");
     }
 
-    if (freight.freight_paid_status === "是") {
-      throw new Error("已支付的货件不能再次获取账单");
-    }
-
     const { data: logisticsData, error: logisticsError } = await adminClient
       .from("logistics_providers")
       .select("system_url, username, password")

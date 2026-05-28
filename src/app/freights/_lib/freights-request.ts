@@ -1,4 +1,5 @@
 import {
+  calculateFreightTotalFee,
   calculateFreightUnitFee,
   type FreightRecord,
   type FreightUpdateValues,
@@ -64,6 +65,9 @@ export async function requestFreightRecords(params: FreightRequestParams) {
   normalizeSelectValues(params.bill_issued).forEach((value) => {
     searchParams.append("bill_issued", value);
   });
+  normalizeSelectValues(params.freight_paid_status).forEach((value) => {
+    searchParams.append("freight_paid_status", value);
+  });
 
   const response = await fetch(`/api/freights?${searchParams.toString()}`);
   const payload = (await response.json().catch(() => null)) as
@@ -97,7 +101,12 @@ export async function updateFreightRecord(
   const freightUnitPrice = normalizeNumberValue(values.freight_unit_price);
   const volume = normalizeNumberValue(values.volume);
   const extraFee = normalizeNumberValue(values.extra_fee);
-  const totalFee = normalizeNumberValue(values.total_fee);
+  const calculatedTotalFee = calculateFreightTotalFee({
+    freight_unit_price: freightUnitPrice,
+    volume,
+    extra_fee: extraFee,
+  });
+  const totalFee = calculatedTotalFee ?? normalizeNumberValue(values.total_fee);
   const requestPayload: Record<string, unknown> = {
     id,
     freight_unit_price: freightUnitPrice,
@@ -256,6 +265,48 @@ export async function fetchRishenghuiFreightBill(values: {
   };
 }
 
+export async function fetchRishenghuiFreightUnitPrice(values: {
+  freightId: string;
+  accessToken: string;
+  overwrite?: boolean;
+}) {
+  const response = await fetch("/api/freights/rishenghui-unit-price", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(values),
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        unitPrice?: number;
+        currentUnitPrice?: number | null;
+        totalFee?: number | null;
+        billCode?: string;
+        matchedCount?: number;
+        detailCount?: number;
+        requiresOverwrite?: boolean;
+        updated?: boolean;
+        error?: string;
+      }
+    | null;
+
+  if (!response.ok || typeof payload?.unitPrice !== "number") {
+    throw new Error(payload?.error || "日升辉运费单价获取失败");
+  }
+
+  return {
+    unitPrice: payload.unitPrice,
+    currentUnitPrice: payload.currentUnitPrice ?? null,
+    totalFee: payload.totalFee ?? null,
+    billCode: payload.billCode ?? "",
+    matchedCount: payload.matchedCount ?? 0,
+    detailCount: payload.detailCount ?? 0,
+    requiresOverwrite: payload.requiresOverwrite ?? false,
+    updated: payload.updated ?? false,
+  };
+}
+
 export async function fetchSaleasyFreightBill(values: { freightId: string }) {
   const response = await fetch("/api/freights/saleasy-bill", {
     method: "POST",
@@ -276,6 +327,36 @@ export async function fetchSaleasyFreightBill(values: { freightId: string }) {
 
   if (!response.ok || typeof payload?.billAmount !== "number") {
     throw new Error(payload?.error || "赛易账单获取失败");
+  }
+
+  return {
+    billAmount: payload.billAmount,
+    totalFee: payload.totalFee,
+    isConsistent: payload.isConsistent ?? false,
+    matchedCount: payload.matchedCount ?? 0,
+  };
+}
+
+export async function fetchTongtuFreightBill(values: { freightId: string }) {
+  const response = await fetch("/api/freights/tongtu-bill", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(values),
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        billAmount?: number;
+        totalFee?: number;
+        isConsistent?: boolean;
+        matchedCount?: number;
+        error?: string;
+      }
+    | null;
+
+  if (!response.ok || typeof payload?.billAmount !== "number") {
+    throw new Error(payload?.error || "通途账单获取失败");
   }
 
   return {
