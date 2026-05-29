@@ -10,7 +10,7 @@ import {
 import type { ActionType } from "@ant-design/pro-components";
 import { ProTable } from "@ant-design/pro-components";
 import type { FormInstance } from "antd";
-import { App, Button, Spin, Table, Tooltip } from "antd";
+import { App, Button, Table, Tooltip } from "antd";
 import type { Key } from "react";
 import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -70,28 +70,10 @@ type ShipmentsTableProps = {
 
 const STORAGE_PREFIX = "mercado-inbound-planning:shipments";
 const COLUMNS_STATE_STORAGE_KEY = `${STORAGE_PREFIX}:columns:v3`;
-const PAGE_SIZE = 40;
 const SHIPMENTS_TABLE_SCROLL_Y_COLLAPSED = "calc(100vh - 360px)";
 const SHIPMENTS_TABLE_SCROLL_Y_EXPANDED = "calc(100vh - 520px)";
 
 type ShipmentColumnsState = Record<string, { show?: boolean }>;
-
-function mergeShipmentsById(
-  current: ShipmentRecord[],
-  incoming: ShipmentRecord[],
-) {
-  const merged = new Map<string, ShipmentRecord>();
-
-  current.forEach((item) => {
-    merged.set(item.id, item);
-  });
-
-  incoming.forEach((item) => {
-    merged.set(item.id, item);
-  });
-
-  return Array.from(merged.values());
-}
 
 function isWarehouseArrivedUndelivered(record: ShipmentRecord) {
   const isWarehouseArrived =
@@ -243,13 +225,8 @@ export default function ShipmentsTable({
     [message, storeOptions],
   );
   const searchParamsRef = useRef<Record<string, unknown>>({});
-  const loadingRef = useRef(true);
-  const loadingMoreRef = useRef(false);
-  const hasMoreRef = useRef(true);
-  const currentPageRef = useRef(1);
   const [dataSource, setDataSource] = useState<ShipmentRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
   const [reloadRequest, setReloadRequest] = useState(0);
   const [summary, setSummary] = useState<ShipmentSummary | null>(null);
@@ -274,70 +251,35 @@ export default function ShipmentsTable({
     [],
   );
 
-  const loadPage = useCallback(
-    async (
-      page: number,
-      params: Record<string, unknown>,
-      options?: { append?: boolean },
-    ) => {
-      const append = options?.append ?? false;
-
-      if (append) {
-        loadingMoreRef.current = true;
-        setLoadingMore(true);
-      } else {
-        loadingRef.current = true;
-        setLoading(true);
-      }
+  const loadRecords = useCallback(
+    async (params: Record<string, unknown>) => {
+      setLoading(true);
 
       try {
-        if (!append) {
-          setSummaryLoading(true);
-        }
+        setSummaryLoading(true);
 
         const [result, summaryResult] = await Promise.all([
-          requestShipmentRecords(
-            {
-              ...params,
-              current: page,
-              pageSize: PAGE_SIZE,
-            },
-            {},
-            {},
-          ),
-          append ? null : requestShipmentSummary(params),
+          requestShipmentRecords(params, {}, {}),
+          requestShipmentSummary(params),
         ]);
 
-        if (!append) {
-          setSummary(summaryResult);
-          setSummaryLoading(false);
-        }
+        setSummary(summaryResult);
+        setSummaryLoading(false);
 
         const nextData = result.data ?? [];
-        setDataSource((current) =>
-          append ? mergeShipmentsById(current, nextData) : nextData,
-        );
-        if (!append) {
-          setSelectedRowKeys([]);
-        }
-        currentPageRef.current = page;
-        hasMoreRef.current = nextData.length >= PAGE_SIZE;
+        setDataSource(nextData);
+        setSelectedRowKeys([]);
       } finally {
-        loadingRef.current = false;
-        loadingMoreRef.current = false;
         setLoading(false);
-        setLoadingMore(false);
-        if (!append) {
-          setSummaryLoading(false);
-        }
+        setSummaryLoading(false);
       }
     },
     [],
   );
 
   const reloadFirstPage = useCallback(async () => {
-    await loadPage(1, searchParamsRef.current, { append: false });
-  }, [loadPage]);
+    await loadRecords(searchParamsRef.current);
+  }, [loadRecords]);
 
   const handleGenerateCartonLabel = useCallback(
     async (record: ShipmentRecord) => {
@@ -441,20 +383,6 @@ export default function ShipmentsTable({
     ],
   );
 
-  const loadNextPage = useCallback(async () => {
-    if (
-      loadingRef.current ||
-      loadingMoreRef.current ||
-      !hasMoreRef.current
-    ) {
-      return;
-    }
-
-    await loadPage(currentPageRef.current + 1, searchParamsRef.current, {
-      append: true,
-    });
-  }, [loadPage]);
-
   useEffect(() => {
     void reloadFirstPage();
   }, [reloadFirstPage]);
@@ -474,14 +402,14 @@ export default function ShipmentsTable({
       },
       reloadAndRest: () => {
         searchParamsRef.current = {};
-        void loadPage(1, {}, { append: false });
+        void loadRecords({});
       },
     } as ActionType;
 
     return () => {
       actionRef.current = undefined;
     };
-  }, [actionRef, loadPage, reloadFirstPage]);
+  }, [actionRef, loadRecords, reloadFirstPage]);
 
   return (
     <ProTable<ShipmentRecord>
@@ -574,15 +502,6 @@ export default function ShipmentsTable({
           ? SHIPMENTS_TABLE_SCROLL_Y_COLLAPSED
           : SHIPMENTS_TABLE_SCROLL_Y_EXPANDED,
       }}
-      onScroll={(event) => {
-        const target = event.currentTarget;
-        if (
-          target.scrollTop + target.clientHeight >=
-          target.scrollHeight - 80
-        ) {
-          void loadNextPage();
-        }
-      }}
       search={{
         labelWidth: "auto",
         defaultCollapsed: true,
@@ -596,11 +515,11 @@ export default function ShipmentsTable({
         );
 
         searchParamsRef.current = nextValues;
-        void loadPage(1, nextValues, { append: false });
+        void loadRecords(nextValues);
       }}
       onReset={() => {
         searchParamsRef.current = {};
-        void loadPage(1, {}, { append: false });
+        void loadRecords({});
       }}
       options={{
         density: false,
@@ -674,16 +593,6 @@ export default function ShipmentsTable({
       }}
       pagination={false}
       dateFormatter="string"
-      tableRender={(_, dom) => (
-        <div className="relative">
-          {dom}
-          {loadingMore ? (
-            <div className="flex justify-center py-3 text-slate-400">
-              <Spin size="small" />
-            </div>
-          ) : null}
-        </div>
-      )}
     />
   );
 }
