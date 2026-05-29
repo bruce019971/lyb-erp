@@ -1,80 +1,136 @@
 import { SyncOutlined } from "@ant-design/icons";
 import type { ProColumns } from "@ant-design/pro-components";
-import { Button, Select, Tooltip, Typography } from "antd";
+import { Button, DatePicker, Select, Tooltip, Typography } from "antd";
+import dayjs from "dayjs";
+import type { Dayjs } from "dayjs";
+import { useEffect, useRef, useState } from "react";
 
-import type { ShipmentOption } from "../../shipments/_lib/shipments";
 import {
   formatShipmentTrackDate,
   type ShipmentTrackRecord,
 } from "../_lib/shipment-tracks";
 
-const TOKEN_SEPARATORS = [" ", "\n", "\r", "\t", ",", "，"];
+type ShipmentTrackSearchOption = {
+  label: string;
+  value: string;
+};
+
+type ShipmentTrackDateField = "sailing_time" | "warehouse_arrived_time";
+
+type ShipmentTrackDateChangeHandler = (
+  record: ShipmentTrackRecord,
+  field: ShipmentTrackDateField,
+  value: Dayjs | null,
+) => void | Promise<void>;
+
+function renderShipmentTrackSearchTagsInput() {
+  return (
+    <Select
+      mode="tags"
+      allowClear
+      open={false}
+      tokenSeparators={[" ", "\n", "\t", ",", "，"]}
+      placeholder="可用回车、空格或逗号分隔"
+      className="w-full"
+    />
+  );
+}
+
+function EditableTrackDatePicker({
+  disabled,
+  field,
+  onCancel,
+  onChange,
+  record,
+}: {
+  disabled: boolean;
+  field: ShipmentTrackDateField;
+  onCancel: (record: ShipmentTrackRecord, field: ShipmentTrackDateField) => void;
+  onChange: ShipmentTrackDateChangeHandler;
+  record: ShipmentTrackRecord;
+}) {
+  const formattedValue = formatShipmentTrackDate(record[field]);
+  const changedRef = useRef(false);
+  const cancelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [open, setOpen] = useState(true);
+
+  useEffect(() => {
+    return () => {
+      if (cancelTimerRef.current) {
+        clearTimeout(cancelTimerRef.current);
+      }
+    };
+  }, []);
+
+  return (
+    <DatePicker
+      autoFocus
+      open={open}
+      size="small"
+      className="!w-[128px]"
+      format="YYYY/MM/DD"
+      allowClear
+      disabled={disabled}
+      value={formattedValue ? dayjs(formattedValue) : null}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+
+        if (nextOpen || disabled) {
+          return;
+        }
+
+        cancelTimerRef.current = setTimeout(() => {
+          cancelTimerRef.current = null;
+
+          if (!changedRef.current) {
+            onCancel(record, field);
+          }
+        }, 0);
+      }}
+      onChange={(value) => {
+        changedRef.current = true;
+
+        if (cancelTimerRef.current) {
+          clearTimeout(cancelTimerRef.current);
+          cancelTimerRef.current = null;
+        }
+
+        void onChange(record, field, value);
+      }}
+    />
+  );
+}
 
 export function getShipmentTrackColumns(
-  shipmentOptions: ShipmentOption[],
   onUpdateTrack: (record: ShipmentTrackRecord) => void,
   onOpenTrackDetails: (record: ShipmentTrackRecord) => void,
+  onChangeTrackDate: ShipmentTrackDateChangeHandler,
+  onStartTrackDateEdit: (
+    record: ShipmentTrackRecord,
+    field: ShipmentTrackDateField,
+  ) => void,
+  onCancelTrackDateEdit: (
+    record: ShipmentTrackRecord,
+    field: ShipmentTrackDateField,
+  ) => void,
+  isTrackDateEditing: (
+    record: ShipmentTrackRecord,
+    field: ShipmentTrackDateField,
+  ) => boolean,
   isUpdatingTrack: (record: ShipmentTrackRecord) => boolean,
+  isTrackDateUpdating: (
+    record: ShipmentTrackRecord,
+    field: ShipmentTrackDateField,
+  ) => boolean,
+  productSelectOptions: ShipmentTrackSearchOption[],
+  logisticsProviderOptions: ShipmentTrackSearchOption[],
 ): ProColumns<ShipmentTrackRecord>[] {
-  const shipmentSelectOptions = Array.from(
-    new Set(
-      shipmentOptions
-        .map((item) => item.shipment_no?.trim())
-        .filter((item): item is string => Boolean(item)),
-    ),
-  ).map((value) => ({
-    label: value,
-    value,
-  }));
-  const trackingSelectOptions = Array.from(
-    new Set(
-      shipmentOptions
-        .map((item) => item.tracking_no?.trim())
-        .filter((item): item is string => Boolean(item)),
-    ),
-  ).map((value) => ({
-    label: value,
-    value,
-  }));
-  const productSelectOptions = Array.from(
-    new Set(
-      shipmentOptions
-        .map((item) => item.product_name?.trim())
-        .filter((item): item is string => Boolean(item)),
-    ),
-  ).map((value) => ({
-    label: value,
-    value,
-  }));
-
   return [
     {
       title: "货件号",
       dataIndex: "shipment_no",
-      valueType: "select",
       hideInTable: true,
-      fieldProps: {
-        mode: "tags",
-        showSearch: true,
-        optionFilterProp: "label",
-        tokenSeparators: TOKEN_SEPARATORS,
-        placeholder: "可粘贴多个货件号",
-        options: shipmentSelectOptions,
-      },
-    },
-    {
-      title: "运单编号",
-      dataIndex: "tracking_no",
-      valueType: "select",
-      hideInTable: true,
-      fieldProps: {
-        mode: "tags",
-        showSearch: true,
-        optionFilterProp: "label",
-        tokenSeparators: TOKEN_SEPARATORS,
-        placeholder: "可粘贴多个运单编号",
-        options: trackingSelectOptions,
-      },
+      renderFormItem: renderShipmentTrackSearchTagsInput,
     },
     {
       title: "货件号/运单编号",
@@ -103,17 +159,47 @@ export function getShipmentTrackColumns(
       dataIndex: "product_name",
       width: 180,
       ellipsis: true,
-      renderFormItem: () => (
-        <Select
-          mode="multiple"
-          showSearch
-          allowClear
-          optionFilterProp="label"
-          placeholder="请选择产品名称"
-          options={productSelectOptions}
-        />
-      ),
+      valueType: "select",
+      fieldProps: {
+        mode: "multiple",
+        showSearch: true,
+        optionFilterProp: "label",
+        placeholder: "请选择产品名称",
+        options: productSelectOptions,
+      },
       render: (_, record) => record.product_name || "-",
+    },
+    {
+      title: "运单编号",
+      dataIndex: "tracking_no",
+      hideInTable: true,
+      renderFormItem: renderShipmentTrackSearchTagsInput,
+    },
+    {
+      title: "物流商",
+      dataIndex: "logistics_provider",
+      hideInTable: true,
+      valueType: "select",
+      fieldProps: {
+        mode: "multiple",
+        showSearch: true,
+        optionFilterProp: "label",
+        placeholder: "请选择物流商",
+        options: logisticsProviderOptions,
+      },
+    },
+    {
+      title: "是否到仓",
+      dataIndex: "warehouse_arrived",
+      hideInTable: true,
+      valueType: "select",
+      fieldProps: {
+        placeholder: "请选择是否到仓",
+        options: [
+          { label: "是", value: "是" },
+          { label: "否", value: "否" },
+        ],
+      },
     },
     {
       title: "最新轨迹",
@@ -134,18 +220,74 @@ export function getShipmentTrackColumns(
       title: "开船时间",
       dataIndex: "sailing_time",
       valueType: "date",
-      width: 120,
+      width: 150,
       search: false,
-      render: (_, record) => formatShipmentTrackDate(record.sailing_time) || "-",
+      onCell: (record) => ({
+        className: "cursor-pointer",
+        onDoubleClick: () => onStartTrackDateEdit(record, "sailing_time"),
+      }),
+      render: (_, record) => {
+        const formattedValue = formatShipmentTrackDate(record.sailing_time);
+
+        if (isTrackDateEditing(record, "sailing_time")) {
+          return (
+            <EditableTrackDatePicker
+              disabled={isTrackDateUpdating(record, "sailing_time")}
+              field="sailing_time"
+              onCancel={onCancelTrackDateEdit}
+              onChange={onChangeTrackDate}
+              record={record}
+            />
+          );
+        }
+
+        return (
+          <Typography.Text
+            className="block min-h-6 whitespace-nowrap"
+            type={formattedValue ? undefined : "secondary"}
+          >
+            {formattedValue || "-"}
+          </Typography.Text>
+        );
+      },
     },
     {
       title: "到仓时间",
       dataIndex: "warehouse_arrived_time",
       valueType: "date",
-      width: 120,
+      width: 150,
       search: false,
-      render: (_, record) =>
-        formatShipmentTrackDate(record.warehouse_arrived_time) || "-",
+      onCell: (record) => ({
+        className: "cursor-pointer",
+        onDoubleClick: () =>
+          onStartTrackDateEdit(record, "warehouse_arrived_time"),
+      }),
+      render: (_, record) => {
+        const formattedValue = formatShipmentTrackDate(
+          record.warehouse_arrived_time,
+        );
+
+        if (isTrackDateEditing(record, "warehouse_arrived_time")) {
+          return (
+            <EditableTrackDatePicker
+              disabled={isTrackDateUpdating(record, "warehouse_arrived_time")}
+              field="warehouse_arrived_time"
+              onCancel={onCancelTrackDateEdit}
+              onChange={onChangeTrackDate}
+              record={record}
+            />
+          );
+        }
+
+        return (
+          <Typography.Text
+            className="block min-h-6 whitespace-nowrap"
+            type={formattedValue ? undefined : "secondary"}
+          >
+            {formattedValue || "-"}
+          </Typography.Text>
+        );
+      },
     },
     {
       title: "时效天数",
@@ -177,7 +319,8 @@ export function getShipmentTrackColumns(
         const canUpdateTrack =
           providerName === "赛易" ||
           providerName === "日升辉" ||
-          providerName === "通途";
+          providerName === "通途" ||
+          providerName === "唐朝";
 
         return [
           <Tooltip
@@ -185,7 +328,7 @@ export function getShipmentTrackColumns(
             title={
               canUpdateTrack
                 ? "更新轨迹"
-                : "当前仅支持赛易/日升辉/通途货件更新轨迹"
+                : "当前仅支持赛易/日升辉/通途/唐朝货件更新轨迹"
             }
           >
             <Button

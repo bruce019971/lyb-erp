@@ -12,6 +12,7 @@ import {
   loginTongtu,
   normalizeBaseUrl,
   queryTongtuWaybill,
+  type TongtuWaybillQueryResult,
 } from "../../shipments/_tongtu";
 
 export const runtime = "nodejs";
@@ -69,6 +70,8 @@ type TongtuTrackEvent = {
 };
 
 const LOG_SCOPE = "tongtu-track-update";
+const TONGTU_FALLBACK_USERNAME = "7660227";
+const TONGTU_FALLBACK_PASSWORD = "Tt7660227";
 
 async function verifyShipmentTrackOperator() {
   const cookieStore = await cookies();
@@ -111,6 +114,115 @@ function normalizeFieldKey(key: string) {
   return key.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, "").toLowerCase();
 }
 
+const TONGTU_TRACK_TIME_FIELDS = [
+  "sj",
+  "time",
+  "tracktime",
+  "eventtime",
+  "operatetime",
+  "operationtime",
+  "operationdate",
+  "trackdate",
+  "trackdatetime",
+  "happentime",
+  "processtime",
+  "nodetime",
+  "createtime",
+  "createdtime",
+  "updatetime",
+  "updatedtime",
+  "gmtcreate",
+  "gmtmodified",
+  "datestr",
+  "date",
+  "riqi",
+  "shijian",
+  "日期",
+  "时间",
+  "轨迹时间",
+  "操作时间",
+  "发生时间",
+];
+
+const TONGTU_TRACK_DESCRIPTION_FIELDS = [
+  "miaoshu",
+  "description",
+  "desc",
+  "detail",
+  "detaildesc",
+  "remark",
+  "memo",
+  "message",
+  "msg",
+  "track",
+  "trace",
+  "trajectory",
+  "trackremark",
+  "trackcontent",
+  "trackcnremark",
+  "trackenremark",
+  "content",
+  "context",
+  "event",
+  "eventname",
+  "eventdesc",
+  "status",
+  "statusdesc",
+  "statusname",
+  "nodename",
+  "nodecontent",
+  "trackname",
+  "guiji",
+  "beizhu",
+  "note",
+  "comment",
+  "轨迹",
+  "描述",
+  "内容",
+  "状态",
+  "备注",
+];
+
+const TONGTU_TRACK_LOCATION_FIELDS = [
+  "location",
+  "locationname",
+  "address",
+  "addressname",
+  "area",
+  "areaname",
+  "position",
+  "positionname",
+  "place",
+  "site",
+  "city",
+  "cityname",
+  "country",
+  "countryname",
+  "provincename",
+  "warehouse",
+  "仓库",
+  "地点",
+  "位置",
+  "地区",
+  "地址",
+];
+
+const TONGTU_TRACK_CHILD_WAYBILL_FIELDS = [
+  "childtrackingno",
+  "childwaybillno",
+  "childbillno",
+  "childorderno",
+  "subtrackingno",
+  "subwaybillno",
+  "subbillno",
+  "suborderno",
+  "transferno",
+  "zizhuandanhao",
+  "转单号",
+  "子转单号",
+  "子单号",
+];
+
 function hasAnyField(row: Record<string, unknown>, fieldNames: readonly string[]) {
   const normalizedFieldNames = fieldNames.map(normalizeFieldKey);
 
@@ -139,6 +251,28 @@ function normalizeDateTimeText(value: unknown) {
   const matched = text.match(
     /\d{4}[-/]\d{1,2}[-/]\d{1,2}(?:[ T]\d{1,2}:\d{1,2}(?::\d{1,2})?)?/,
   );
+  if (!matched) {
+    const monthDayMatch = text.match(
+      /(^|[^\d])(\d{1,2})[-/月](\d{1,2})(?:日)?(?:[ T](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?(?!\d)/,
+    );
+
+    if (monthDayMatch) {
+      const now = new Date();
+      const month = Number(monthDayMatch[2]);
+      const day = Number(monthDayMatch[3]);
+      const hour = Number(monthDayMatch[4] ?? "0");
+      const minute = Number(monthDayMatch[5] ?? "0");
+      const second = Number(monthDayMatch[6] ?? "0");
+      const candidate = new Date(
+        Date.UTC(now.getUTCFullYear(), month - 1, day, hour, minute, second),
+      );
+
+      if (!Number.isNaN(candidate.getTime())) {
+        return candidate.toISOString();
+      }
+    }
+  }
+
   const dateText = matched?.[0] ?? text;
   const normalized = dateText.replace(/\//g, "-").replace(" ", "T");
   const timestamp = Date.parse(normalized);
@@ -146,6 +280,179 @@ function normalizeDateTimeText(value: unknown) {
   if (Number.isNaN(timestamp)) return "";
 
   return new Date(timestamp).toISOString();
+}
+
+function isStructuredNoiseText(value: string) {
+  const text = value.trim();
+  if (!text) return false;
+
+  if (
+    (/^[\[{]/.test(text) || text.includes('{"') || text.includes('","')) &&
+    /"[A-Za-z0-9_]+":/.test(text)
+  ) {
+    return true;
+  }
+
+  const fieldLikeMatches = text.match(/"[A-Za-z0-9_]+":/g) ?? [];
+  if (fieldLikeMatches.length >= 4) {
+    return true;
+  }
+
+  const suspiciousKeywords = [
+    "clientModel",
+    "amount",
+    "createTime",
+    "creatorName",
+    "currency",
+    "companyAddress",
+    "totalAvailableAmount",
+    "convertedAmount",
+    "principal",
+    "warehouseAddress",
+  ];
+
+  const matchedKeywordCount = suspiciousKeywords.filter((keyword) =>
+    text.includes(keyword),
+  ).length;
+
+  return matchedKeywordCount >= 3;
+}
+
+function sanitizeTrackText(value: string) {
+  const text = value.replace(/\s+/g, " ").trim();
+  if (!text) return "";
+  if (isStructuredNoiseText(text)) return "";
+
+  return text;
+}
+
+function isTongtuTrackContainerKey(key: string) {
+  const normalized = normalizeFieldKey(key);
+
+  return (
+    [
+      "track",
+      "tracks",
+      "traces",
+      "trace",
+      "trajectory",
+      "trajectorylist",
+      "tracklist",
+      "tracelist",
+      "nodelist",
+      "eventlist",
+      "history",
+      "historylist",
+      "record",
+      "records",
+      "guiji",
+      "guijilist",
+    ].includes(normalized) ||
+    normalized.includes("track") ||
+    normalized.includes("trace") ||
+    normalized.includes("trajectory") ||
+    normalized.includes("guiji") ||
+    normalized.includes("history") ||
+    normalized.includes("record") ||
+    key.includes("轨迹") ||
+    key.includes("跟踪") ||
+    key.includes("记录") ||
+    key.includes("历程") ||
+    key.includes("节点")
+  );
+}
+
+function hasLikelyDateTimeValue(value: unknown) {
+  return Boolean(normalizeDateTimeText(value));
+}
+
+function hasLikelyTrackTimeField(row: Record<string, unknown>) {
+  if (hasAnyField(row, TONGTU_TRACK_TIME_FIELDS)) {
+    return Boolean(getTextField(row, TONGTU_TRACK_TIME_FIELDS));
+  }
+
+  return Object.entries(row).some(([key, value]) => {
+    const normalized = normalizeFieldKey(key);
+    return (
+      (normalized.includes("time") ||
+        normalized.includes("date") ||
+        normalized.includes("riqi") ||
+        normalized.includes("shijian") ||
+        key.includes("时间") ||
+        key.includes("日期")) &&
+      hasLikelyDateTimeValue(value)
+    );
+  });
+}
+
+function getTrackEventTime(row: Record<string, unknown>) {
+  const explicitText = getTextField(row, TONGTU_TRACK_TIME_FIELDS);
+  if (explicitText) {
+    return normalizeDateTimeText(explicitText);
+  }
+
+  for (const [key, value] of Object.entries(row)) {
+    const normalized = normalizeFieldKey(key);
+    if (
+      normalized.includes("time") ||
+      normalized.includes("date") ||
+      normalized.includes("riqi") ||
+      normalized.includes("shijian") ||
+      key.includes("时间") ||
+      key.includes("日期")
+    ) {
+      const parsed = normalizeDateTimeText(value);
+      if (parsed) return parsed;
+    }
+  }
+
+  return "";
+}
+
+function getTrackDescription(row: Record<string, unknown>) {
+  const explicitText = getTextField(row, TONGTU_TRACK_DESCRIPTION_FIELDS);
+  if (explicitText) return sanitizeTrackText(explicitText);
+
+  const fallbackTexts = Object.entries(row)
+    .filter(([key]) => {
+      const normalized = normalizeFieldKey(key);
+      return !(
+        normalized === "id" ||
+        normalized.endsWith("id") ||
+        normalized === "index" ||
+        normalized === "sort" ||
+        normalized === "seq" ||
+        normalized === "no" ||
+        isTongtuTrackContainerKey(key)
+      );
+    })
+    .map(([, value]) => getOptionalText(value))
+    .map((value) => sanitizeTrackText(value))
+    .filter((value) => value && !normalizeDateTimeText(value))
+    .slice(0, 3);
+
+  return sanitizeTrackText(fallbackTexts.join("；"));
+}
+
+function getTrackLocation(row: Record<string, unknown>) {
+  return getTextField(row, TONGTU_TRACK_LOCATION_FIELDS);
+}
+
+function getChildWaybillNo(row: Record<string, unknown>) {
+  return getTextField(row, TONGTU_TRACK_CHILD_WAYBILL_FIELDS);
+}
+
+function isLikelyTongtuTrackRow(row: Record<string, unknown>) {
+  const hasTime = hasLikelyTrackTimeField(row);
+  const description = getTrackDescription(row);
+  const location = getTrackLocation(row);
+  const childWaybillNo = getChildWaybillNo(row);
+
+  if (hasTime && (description || location || childWaybillNo)) {
+    return true;
+  }
+
+  return false;
 }
 
 function collectTongtuTrackRows(
@@ -161,120 +468,20 @@ function collectTongtuTrackRows(
   if (typeof value !== "object") return [];
 
   const record = value as Record<string, unknown>;
-  const currentRows =
-    hasAnyField(record, [
-      "miaoshu",
-      "description",
-      "desc",
-      "remark",
-      "track",
-      "trackremark",
-      "trackcontent",
-      "content",
-      "status",
-      "nodename",
-      "guiji",
-      "轨迹",
-      "描述",
-      "内容",
-      "状态",
-    ]) &&
-    hasAnyField(record, [
-      "sj",
-      "time",
-      "tracktime",
-      "eventtime",
-      "operatetime",
-      "operationtime",
-      "createtime",
-      "createdtime",
-      "updatetime",
-      "updatedtime",
-      "date",
-      "日期",
-      "时间",
-      "轨迹时间",
-      "操作时间",
-    ])
-      ? [record]
-      : [];
-  const nestedRows = Object.values(record).flatMap((item) =>
-    collectTongtuTrackRows(item, depth + 1),
+  const currentRows = isLikelyTongtuTrackRow(record) ? [record] : [];
+  const preferredNestedRows = Object.entries(record).flatMap(([key, item]) =>
+    isTongtuTrackContainerKey(key)
+      ? collectTongtuTrackRows(item, depth + 1)
+      : [],
   );
+  const nestedRows =
+    preferredNestedRows.length > 0
+      ? preferredNestedRows
+      : Object.values(record).flatMap((item) =>
+          collectTongtuTrackRows(item, depth + 1),
+        );
 
   return [...currentRows, ...nestedRows];
-}
-
-function getTrackEventTime(row: Record<string, unknown>) {
-  return normalizeDateTimeText(
-    getTextField(row, [
-      "sj",
-      "time",
-      "tracktime",
-      "eventtime",
-      "operatetime",
-      "operationtime",
-      "createtime",
-      "createdtime",
-      "updatetime",
-      "updatedtime",
-      "date",
-      "日期",
-      "时间",
-      "轨迹时间",
-      "操作时间",
-    ]),
-  );
-}
-
-function getTrackDescription(row: Record<string, unknown>) {
-  return (
-    getTextField(row, [
-      "miaoshu",
-      "description",
-      "desc",
-      "remark",
-      "trackremark",
-      "trackcontent",
-      "content",
-      "status",
-      "nodename",
-      "trackname",
-      "guiji",
-      "轨迹",
-      "描述",
-      "内容",
-      "状态",
-    ]) || JSON.stringify(row)
-  );
-}
-
-function getTrackLocation(row: Record<string, unknown>) {
-  return getTextField(row, [
-    "location",
-    "address",
-    "area",
-    "position",
-    "place",
-    "city",
-    "country",
-    "位置",
-    "地区",
-    "地址",
-  ]);
-}
-
-function getChildWaybillNo(row: Record<string, unknown>) {
-  return getTextField(row, [
-    "childtrackingno",
-    "childwaybillno",
-    "subtrackingno",
-    "subwaybillno",
-    "transferno",
-    "转单号",
-    "子转单号",
-    "子单号",
-  ]);
 }
 
 function joinTrackContent(description: string, location: string, childWaybillNo: string) {
@@ -288,7 +495,7 @@ function joinTrackContent(description: string, location: string, childWaybillNo:
     parts.push(`子转单号：${childWaybillNo}`);
   }
 
-  return parts.filter(Boolean).join("；");
+  return sanitizeTrackText(parts.filter(Boolean).join("；"));
 }
 
 function inferYearForMonthDay(month: number, day: number, referenceDate: Date) {
@@ -311,6 +518,62 @@ function inferYearForMonthDay(month: number, day: number, referenceDate: Date) {
 
 function formatDateOnly(date: Date) {
   return date.toISOString().slice(0, 10);
+}
+
+function parseMonthDayToDateText(
+  month: number,
+  day: number,
+  referenceDate: Date,
+) {
+  if (!Number.isFinite(month) || !Number.isFinite(day)) return null;
+
+  return formatDateOnly(inferYearForMonthDay(month, day, referenceDate));
+}
+
+function extractKeywordBusinessDate(
+  content: string,
+  keywords: string[],
+  time: string,
+) {
+  const referenceDate = time ? new Date(time) : new Date();
+
+  for (const keyword of keywords) {
+    const keywordIndex = content.indexOf(keyword);
+    if (keywordIndex < 0) continue;
+
+    const beforeText = content.slice(0, keywordIndex + keyword.length);
+    const fullDateMatches = Array.from(
+      beforeText.matchAll(
+        /(\d{4})[-/.年](\d{1,2})[-/.月](\d{1,2})(?:日)?/g,
+      ),
+    );
+    const lastFullDateMatch = fullDateMatches.at(-1);
+
+    if (lastFullDateMatch) {
+      const year = Number(lastFullDateMatch[1]);
+      const month = Number(lastFullDateMatch[2]);
+      const day = Number(lastFullDateMatch[3]);
+      const candidate = new Date(Date.UTC(year, month - 1, day));
+
+      if (!Number.isNaN(candidate.getTime())) {
+        return formatDateOnly(candidate);
+      }
+    }
+
+    const monthDayMatches = Array.from(
+      beforeText.matchAll(/(^|[^\d])(\d{1,2})[-/.月](\d{1,2})(?:日)?/g),
+    );
+    const lastMonthDayMatch = monthDayMatches.at(-1);
+
+    if (lastMonthDayMatch) {
+      const month = Number(lastMonthDayMatch[2]);
+      const day = Number(lastMonthDayMatch[3]);
+      const parsed = parseMonthDayToDateText(month, day, referenceDate);
+      if (parsed) return parsed;
+    }
+  }
+
+  return null;
 }
 
 function extractBusinessDate(content: string, time: string) {
@@ -336,11 +599,8 @@ function extractBusinessDate(content: string, time: string) {
 
   const month = Number(monthDayMatch[2]);
   const day = Number(monthDayMatch[3]);
-  if (!Number.isFinite(month) || !Number.isFinite(day)) {
-    return time ? time.slice(0, 10) : null;
-  }
-
-  return formatDateOnly(inferYearForMonthDay(month, day, referenceDate));
+  return parseMonthDayToDateText(month, day, referenceDate) ??
+    (time ? time.slice(0, 10) : null);
 }
 
 function normalizeTrackEvent(row: Record<string, unknown>, index: number): TongtuTrackEvent {
@@ -378,7 +638,11 @@ function findFirstMatchedDate(
   if (!matchedEvent) return null;
 
   if (options?.useBusinessDate) {
-    return matchedEvent.businessDate ?? (matchedEvent.time ? matchedEvent.time.slice(0, 10) : null);
+    return (
+      extractKeywordBusinessDate(matchedEvent.content, keywords, matchedEvent.time) ??
+      matchedEvent.businessDate ??
+      (matchedEvent.time ? matchedEvent.time.slice(0, 10) : null)
+    );
   }
 
   return matchedEvent.time ? matchedEvent.time.slice(0, 10) : matchedEvent.businessDate;
@@ -396,22 +660,10 @@ function parseTongtuTrackResult(value: unknown) {
     (left, right) => getEventTimestamp(right) - getEventTimestamp(left),
   );
   const latestEvent = orderedByTimeDesc[0];
-  const sailingTime = findFirstMatchedDate(
-    orderedByTimeAsc,
-    ["已开船", "开船", "开航", "启航", "离港", "已发船", "sailing", "depart"],
-    { useBusinessDate: true },
-  );
-  const warehouseArrivedTime =
-    findFirstMatchedDate(
-      orderedByTimeAsc,
-      ["海外仓", "已到仓", "到仓", "入仓", "抵仓", "已入库", "已入仓", "warehouse", "arriv"],
-      { useBusinessDate: true },
-    ) ||
-    findFirstMatchedDate(
-      orderedByTimeAsc,
-      ["理货上架", "已上架", "上架"],
-      { useBusinessDate: true },
-    );
+  const sailingTime = findFirstMatchedDate(orderedByTimeAsc, ["已开船"]);
+  const warehouseArrivedTime = findFirstMatchedDate(orderedByTimeAsc, [
+    "海外仓",
+  ]);
 
   return {
     events: orderedByTimeDesc,
@@ -425,6 +677,129 @@ function parseTongtuTrackResult(value: unknown) {
 function getPayloadSummary(payload: unknown) {
   const text = JSON.stringify(payload);
   return text.length > 1000 ? `${text.slice(0, 1000)}...` : text;
+}
+
+async function loginTongtuCredential(params: {
+  baseUrl: string;
+  username: string;
+  password: string;
+  label: "primary" | "fallback";
+}) {
+  const websocketToken = createTongtuId();
+  const visitorId = createTongtuId();
+  const token = await loginTongtu({
+    baseUrl: params.baseUrl,
+    username: params.username,
+    password: params.password,
+    logScope: LOG_SCOPE,
+  });
+
+  return {
+    label: params.label,
+    token,
+    websocketToken,
+    visitorId,
+  };
+}
+
+async function queryTongtuTrackWithSession(params: {
+  baseUrl: string;
+  token: string;
+  websocketToken: string;
+  visitorId: string;
+  shipmentNo: string;
+  trackingNo: string;
+}) {
+  const queryResult = await queryTongtuWaybill({
+    baseUrl: params.baseUrl,
+    token: params.token,
+    shipmentNo: params.shipmentNo,
+    trackingNo: params.trackingNo,
+    websocketToken: params.websocketToken,
+    visitorId: params.visitorId,
+    logScope: LOG_SCOPE,
+    returnMatchedRowWithoutWaybill: true,
+  });
+
+  if (queryResult.error) {
+    throw new Error(queryResult.error);
+  }
+
+  const waybillDetail = queryResult.waybillId
+    ? await fetchTongtuWaybillDetail({
+        baseUrl: params.baseUrl,
+        token: params.token,
+        waybillId: queryResult.waybillId,
+        websocketToken: params.websocketToken,
+        visitorId: params.visitorId,
+        logScope: LOG_SCOPE,
+      })
+    : null;
+
+  return {
+    queryResult,
+    waybillDetail,
+  };
+}
+
+async function queryTongtuTrackWithBusinessFallback(params: {
+  baseUrl: string;
+  username: string;
+  password: string;
+  shipmentNo: string;
+  trackingNo: string;
+}): Promise<{
+  queryResult: TongtuWaybillQueryResult;
+  waybillDetail: unknown;
+  usedFallback: boolean;
+}> {
+  const primarySession = await loginTongtuCredential({
+    baseUrl: params.baseUrl,
+    username: params.username,
+    password: params.password,
+    label: "primary",
+  });
+
+  try {
+    return {
+      ...(await queryTongtuTrackWithSession({
+        baseUrl: params.baseUrl,
+        token: primarySession.token,
+        websocketToken: primarySession.websocketToken,
+        visitorId: primarySession.visitorId,
+        shipmentNo: params.shipmentNo,
+        trackingNo: params.trackingNo,
+      })),
+      usedFallback: false,
+    };
+  } catch (error) {
+    const primaryBusinessError =
+      error instanceof Error ? error.message : "通途业务接口查询失败";
+
+    logTongtuResponse(LOG_SCOPE, "business query fallback", {
+      primaryBusinessError,
+      fallbackUsername: TONGTU_FALLBACK_USERNAME,
+    });
+  }
+
+  const fallbackSession = await loginTongtuCredential({
+    baseUrl: params.baseUrl,
+    username: TONGTU_FALLBACK_USERNAME,
+    password: TONGTU_FALLBACK_PASSWORD,
+    label: "fallback",
+  });
+
+  return {
+    ...(await queryTongtuTrackWithSession({
+      baseUrl: params.baseUrl,
+      token: fallbackSession.token,
+      websocketToken: fallbackSession.websocketToken,
+      visitorId: fallbackSession.visitorId,
+      shipmentNo: params.shipmentNo,
+      trackingNo: params.trackingNo,
+    })),
+    usedFallback: true,
+  };
 }
 
 export async function POST(request: Request) {
@@ -482,46 +857,23 @@ export async function POST(request: Request) {
       logisticsProvider.password,
       "通途物流商密码未配置",
     );
-    const websocketToken = createTongtuId();
-    const visitorId = createTongtuId();
-    const token = await loginTongtu({
+    const { queryResult, waybillDetail, usedFallback } =
+      await queryTongtuTrackWithBusinessFallback({
       baseUrl,
       username,
       password,
-      logScope: LOG_SCOPE,
-    });
-    const queryResult = await queryTongtuWaybill({
-      baseUrl,
-      token,
       shipmentNo,
       trackingNo,
-      websocketToken,
-      visitorId,
-      logScope: LOG_SCOPE,
-      returnMatchedRowWithoutWaybill: true,
     });
 
     if (!queryResult.row) {
-      throw new Error(
-        queryResult.error ||
-          `通途已下单货件中未找到客户单号为 ${shipmentNo} 的数据`,
-      );
+      throw new Error(`通途已下单货件中未找到客户单号为 ${shipmentNo} 的数据`);
     }
 
     if (!queryResult.matchedShipmentNo) {
       throw new Error(`通途已下单货件中未找到客户单号为 ${shipmentNo} 的数据`);
     }
 
-    const waybillDetail = queryResult.waybillId
-      ? await fetchTongtuWaybillDetail({
-          baseUrl,
-          token,
-          waybillId: queryResult.waybillId,
-          websocketToken,
-          visitorId,
-          logScope: LOG_SCOPE,
-        })
-      : null;
     const detailTrack = parseTongtuTrackResult(waybillDetail);
     const parsedTrack =
       detailTrack.events.length > 0
@@ -537,6 +889,7 @@ export async function POST(request: Request) {
       warehouseArrivedTime: parsedTrack.warehouseArrivedTime,
       trackUpdatedAt: parsedTrack.trackUpdatedAt,
       eventCount: parsedTrack.events.length,
+      credential: usedFallback ? "fallback" : "primary",
     });
 
     if (!parsedTrack.latestTrack) {
@@ -551,8 +904,6 @@ export async function POST(request: Request) {
         time: event.time || null,
         content: event.content,
       })),
-      sailing_time: parsedTrack.sailingTime,
-      warehouse_arrived_time: parsedTrack.warehouseArrivedTime,
       track_updated_at: parsedTrack.trackUpdatedAt,
     };
     const { data: updatedData, error: updateError } = await adminClient

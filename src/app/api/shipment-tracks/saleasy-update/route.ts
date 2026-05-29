@@ -40,6 +40,7 @@ type SaleasyTrackUpdateRequestBody = {
 type ShipmentTrackRow = {
   id: string;
   shipment_record_id: string;
+  warehouse_arrived_time: string | null;
   shipment:
     | {
         id: string;
@@ -252,7 +253,7 @@ function getTrackEventText(row: unknown) {
       "name",
     ]) || getOptionalText(record);
 
-  return text || JSON.stringify(row);
+  return text;
 }
 
 function getTrackEventTime(row: unknown) {
@@ -346,7 +347,7 @@ function parseTrackResult(payload: unknown) {
   const sourceRows = rows.length > 0 ? rows : [payload];
   const rawEvents = sourceRows
     .map(normalizeTrackEvent)
-    .filter((event) => event.content || event.time);
+    .filter((event) => event.content);
   const events = [...rawEvents].sort(
     (left, right) => getEventTimestamp(left) - getEventTimestamp(right),
   );
@@ -399,7 +400,7 @@ export async function POST(request: Request) {
     const { data: trackData, error: trackError } = await adminClient
       .from("shipment_tracks")
       .select(
-        "id, shipment_record_id, shipment:shipment_records!inner(id, shipment_no, tracking_no, logistics_provider, status)",
+        "id, shipment_record_id, warehouse_arrived_time, shipment:shipment_records!inner(id, shipment_no, tracking_no, logistics_provider, status)",
       )
       .eq("id", trackId)
       .eq("shipment.status", "有效")
@@ -497,7 +498,8 @@ export async function POST(request: Request) {
         content: event.content,
       })),
       sailing_time: parsedTrack.sailingTime,
-      warehouse_arrived_time: parsedTrack.warehouseArrivedTime,
+      warehouse_arrived_time:
+        parsedTrack.warehouseArrivedTime || track.warehouse_arrived_time,
       track_updated_at: parsedTrack.trackUpdatedAt,
     };
     const { data: updatedData, error: updateError } = await adminClient

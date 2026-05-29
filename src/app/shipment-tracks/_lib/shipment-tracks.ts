@@ -30,6 +30,50 @@ export function formatShipmentTrackDateTime(value?: string | null) {
   return value.replace("T", " ").slice(0, 19);
 }
 
+export function isShipmentTrackNoiseText(value?: string | null) {
+  const text = value?.trim() || "";
+  if (!text) return false;
+
+  if (
+    (/^[\[{]/.test(text) || text.includes('{"') || text.includes('","')) &&
+    /"[A-Za-z0-9_]+":/.test(text)
+  ) {
+    return true;
+  }
+
+  const fieldLikeMatches = text.match(/"[A-Za-z0-9_]+":/g) ?? [];
+  if (fieldLikeMatches.length >= 4) {
+    return true;
+  }
+
+  const suspiciousKeywords = [
+    "clientModel",
+    "amount",
+    "createTime",
+    "creatorName",
+    "currency",
+    "companyAddress",
+    "totalAvailableAmount",
+    "convertedAmount",
+    "principal",
+    "warehouseAddress",
+  ];
+
+  const matchedKeywordCount = suspiciousKeywords.filter((keyword) =>
+    text.includes(keyword),
+  ).length;
+
+  return matchedKeywordCount >= 3;
+}
+
+export function sanitizeShipmentTrackText(value?: string | null) {
+  const text = value?.replace(/\s+/g, " ").trim() || "";
+  if (!text) return "";
+  if (isShipmentTrackNoiseText(text)) return "";
+
+  return text;
+}
+
 export function calculateShipmentTrackDurationDays(
   sailingTime?: string | null,
   warehouseArrivedTime?: string | null,

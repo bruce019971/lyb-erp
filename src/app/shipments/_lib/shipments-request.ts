@@ -181,16 +181,10 @@ export async function requestShipmentRecords(
   sorter: Record<string, SortOrder>,
   filters: Record<string, FilterValue | null> = {},
 ) {
-  const current = params.current ?? 1;
-  const pageSize = params.pageSize ?? 20;
-  const from = (current - 1) * pageSize;
-  const to = from + pageSize - 1;
-
   let query = supabase
     .from("shipment_records")
     .select("*", { count: "exact" })
-    .eq("status", "有效")
-    .range(from, to);
+    .eq("status", "有效");
 
   query = applyShipmentSearchParams(query, params);
 
@@ -977,7 +971,9 @@ export async function uploadShipmentLogisticsBoxMark(file: File) {
 export async function requestShipmentOptions() {
   const { data, error } = await supabase
     .from("shipment_records")
-    .select("id, shipment_no, tracking_no, product_name, order_store, box_count")
+    .select(
+      "id, shipment_no, tracking_no, product_name, order_store, box_count, logistics_provider, warehouse_arrived_status",
+    )
     .eq("status", "有效")
     .order("created_at", { ascending: false, nullsFirst: false });
 
@@ -989,7 +985,9 @@ export async function requestShipmentOptions() {
 
   const { data: fallbackData, error: fallbackError } = await supabase
     .from("shipment_records")
-    .select("id, shipment_no, tracking_no, product_name")
+    .select(
+      "id, shipment_no, tracking_no, product_name, logistics_provider, warehouse_arrived_status",
+    )
     .eq("status", "有效")
     .order("created_at", { ascending: false, nullsFirst: false });
 

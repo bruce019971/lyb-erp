@@ -28,6 +28,7 @@ type RishenghuiTrackUpdateRequestBody = {
 type ShipmentTrackRow = {
   id: string;
   shipment_record_id: string;
+  warehouse_arrived_time: string | null;
   shipment:
     | {
         id: string;
@@ -292,7 +293,7 @@ function normalizeTrackEvent(row: Record<string, unknown>, index: number) {
 
   return {
     index,
-    content: content || JSON.stringify(row),
+    content,
     time: getRishenghuiTrackTime(row),
     row,
   };
@@ -500,7 +501,7 @@ async function fetchRishenghuiOrderNo(params: {
 function parseRishenghuiTracks(rows: Array<Record<string, unknown>>) {
   const events = rows
     .map(normalizeTrackEvent)
-    .filter((event) => event.content || event.time)
+    .filter((event) => event.content)
     .sort((left, right) => getEventTimestamp(right) - getEventTimestamp(left));
   const latestEvent = events[0];
 
@@ -524,7 +525,7 @@ export async function POST(request: Request) {
     const { data: trackData, error: trackError } = await adminClient
       .from("shipment_tracks")
       .select(
-        "id, shipment_record_id, shipment:shipment_records!inner(id, shipment_no, tracking_no, logistics_provider, created_at, status)",
+        "id, shipment_record_id, warehouse_arrived_time, shipment:shipment_records!inner(id, shipment_no, tracking_no, logistics_provider, created_at, status)",
       )
       .eq("id", trackId)
       .eq("shipment.status", "有效")
@@ -602,7 +603,9 @@ export async function POST(request: Request) {
         content: event.content,
       })),
       sailing_time: resolvedEventsResult.sailingTime,
-      warehouse_arrived_time: resolvedEventsResult.warehouseArrivedTime,
+      warehouse_arrived_time:
+        resolvedEventsResult.warehouseArrivedTime ||
+        track.warehouse_arrived_time,
       track_updated_at: resolvedEventsResult.trackUpdatedAt,
     };
     const { data: updatedData, error: updateError } = await adminClient
