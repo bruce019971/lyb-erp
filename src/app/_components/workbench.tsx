@@ -124,29 +124,33 @@ export default function Workbench({
   useEffect(() => {
     if (!authReady || !authSession || !allowedPageKeys.length) return;
 
-    const pathnameKey = getPageKeyByPathname(pathname);
-    const nextActiveKey =
-      pathnameKey && allowedPageKeys.includes(pathnameKey)
-        ? pathnameKey
-        : allowedPageKeys.includes(initialActiveKey)
-          ? initialActiveKey
-          : allowedPageKeys[0];
+    const timer = window.setTimeout(() => {
+      const pathnameKey = getPageKeyByPathname(pathname);
+      const nextActiveKey =
+        pathnameKey && allowedPageKeys.includes(pathnameKey)
+          ? pathnameKey
+          : allowedPageKeys.includes(initialActiveKey)
+            ? initialActiveKey
+            : allowedPageKeys[0];
 
-    setOpenTabs((tabs) => {
-      const filteredTabs = tabs.filter((key) => allowedPageKeys.includes(key));
-      return filteredTabs.includes(nextActiveKey)
-        ? filteredTabs
-        : [...filteredTabs, nextActiveKey];
-    });
-    setActiveKey(nextActiveKey);
+      setOpenTabs((tabs) => {
+        const filteredTabs = tabs.filter((key) => allowedPageKeys.includes(key));
+        return filteredTabs.includes(nextActiveKey)
+          ? filteredTabs
+          : [...filteredTabs, nextActiveKey];
+      });
+      setActiveKey(nextActiveKey);
 
-    const matchedPage = pageConfigs.find((item) => item.href === pathname);
-    if (!matchedPage || !allowedPageKeys.includes(matchedPage.key)) {
-      const fallbackPage = pageConfigMap.get(nextActiveKey);
-      if (fallbackPage && pathname !== fallbackPage.href) {
-        router.replace(fallbackPage.href);
+      const matchedPage = pageConfigs.find((item) => item.href === pathname);
+      if (!matchedPage || !allowedPageKeys.includes(matchedPage.key)) {
+        const fallbackPage = pageConfigMap.get(nextActiveKey);
+        if (fallbackPage && pathname !== fallbackPage.href) {
+          router.replace(fallbackPage.href);
+        }
       }
-    }
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [allowedPageKeys, authReady, authSession, initialActiveKey, pathname, router]);
 
   const tabItems = useMemo<TabsProps["items"]>(
@@ -177,23 +181,24 @@ export default function Workbench({
   }
 
   function closePage(targetKey: PageKey) {
-    setOpenTabs((tabs) => {
-      const nextTabs = tabs.filter((key) => key !== targetKey);
-      if (activeKey === targetKey) {
-        const fallbackKey = getFallbackActiveKey(
-          tabs,
-          targetKey,
-          allowedPageKeys[0] ?? "profile",
-        );
-        setActiveKey(fallbackKey);
+    const fallbackKey = allowedPageKeys[0] ?? "profile";
+    const nextTabs = openTabs.filter((key) => key !== targetKey);
+    const nextOpenTabs = nextTabs.length ? nextTabs : [fallbackKey];
+    const nextActiveKey =
+      activeKey === targetKey
+        ? getFallbackActiveKey(openTabs, targetKey, fallbackKey)
+        : activeKey;
+    const normalizedActiveKey = nextOpenTabs.includes(nextActiveKey)
+      ? nextActiveKey
+      : nextOpenTabs[0];
 
-        const page = pageConfigMap.get(fallbackKey);
-        if (page && pathname !== page.href) {
-          window.history.pushState(null, "", page.href);
-        }
-      }
-      return nextTabs.length ? nextTabs : [allowedPageKeys[0] ?? "profile"];
-    });
+    setOpenTabs(nextOpenTabs);
+    setActiveKey(normalizedActiveKey);
+
+    const page = pageConfigMap.get(normalizedActiveKey);
+    if (page && pathname !== page.href) {
+      window.history.pushState(null, "", page.href);
+    }
   }
 
   async function handleLogout() {
