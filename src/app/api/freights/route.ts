@@ -23,6 +23,7 @@ type FreightRow = {
   freight_unit_price: number | null;
   volume: number | null;
   extra_fee: number | null;
+  extra_fee_remark: string | null;
   total_fee: number | null;
   bill_amount: number | null;
   freight_paid_status: string | null;
@@ -30,13 +31,14 @@ type FreightRow = {
   updated_at: string | null;
   shipment:
     | {
-        shipment_no: string | null;
-        tracking_no: string | null;
-        logistics_provider: string | null;
-        product_name: string | null;
-        box_count: number | null;
-        total_qty: number | null;
-      }
+      shipment_no: string | null;
+      tracking_no: string | null;
+      logistics_provider: string | null;
+      product_name: string | null;
+      box_count: number | null;
+      total_qty: number | null;
+      created_at: string | null;
+    }
     | Array<{
         shipment_no: string | null;
         tracking_no: string | null;
@@ -44,6 +46,7 @@ type FreightRow = {
         product_name: string | null;
         box_count: number | null;
         total_qty: number | null;
+        created_at: string | null;
       }>
     | null;
 };
@@ -53,6 +56,15 @@ type FreightSummary = {
   total_fee: number;
   bill_amount: number;
 };
+
+const FREIGHT_SELECT_WITH_EXTRA_FEE_REMARK =
+  "id, shipment_record_id, freight_unit_price, volume, extra_fee, extra_fee_remark, total_fee, bill_amount, freight_paid_status, created_at, updated_at, shipment:shipment_records!inner(shipment_no, tracking_no, logistics_provider, product_name, box_count, total_qty, created_at)";
+const FREIGHT_SELECT =
+  "id, shipment_record_id, freight_unit_price, volume, extra_fee, total_fee, bill_amount, freight_paid_status, created_at, updated_at, shipment:shipment_records!inner(shipment_no, tracking_no, logistics_provider, product_name, box_count, total_qty, created_at)";
+const FREIGHT_PATCH_SELECT_WITH_EXTRA_FEE_REMARK =
+  "id, shipment_record_id, freight_unit_price, volume, extra_fee, extra_fee_remark, total_fee, bill_amount, freight_paid_status, created_at, updated_at, shipment:shipment_records(shipment_no, tracking_no, logistics_provider, product_name, box_count, total_qty, created_at)";
+const FREIGHT_PATCH_SELECT =
+  "id, shipment_record_id, freight_unit_price, volume, extra_fee, total_fee, bill_amount, freight_paid_status, created_at, updated_at, shipment:shipment_records(shipment_no, tracking_no, logistics_provider, product_name, box_count, total_qty, created_at)";
 
 function calculateFreightUnitFee(
   totalFee?: number | null,
@@ -84,13 +96,14 @@ function normalizeFreightRow(row: FreightRow) {
     freight_unit_price: row.freight_unit_price,
     volume: row.volume,
     extra_fee: row.extra_fee,
+    extra_fee_remark: row.extra_fee_remark ?? null,
     box_count: shipment?.box_count ?? null,
     total_qty: shipment?.total_qty ?? null,
     total_fee: row.total_fee,
     bill_amount: row.bill_amount,
     unit_fee: calculateFreightUnitFee(row.total_fee, shipment?.total_qty ?? null),
     freight_paid_status: row.freight_paid_status ?? "否",
-    created_at: row.created_at,
+    created_at: shipment?.created_at ?? row.created_at,
     updated_at: row.updated_at,
   };
 }
@@ -188,6 +201,15 @@ function normalizeCreatedAtBoundary(value: string, boundary: "start" | "end") {
     : `${value}T23:59:59.999`;
 }
 
+function isMissingExtraFeeRemarkError(error: unknown) {
+  const text = JSON.stringify(error);
+
+  return (
+    text.includes("extra_fee_remark") &&
+    /does not exist|could not find|schema cache|PGRST204|42703/i.test(text)
+  );
+}
+
 async function verifyOperator() {
   const cookieStore = await cookies();
   const token = cookieStore.get(APP_SESSION_COOKIE)?.value;
@@ -230,12 +252,6 @@ export async function GET(request: Request) {
     await verifyOperator();
 
     const { searchParams } = new URL(request.url);
-    const current = Number(searchParams.get("current") ?? 1);
-    const pageSize = Number(searchParams.get("pageSize") ?? 40);
-    const from = (Math.max(current, 1) - 1) * Math.max(pageSize, 1);
-    const to = from + Math.max(pageSize, 1) - 1;
-    const orderField = searchParams.get("orderField") || "created_at";
-    const orderDirection = searchParams.get("orderDirection") || "descend";
     const shipmentNoValues = splitSearchTexts(
       searchParams.getAll("shipment_no"),
     );
@@ -257,17 +273,6 @@ export async function GET(request: Request) {
     const freightPaidStatusValues = normalizeMultiSelectValues(
       searchParams.getAll("freight_paid_status"),
     );
-    const allowedOrderFields = new Set([
-      "created_at",
-      "updated_at",
-      "freight_unit_price",
-      "volume",
-      "extra_fee",
-      "total_fee",
-      "bill_amount",
-      "freight_paid_status",
-    ]);
-
     const adminClient = createSupabaseAdminClient();
     let matchedShipmentIds: string[] | null = null;
 
@@ -340,62 +345,62 @@ export async function GET(request: Request) {
       });
     }
 
-    let query = adminClient
-      .from("freight_records")
-      .select(
-        "id, shipment_record_id, freight_unit_price, volume, extra_fee, total_fee, bill_amount, freight_paid_status, created_at, updated_at, shipment:shipment_records!inner(shipment_no, tracking_no, logistics_provider, product_name, box_count, total_qty)",
-        { count: "exact" },
-      )
-      .eq("shipment.status", "有效")
-      .range(from, to);
-    let summaryQuery = adminClient
-      .from("freight_records")
-      .select(
-        "id, shipment_record_id, freight_unit_price, volume, extra_fee, total_fee, bill_amount, freight_paid_status, created_at, updated_at, shipment:shipment_records!inner(shipment_no, tracking_no, logistics_provider, product_name, box_count, total_qty)",
-      )
-      .eq("shipment.status", "有效");
+    const runFreightQueries = async (includeExtraFeeRemark: boolean) => {
+      const selectFields = includeExtraFeeRemark
+        ? FREIGHT_SELECT_WITH_EXTRA_FEE_REMARK
+        : FREIGHT_SELECT;
+      let query = adminClient
+        .from("freight_records")
+        .select(selectFields, { count: "exact" })
+        .eq("shipment.status", "有效");
+      let summaryQuery = adminClient
+        .from("freight_records")
+        .select(selectFields)
+        .eq("shipment.status", "有效");
 
-    if (matchedShipmentIds && matchedShipmentIds.length > 0) {
-      query = query.in("shipment_record_id", matchedShipmentIds);
-      summaryQuery = summaryQuery.in("shipment_record_id", matchedShipmentIds);
-    }
+      if (matchedShipmentIds && matchedShipmentIds.length > 0) {
+        query = query.in("shipment_record_id", matchedShipmentIds);
+        summaryQuery = summaryQuery.in("shipment_record_id", matchedShipmentIds);
+      }
 
-    if (billIssuedValues.includes("是") && !billIssuedValues.includes("否")) {
-      query = query.not("bill_amount", "is", null);
-      summaryQuery = summaryQuery.not("bill_amount", "is", null);
-    } else if (
-      billIssuedValues.includes("否") &&
-      !billIssuedValues.includes("是")
-    ) {
-      query = query.is("bill_amount", null);
-      summaryQuery = summaryQuery.is("bill_amount", null);
-    }
+      if (billIssuedValues.includes("是") && !billIssuedValues.includes("否")) {
+        query = query.not("bill_amount", "is", null);
+        summaryQuery = summaryQuery.not("bill_amount", "is", null);
+      } else if (
+        billIssuedValues.includes("否") &&
+        !billIssuedValues.includes("是")
+      ) {
+        query = query.is("bill_amount", null);
+        summaryQuery = summaryQuery.is("bill_amount", null);
+      }
+
+      if (
+        freightPaidStatusValues.includes("是") &&
+        !freightPaidStatusValues.includes("否")
+      ) {
+        query = query.eq("freight_paid_status", "是");
+        summaryQuery = summaryQuery.eq("freight_paid_status", "是");
+      } else if (
+        freightPaidStatusValues.includes("否") &&
+        !freightPaidStatusValues.includes("是")
+      ) {
+        query = query.or("freight_paid_status.is.null,freight_paid_status.eq.否");
+        summaryQuery = summaryQuery.or(
+          "freight_paid_status.is.null,freight_paid_status.eq.否",
+        );
+      }
+
+      return Promise.all([query, summaryQuery]);
+    };
+
+    let [listResult, summaryResult] = await runFreightQueries(true);
 
     if (
-      freightPaidStatusValues.includes("是") &&
-      !freightPaidStatusValues.includes("否")
+      isMissingExtraFeeRemarkError(listResult.error) ||
+      isMissingExtraFeeRemarkError(summaryResult.error)
     ) {
-      query = query.eq("freight_paid_status", "是");
-      summaryQuery = summaryQuery.eq("freight_paid_status", "是");
-    } else if (
-      freightPaidStatusValues.includes("否") &&
-      !freightPaidStatusValues.includes("是")
-    ) {
-      query = query.or("freight_paid_status.is.null,freight_paid_status.eq.否");
-      summaryQuery = summaryQuery.or(
-        "freight_paid_status.is.null,freight_paid_status.eq.否",
-      );
+      [listResult, summaryResult] = await runFreightQueries(false);
     }
-
-    query = query.order(
-      allowedOrderFields.has(orderField) ? orderField : "created_at",
-      {
-        ascending: orderDirection === "ascend",
-        nullsFirst: false,
-      },
-    );
-
-    const [listResult, summaryResult] = await Promise.all([query, summaryQuery]);
     const { data, error, count } = listResult;
 
     if (error) {
@@ -406,7 +411,7 @@ export async function GET(request: Request) {
       throw summaryResult.error;
     }
 
-    const summary = ((summaryResult.data ?? []) as FreightRow[]).reduce(
+    const summary = ((summaryResult.data ?? []) as unknown as FreightRow[]).reduce(
       (result, row) => {
         addSummaryValue(result, row);
         return result;
@@ -418,8 +423,17 @@ export async function GET(request: Request) {
       },
     );
 
+    const records = ((data ?? []) as unknown as FreightRow[])
+      .map(normalizeFreightRow)
+      .sort((left, right) => {
+        const leftTime = left.created_at ? Date.parse(left.created_at) : 0;
+        const rightTime = right.created_at ? Date.parse(right.created_at) : 0;
+
+        return rightTime - leftTime;
+      });
+
     return NextResponse.json({
-      data: ((data ?? []) as FreightRow[]).map(normalizeFreightRow),
+      data: records,
       total: count ?? 0,
       summary: normalizeSummary(summary),
     });
@@ -481,26 +495,37 @@ export async function PATCH(request: Request) {
       throw new Error("已支付状态不可更改");
     }
 
-    const { data, error } = await adminClient
-      .from("freight_records")
-      .update({
-        freight_unit_price: freightUnitPrice,
-        volume,
-        extra_fee: extraFee,
-        total_fee: totalFee,
-        freight_paid_status: freightPaidStatus,
-      })
-      .eq("id", id)
-      .select(
-        "id, shipment_record_id, freight_unit_price, volume, extra_fee, total_fee, bill_amount, freight_paid_status, created_at, updated_at, shipment:shipment_records(shipment_no, tracking_no, logistics_provider, product_name, box_count, total_qty)",
-      )
-      .single();
+    const updatePayload = {
+      freight_unit_price: freightUnitPrice,
+      volume,
+      extra_fee: extraFee,
+      total_fee: totalFee,
+      freight_paid_status: freightPaidStatus,
+    };
+    const updateFreight = (selectFields: string) =>
+      adminClient
+        .from("freight_records")
+        .update(updatePayload)
+        .eq("id", id)
+        .select(selectFields)
+        .single();
+    let { data, error } = await updateFreight(
+      FREIGHT_PATCH_SELECT_WITH_EXTRA_FEE_REMARK,
+    );
+
+    if (isMissingExtraFeeRemarkError(error)) {
+      const fallbackResult = await updateFreight(FREIGHT_PATCH_SELECT);
+      data = fallbackResult.data;
+      error = fallbackResult.error;
+    }
 
     if (error) {
       throw error;
     }
 
-    return NextResponse.json({ data: normalizeFreightRow(data as FreightRow) });
+    return NextResponse.json({
+      data: normalizeFreightRow(data as unknown as FreightRow),
+    });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "运费信息修改失败，请稍后重试";

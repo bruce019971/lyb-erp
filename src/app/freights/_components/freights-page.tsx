@@ -25,6 +25,7 @@ import {
   fetchRishenghuiFreightUnitPrice,
   fetchRishenghuiFreightVolume,
   fetchSaleasyFreightBill,
+  fetchSaleasyFreightExtraFee,
   fetchSaleasyFreightVolume,
   fetchTongtuFreightBill,
   fetchTongtuFreightVolume,
@@ -37,6 +38,29 @@ import FreightsTable from "./freights-table";
 dayjs.locale("zh-cn");
 
 type PendingRishenghuiAction = (accessToken: string) => void | Promise<void>;
+type FreightVolumeBoxRow = FreightVolumeBox & {
+  _rowKey: string;
+};
+
+function createFreightVolumeBoxRows(params: {
+  boxes: FreightVolumeBox[];
+  providerName: string;
+  shipmentNo: string;
+}) {
+  return params.boxes.map((box, index) => ({
+    ...box,
+    _rowKey: [
+      params.providerName,
+      params.shipmentNo,
+      box.packno ?? "",
+      box.length ?? "",
+      box.width ?? "",
+      box.height ?? "",
+      box.yjf_weit ?? "",
+      index,
+    ].join("-"),
+  }));
+}
 
 export default function FreightsPage() {
   const [mounted, setMounted] = useState(false);
@@ -49,6 +73,9 @@ export default function FreightsPage() {
   const [fetchingVolumeId, setFetchingVolumeId] = useState<string | null>(null);
   const [fetchingBillId, setFetchingBillId] = useState<string | null>(null);
   const [fetchingUnitPriceId, setFetchingUnitPriceId] = useState<string | null>(
+    null,
+  );
+  const [fetchingExtraFeeId, setFetchingExtraFeeId] = useState<string | null>(
     null,
   );
   const [editingPaidStatusId, setEditingPaidStatusId] = useState<string | null>(
@@ -65,7 +92,7 @@ export default function FreightsPage() {
     trackingNo: string;
     volume: number | null;
     matchedCount: number;
-    boxes: FreightVolumeBox[];
+    boxes: FreightVolumeBoxRow[];
   }>({
     open: false,
     providerName: "",
@@ -479,6 +506,81 @@ export default function FreightsPage() {
     void fetchAndSaveUnitPrice(record);
   }
 
+  function showExtraFeeSavedMessage(totalFee?: number | null) {
+    messageApi.success(
+      typeof totalFee === "number" && Number.isFinite(totalFee)
+        ? `额外费用已获取，总费用已更新为 ${totalFee}`
+        : "额外费用已获取",
+    );
+  }
+
+  async function fetchAndSaveExtraFee(
+    record: FreightRecord,
+    options?: { overwrite?: boolean },
+  ) {
+    try {
+      setFetchingExtraFeeId(record.id);
+      const result = await fetchSaleasyFreightExtraFee({
+        freightId: record.id,
+        overwrite: options?.overwrite,
+      });
+
+      if (
+        result.requiresOverwrite &&
+        typeof result.currentExtraFee === "number" &&
+        Number.isFinite(result.currentExtraFee)
+      ) {
+        modalApi.confirm({
+          title: "是否覆盖额外费用？",
+          content: `赛易额外费用为 ${result.extraFee}，当前额外费用为 ${result.currentExtraFee}，是否覆盖？`,
+          okText: "覆盖",
+          cancelText: "取消",
+          centered: true,
+          onOk: () =>
+            fetchAndSaveExtraFee(record, {
+              overwrite: true,
+            }),
+        });
+        return;
+      }
+
+      if (!result.updated) {
+        messageApi.success("额外费用已确认，无需更新");
+        return;
+      }
+
+      showExtraFeeSavedMessage(result.totalFee);
+      tableActionRef.current?.reload();
+    } catch (error) {
+      const description =
+        error instanceof Error ? error.message : "赛易额外费用获取失败";
+      messageApi.error(`额外费用获取失败：${description}`);
+    } finally {
+      setFetchingExtraFeeId(null);
+    }
+  }
+
+  function handleFetchExtraFee(record: FreightRecord) {
+    const providerName = record.logistics_provider?.trim();
+
+    if (hasBillAmount(record)) {
+      messageApi.warning("账单金额已存在，不能获取额外费用");
+      return;
+    }
+
+    if (providerName !== "赛易") {
+      messageApi.warning("当前仅赛易货件支持获取额外费用");
+      return;
+    }
+
+    if (!record.shipment_no?.trim()) {
+      messageApi.warning("当前货件缺少货件号");
+      return;
+    }
+
+    void fetchAndSaveExtraFee(record);
+  }
+
   async function handleChangePaidStatus(record: FreightRecord, value: string) {
     const nextValue = value.trim() === "是" ? "是" : "否";
 
@@ -563,7 +665,11 @@ export default function FreightsPage() {
           trackingNo: record.tracking_no?.trim() || "",
           volume: result.volume,
           matchedCount: result.matchedCount,
-          boxes: result.boxes ?? [],
+          boxes: createFreightVolumeBoxRows({
+            boxes: result.boxes ?? [],
+            providerName: "日升辉",
+            shipmentNo: record.shipment_no?.trim() || "",
+          }),
         });
       } else if (providerName === "通途") {
         const result = await fetchTongtuFreightVolume({
@@ -578,7 +684,11 @@ export default function FreightsPage() {
           trackingNo: record.tracking_no?.trim() || "",
           volume: result.volume,
           matchedCount: result.matchedCount,
-          boxes: result.boxes ?? [],
+          boxes: createFreightVolumeBoxRows({
+            boxes: result.boxes ?? [],
+            providerName: "通途",
+            shipmentNo: record.shipment_no?.trim() || "",
+          }),
         });
       } else {
         const result = await fetchSaleasyFreightVolume({
@@ -593,7 +703,11 @@ export default function FreightsPage() {
           trackingNo: record.tracking_no?.trim() || "",
           volume: result.volume,
           matchedCount: result.matchedCount,
-          boxes: result.boxes ?? [],
+          boxes: createFreightVolumeBoxRows({
+            boxes: result.boxes ?? [],
+            providerName: "赛易",
+            shipmentNo: record.shipment_no?.trim() || "",
+          }),
         });
       }
     } catch (error) {
@@ -760,6 +874,7 @@ export default function FreightsPage() {
                 onFetchVolume={handleFetchVolume}
                 onFetchBill={handleFetchBill}
                 onFetchUnitPrice={handleFetchUnitPrice}
+                onFetchExtraFee={handleFetchExtraFee}
                 onCalculateFreight={handleCalculateFreight}
                 onStartPaidStatusEdit={(record) => {
                   if (!hasBillAmount(record)) {
@@ -778,6 +893,7 @@ export default function FreightsPage() {
                 isFetchingUnitPrice={(record) =>
                   fetchingUnitPriceId === record.id
                 }
+                isFetchingExtraFee={(record) => fetchingExtraFeeId === record.id}
                 isCalculatingFreight={(record) =>
                   calculatingFreightId === record.id
                 }
@@ -841,9 +957,9 @@ export default function FreightsPage() {
               {volumeDetail.volume ?? "-"}
             </div>
           </div>
-          <Table<FreightVolumeBox>
+          <Table<FreightVolumeBoxRow>
             size="small"
-            rowKey={(_, index) => `${volumeDetail.providerName}-${volumeDetail.shipmentNo}-${index}`}
+            rowKey="_rowKey"
             pagination={false}
             dataSource={volumeDetail.boxes}
             scroll={{ y: 360 }}

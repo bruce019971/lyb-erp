@@ -1,9 +1,11 @@
 import {
   CalculatorOutlined,
   CloudDownloadOutlined,
-  FileSearchOutlined,
-  EditOutlined,
   DollarOutlined,
+  EditOutlined,
+  FileSearchOutlined,
+  InfoCircleOutlined,
+  PlusCircleOutlined,
 } from "@ant-design/icons";
 import type { ProColumns } from "@ant-design/pro-components";
 import { Button, Select, Tag, Tooltip, Typography } from "antd";
@@ -31,6 +33,7 @@ export function getFreightColumns(
   onFetchVolume: (record: FreightRecord) => void,
   onFetchBill: (record: FreightRecord) => void,
   onFetchUnitPrice: (record: FreightRecord) => void,
+  onFetchExtraFee: (record: FreightRecord) => void,
   onCalculateFreight: (record: FreightRecord) => void,
   onStartPaidStatusEdit: (record: FreightRecord) => void,
   onCancelPaidStatusEdit: () => void,
@@ -38,6 +41,7 @@ export function getFreightColumns(
   isFetchingVolume: (record: FreightRecord) => boolean,
   isFetchingBill: (record: FreightRecord) => boolean,
   isFetchingUnitPrice: (record: FreightRecord) => boolean,
+  isFetchingExtraFee: (record: FreightRecord) => boolean,
   isCalculatingFreight: (record: FreightRecord) => boolean,
   isPaidStatusEditing: (record: FreightRecord) => boolean,
   isPaidStatusUpdating: (record: FreightRecord) => boolean,
@@ -62,6 +66,14 @@ export function getFreightColumns(
 
   function canFetchUnitPrice(record: FreightRecord) {
     return record.logistics_provider?.trim() === "日升辉";
+  }
+
+  function canFetchExtraFee(record: FreightRecord) {
+    return record.logistics_provider?.trim() === "赛易";
+  }
+
+  function hasNonZeroAmount(value?: number | null) {
+    return typeof value === "number" && Number.isFinite(value) && value !== 0;
   }
 
   const shipmentSelectOptions = Array.from(
@@ -227,6 +239,20 @@ export function getFreightColumns(
       valueType: "money",
       width: 120,
       search: false,
+      render: (dom, record) => {
+        const remark = record.extra_fee_remark?.trim();
+
+        if (!hasNonZeroAmount(record.extra_fee)) return dom;
+
+        return (
+          <span className="inline-flex items-center gap-1">
+            {dom}
+            <Tooltip title={remark || "暂无备注"}>
+              <InfoCircleOutlined className="cursor-help text-[#1677ff]" />
+            </Tooltip>
+          </span>
+        );
+      },
     },
     {
       title: "总费用",
@@ -311,7 +337,7 @@ export function getFreightColumns(
     {
       title: "操作",
       valueType: "option",
-      width: 196,
+      width: 224,
       fixed: "right",
       search: false,
       render: (_, record) => {
@@ -338,6 +364,17 @@ export function getFreightColumns(
                 icon={<DollarOutlined />}
                 loading={isFetchingUnitPrice(record)}
                 onClick={() => onFetchUnitPrice(record)}
+              />
+            </Tooltip>
+          ),
+          locked || !canFetchExtraFee(record) ? null : (
+            <Tooltip key="fetch-extra-fee" title="获取额外费用">
+              <Button
+                type="text"
+                size="small"
+                icon={<PlusCircleOutlined />}
+                loading={isFetchingExtraFee(record)}
+                onClick={() => onFetchExtraFee(record)}
               />
             </Tooltip>
           ),

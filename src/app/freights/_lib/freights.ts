@@ -8,6 +8,7 @@ export type FreightRecord = {
   freight_unit_price: number | null;
   volume: number | null;
   extra_fee: number | null;
+  extra_fee_remark: string | null;
   box_count: number | null;
   total_qty: number | null;
   total_fee: number | null;

@@ -57,10 +57,7 @@ function splitSearchTexts(value: unknown) {
 }
 
 export async function requestFreightRecords(params: FreightRequestParams) {
-  const searchParams = new URLSearchParams({
-    current: String(params.current ?? 1),
-    pageSize: String(params.pageSize ?? 40),
-  });
+  const searchParams = new URLSearchParams();
 
   splitSearchTexts(params.shipment_no).forEach((value) => {
     searchParams.append("shipment_no", value);
@@ -355,6 +352,47 @@ export async function fetchSaleasyFreightBill(values: { freightId: string }) {
     totalFee: payload.totalFee,
     isConsistent: payload.isConsistent ?? false,
     matchedCount: payload.matchedCount ?? 0,
+  };
+}
+
+export async function fetchSaleasyFreightExtraFee(values: {
+  freightId: string;
+  overwrite?: boolean;
+}) {
+  const response = await fetch("/api/freights/saleasy-extra-fee", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(values),
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        extraFee?: number;
+        extraFeeRemark?: string;
+        currentExtraFee?: number | null;
+        totalFee?: number | null;
+        transportPlanId?: string;
+        matchedCount?: number;
+        requiresOverwrite?: boolean;
+        updated?: boolean;
+        error?: string;
+      }
+    | null;
+
+  if (!response.ok || typeof payload?.extraFee !== "number") {
+    throw new Error(payload?.error || "赛易额外费用获取失败");
+  }
+
+  return {
+    extraFee: payload.extraFee,
+    extraFeeRemark: payload.extraFeeRemark ?? "",
+    currentExtraFee: payload.currentExtraFee ?? null,
+    totalFee: payload.totalFee ?? null,
+    transportPlanId: payload.transportPlanId ?? "",
+    matchedCount: payload.matchedCount ?? 0,
+    requiresOverwrite: payload.requiresOverwrite ?? false,
+    updated: payload.updated ?? false,
   };
 }
 

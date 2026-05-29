@@ -2,7 +2,7 @@
 
 import type { ActionType } from "@ant-design/pro-components";
 import { ProTable } from "@ant-design/pro-components";
-import { Spin, Table } from "antd";
+import { Table } from "antd";
 import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -20,6 +20,7 @@ type FreightsTableProps = {
   onFetchVolume: (record: FreightRecord) => void;
   onFetchBill: (record: FreightRecord) => void;
   onFetchUnitPrice: (record: FreightRecord) => void;
+  onFetchExtraFee: (record: FreightRecord) => void;
   onCalculateFreight: (record: FreightRecord) => void;
   onStartPaidStatusEdit: (record: FreightRecord) => void;
   onCancelPaidStatusEdit: () => void;
@@ -27,12 +28,12 @@ type FreightsTableProps = {
   isFetchingVolume: (record: FreightRecord) => boolean;
   isFetchingBill: (record: FreightRecord) => boolean;
   isFetchingUnitPrice: (record: FreightRecord) => boolean;
+  isFetchingExtraFee: (record: FreightRecord) => boolean;
   isCalculatingFreight: (record: FreightRecord) => boolean;
   isPaidStatusEditing: (record: FreightRecord) => boolean;
   isPaidStatusUpdating: (record: FreightRecord) => boolean;
 };
 
-const PAGE_SIZE = 40;
 const FREIGHT_SUMMARY_COLUMN_KEYS = [
   "shipment_no",
   "product_name",
@@ -49,20 +50,6 @@ const FREIGHT_SUMMARY_COLUMN_KEYS = [
 
 function hasBillAmount(value?: number | null) {
   return typeof value === "number" && Number.isFinite(value);
-}
-
-function mergeFreightsById(current: FreightRecord[], incoming: FreightRecord[]) {
-  const merged = new Map<string, FreightRecord>();
-
-  current.forEach((item) => {
-    merged.set(item.id, item);
-  });
-
-  incoming.forEach((item) => {
-    merged.set(item.id, item);
-  });
-
-  return Array.from(merged.values());
 }
 
 function formatSummaryMoney(value?: number | null) {
@@ -89,6 +76,7 @@ export default function FreightsTable({
   onFetchVolume,
   onFetchBill,
   onFetchUnitPrice,
+  onFetchExtraFee,
   onCalculateFreight,
   onStartPaidStatusEdit,
   onCancelPaidStatusEdit,
@@ -96,6 +84,7 @@ export default function FreightsTable({
   isFetchingVolume,
   isFetchingBill,
   isFetchingUnitPrice,
+  isFetchingExtraFee,
   isCalculatingFreight,
   isPaidStatusEditing,
   isPaidStatusUpdating,
@@ -107,6 +96,7 @@ export default function FreightsTable({
         onFetchVolume,
         onFetchBill,
         onFetchUnitPrice,
+        onFetchExtraFee,
         onCalculateFreight,
         onStartPaidStatusEdit,
         onCancelPaidStatusEdit,
@@ -114,6 +104,7 @@ export default function FreightsTable({
         isFetchingVolume,
         isFetchingBill,
         isFetchingUnitPrice,
+        isFetchingExtraFee,
         isCalculatingFreight,
         isPaidStatusEditing,
         isPaidStatusUpdating,
@@ -124,6 +115,7 @@ export default function FreightsTable({
       isCalculatingFreight,
       isFetchingVolume,
       isFetchingBill,
+      isFetchingExtraFee,
       isFetchingUnitPrice,
       logisticsOptions,
       onCalculateFreight,
@@ -131,6 +123,7 @@ export default function FreightsTable({
       onChangePaidStatus,
       onEdit,
       onFetchBill,
+      onFetchExtraFee,
       onFetchUnitPrice,
       onFetchVolume,
       onStartPaidStatusEdit,
@@ -140,72 +133,30 @@ export default function FreightsTable({
     ],
   );
   const searchParamsRef = useRef<Record<string, unknown>>({});
-  const loadingRef = useRef(true);
-  const loadingMoreRef = useRef(false);
-  const hasMoreRef = useRef(true);
-  const currentPageRef = useRef(1);
   const [dataSource, setDataSource] = useState<FreightRecord[]>([]);
   const [summary, setSummary] = useState<FreightSummary | null>(null);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
 
-  const loadPage = useCallback(
-    async (
-      page: number,
-      params: Record<string, unknown>,
-      options?: { append?: boolean },
-    ) => {
-      const append = options?.append ?? false;
-
-      if (append) {
-        loadingMoreRef.current = true;
-        setLoadingMore(true);
-      } else {
-        loadingRef.current = true;
-        setLoading(true);
-      }
+  const loadRecords = useCallback(
+    async (params: Record<string, unknown>) => {
+      setLoading(true);
 
       try {
-        const result = await requestFreightRecords({
-          ...params,
-          current: page,
-          pageSize: PAGE_SIZE,
-        });
+        const result = await requestFreightRecords(params);
 
         const nextData = result.data ?? [];
-        setDataSource((current) =>
-          append ? mergeFreightsById(current, nextData) : nextData,
-        );
+        setDataSource(nextData);
         setSummary(result.summary ?? null);
-        currentPageRef.current = page;
-        hasMoreRef.current = nextData.length >= PAGE_SIZE;
       } finally {
-        loadingRef.current = false;
-        loadingMoreRef.current = false;
         setLoading(false);
-        setLoadingMore(false);
       }
     },
     [],
   );
 
   const reloadFirstPage = useCallback(async () => {
-    await loadPage(1, searchParamsRef.current, { append: false });
-  }, [loadPage]);
-
-  const loadNextPage = useCallback(async () => {
-    if (
-      loadingRef.current ||
-      loadingMoreRef.current ||
-      !hasMoreRef.current
-    ) {
-      return;
-    }
-
-    await loadPage(currentPageRef.current + 1, searchParamsRef.current, {
-      append: true,
-    });
-  }, [loadPage]);
+    await loadRecords(searchParamsRef.current);
+  }, [loadRecords]);
 
   useEffect(() => {
     void reloadFirstPage();
@@ -220,14 +171,14 @@ export default function FreightsTable({
       },
       reloadAndRest: () => {
         searchParamsRef.current = {};
-        void loadPage(1, {}, { append: false });
+        void loadRecords({});
       },
     } as ActionType;
 
     return () => {
       actionRef.current = undefined;
     };
-  }, [actionRef, loadPage, reloadFirstPage]);
+  }, [actionRef, loadRecords, reloadFirstPage]);
 
   return (
     <ProTable<FreightRecord>
@@ -253,22 +204,13 @@ export default function FreightsTable({
         setting: true,
       }}
       scroll={{ x: 1800, y: "calc(100vh - 360px)" }}
-      onScroll={(event) => {
-        const target = event.currentTarget;
-        if (
-          target.scrollTop + target.clientHeight >=
-          target.scrollHeight - 80
-        ) {
-          void loadNextPage();
-        }
-      }}
       onSubmit={(values) => {
         searchParamsRef.current = values;
-        void loadPage(1, values, { append: false });
+        void loadRecords(values);
       }}
       onReset={() => {
         searchParamsRef.current = {};
-        void loadPage(1, {}, { append: false });
+        void loadRecords({});
       }}
       pagination={false}
       dateFormatter="string"
@@ -303,16 +245,6 @@ export default function FreightsTable({
             <Table.Summary.Cell index={FREIGHT_SUMMARY_COLUMN_KEYS.length} />
           </Table.Summary.Row>
         </Table.Summary>
-      )}
-      tableRender={(_, dom) => (
-        <div className="relative">
-          {dom}
-          {loadingMore ? (
-            <div className="flex justify-center py-3 text-slate-400">
-              <Spin size="small" />
-            </div>
-          ) : null}
-        </div>
       )}
     />
   );
