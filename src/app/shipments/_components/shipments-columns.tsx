@@ -51,6 +51,8 @@ function renderShipmentSearchTagsInput() {
       allowClear
       open={false}
       tokenSeparators={[" ", "\n", "\t", ",", "，"]}
+      maxTagCount="responsive"
+      maxTagTextLength={18}
       placeholder="可用回车、空格或逗号分隔"
       className="w-full"
     />
