@@ -16,6 +16,10 @@ import type { ShipmentOption } from "../../shipments/_lib/shipments";
 
 const TOKEN_SEPARATORS = [" ", "\n", "\r", "\t", ",", "，"];
 
+function formatFreightDate(value?: string | null) {
+  return value ? value.slice(0, 10) : "";
+}
+
 function PaymentTag({ value }: { value?: string | null }) {
   if (value === "是") {
     return <Tag className="border-[#b7eb8f] bg-[#f6ffed] text-[#389e0d]">是</Tag>;
@@ -128,6 +132,8 @@ export function getFreightColumns(
         showSearch: true,
         optionFilterProp: "label",
         tokenSeparators: TOKEN_SEPARATORS,
+        maxTagCount: "responsive",
+        maxTagTextLength: 18,
         placeholder: "可粘贴多个货件号",
         options: shipmentSelectOptions,
       },
@@ -142,6 +148,8 @@ export function getFreightColumns(
         showSearch: true,
         optionFilterProp: "label",
         tokenSeparators: TOKEN_SEPARATORS,
+        maxTagCount: "responsive",
+        maxTagTextLength: 18,
         placeholder: "可粘贴多个运单编号",
         options: trackingSelectOptions,
       },
@@ -182,6 +190,8 @@ export function getFreightColumns(
         showSearch: true,
         optionFilterProp: "label",
         tokenSeparators: TOKEN_SEPARATORS,
+        maxTagCount: "responsive",
+        maxTagTextLength: 18,
         placeholder: "可粘贴多个产品名称",
         options: productSelectOptions,
       },
@@ -333,6 +343,14 @@ export function getFreightColumns(
         是: { text: "是" },
         否: { text: "否" },
       },
+    },
+    {
+      title: "到仓时间",
+      dataIndex: "overseas_warehouse_arrived_at",
+      width: 100,
+      search: false,
+      render: (_, record) =>
+        formatFreightDate(record.overseas_warehouse_arrived_at),
     },
     {
       title: "操作",

@@ -232,6 +232,21 @@ td.shipment-delivery-done-cell:hover,
   font-weight: 600;
 }
 
+.freights-table-with-sticky-summary
+  .ant-pro-table-search
+  .ant-select-multiple
+  .ant-select-selector {
+  max-height: 40px;
+  overflow-y: hidden;
+}
+
+.freights-table-with-sticky-summary
+  .ant-pro-table-search
+  .ant-select-multiple
+  .ant-select-selection-overflow {
+  flex-wrap: nowrap;
+}
+
 .role-status-group .ant-radio-button-wrapper {
   min-width: 148px;
   height: 56px;

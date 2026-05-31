@@ -46,6 +46,7 @@ const FREIGHT_SUMMARY_COLUMN_KEYS = [
   "unit_fee",
   "box_count",
   "freight_paid_status",
+  "overseas_warehouse_arrived_at",
 ] as const;
 
 function hasBillAmount(value?: number | null) {
@@ -203,7 +204,7 @@ export default function FreightsTable({
         reload: false,
         setting: true,
       }}
-      scroll={{ x: 1800, y: "calc(100vh - 360px)" }}
+      scroll={{ x: 1900, y: "calc(100vh - 360px)" }}
       onSubmit={(values) => {
         searchParamsRef.current = values;
         void loadRecords(values);

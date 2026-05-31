@@ -5,6 +5,7 @@ export type FreightRecord = {
   tracking_no: string | null;
   logistics_provider: string | null;
   product_name: string | null;
+  overseas_warehouse_arrived_at: string | null;
   freight_unit_price: number | null;
   volume: number | null;
   extra_fee: number | null;

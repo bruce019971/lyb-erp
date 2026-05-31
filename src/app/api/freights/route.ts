@@ -31,19 +31,21 @@ type FreightRow = {
   updated_at: string | null;
   shipment:
     | {
-      shipment_no: string | null;
-      tracking_no: string | null;
-      logistics_provider: string | null;
-      product_name: string | null;
-      box_count: number | null;
-      total_qty: number | null;
-      created_at: string | null;
+        shipment_no: string | null;
+        tracking_no: string | null;
+        logistics_provider: string | null;
+        product_name: string | null;
+        overseas_warehouse_arrived_at: string | null;
+        box_count: number | null;
+        total_qty: number | null;
+        created_at: string | null;
     }
     | Array<{
         shipment_no: string | null;
         tracking_no: string | null;
         logistics_provider: string | null;
         product_name: string | null;
+        overseas_warehouse_arrived_at: string | null;
         box_count: number | null;
         total_qty: number | null;
         created_at: string | null;
@@ -58,13 +60,13 @@ type FreightSummary = {
 };
 
 const FREIGHT_SELECT_WITH_EXTRA_FEE_REMARK =
-  "id, shipment_record_id, freight_unit_price, volume, extra_fee, extra_fee_remark, total_fee, bill_amount, freight_paid_status, created_at, updated_at, shipment:shipment_records!inner(shipment_no, tracking_no, logistics_provider, product_name, box_count, total_qty, created_at)";
+  "id, shipment_record_id, freight_unit_price, volume, extra_fee, extra_fee_remark, total_fee, bill_amount, freight_paid_status, created_at, updated_at, shipment:shipment_records!inner(shipment_no, tracking_no, logistics_provider, product_name, overseas_warehouse_arrived_at, box_count, total_qty, created_at)";
 const FREIGHT_SELECT =
-  "id, shipment_record_id, freight_unit_price, volume, extra_fee, total_fee, bill_amount, freight_paid_status, created_at, updated_at, shipment:shipment_records!inner(shipment_no, tracking_no, logistics_provider, product_name, box_count, total_qty, created_at)";
+  "id, shipment_record_id, freight_unit_price, volume, extra_fee, total_fee, bill_amount, freight_paid_status, created_at, updated_at, shipment:shipment_records!inner(shipment_no, tracking_no, logistics_provider, product_name, overseas_warehouse_arrived_at, box_count, total_qty, created_at)";
 const FREIGHT_PATCH_SELECT_WITH_EXTRA_FEE_REMARK =
-  "id, shipment_record_id, freight_unit_price, volume, extra_fee, extra_fee_remark, total_fee, bill_amount, freight_paid_status, created_at, updated_at, shipment:shipment_records(shipment_no, tracking_no, logistics_provider, product_name, box_count, total_qty, created_at)";
+  "id, shipment_record_id, freight_unit_price, volume, extra_fee, extra_fee_remark, total_fee, bill_amount, freight_paid_status, created_at, updated_at, shipment:shipment_records(shipment_no, tracking_no, logistics_provider, product_name, overseas_warehouse_arrived_at, box_count, total_qty, created_at)";
 const FREIGHT_PATCH_SELECT =
-  "id, shipment_record_id, freight_unit_price, volume, extra_fee, total_fee, bill_amount, freight_paid_status, created_at, updated_at, shipment:shipment_records(shipment_no, tracking_no, logistics_provider, product_name, box_count, total_qty, created_at)";
+  "id, shipment_record_id, freight_unit_price, volume, extra_fee, total_fee, bill_amount, freight_paid_status, created_at, updated_at, shipment:shipment_records(shipment_no, tracking_no, logistics_provider, product_name, overseas_warehouse_arrived_at, box_count, total_qty, created_at)";
 
 function calculateFreightUnitFee(
   totalFee?: number | null,
@@ -93,6 +95,8 @@ function normalizeFreightRow(row: FreightRow) {
     tracking_no: shipment?.tracking_no ?? null,
     logistics_provider: shipment?.logistics_provider ?? null,
     product_name: shipment?.product_name ?? null,
+    overseas_warehouse_arrived_at:
+      shipment?.overseas_warehouse_arrived_at ?? null,
     freight_unit_price: row.freight_unit_price,
     volume: row.volume,
     extra_fee: row.extra_fee,
