@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 
 import { APP_SESSION_COOKIE, verifySessionToken } from "@/lib/app-session";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { syncShipmentWarehouseArrivedAt } from "../_shipment-warehouse-sync";
 import { RISHENGHUI_TPL_LIST_VALUES_URL } from "../../logistics/rishenghui/_lib";
 
 export const runtime = "nodejs";
@@ -620,6 +621,13 @@ export async function POST(request: Request) {
     if (updateError) {
       throw updateError;
     }
+
+    await syncShipmentWarehouseArrivedAt({
+      adminClient,
+      shipmentRecordId: track.shipment_record_id,
+      previousWarehouseArrivedTime: track.warehouse_arrived_time,
+      nextWarehouseArrivedTime: updateValues.warehouse_arrived_time,
+    });
 
     return NextResponse.json({
       data: updatedData,

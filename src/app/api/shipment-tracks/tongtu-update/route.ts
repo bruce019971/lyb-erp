@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 
 import { APP_SESSION_COOKIE, verifySessionToken } from "@/lib/app-session";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { syncShipmentWarehouseArrivedAt } from "../_shipment-warehouse-sync";
 import {
   createTongtuId,
   fetchTongtuWaybillDetail,
@@ -37,6 +38,7 @@ type TongtuTrackUpdateRequestBody = {
 type ShipmentTrackRow = {
   id: string;
   shipment_record_id: string;
+  warehouse_arrived_time: string | null;
   shipment:
     | {
         id: string;
@@ -812,7 +814,7 @@ export async function POST(request: Request) {
     const { data: trackData, error: trackError } = await adminClient
       .from("shipment_tracks")
       .select(
-        "id, shipment_record_id, shipment:shipment_records!inner(id, shipment_no, tracking_no, logistics_provider, status)",
+        "id, shipment_record_id, warehouse_arrived_time, shipment:shipment_records!inner(id, shipment_no, tracking_no, logistics_provider, status)",
       )
       .eq("id", trackId)
       .eq("shipment.status", "有效")
@@ -904,6 +906,9 @@ export async function POST(request: Request) {
         time: event.time || null,
         content: event.content,
       })),
+      sailing_time: parsedTrack.sailingTime,
+      warehouse_arrived_time:
+        parsedTrack.warehouseArrivedTime || track.warehouse_arrived_time,
       track_updated_at: parsedTrack.trackUpdatedAt,
     };
     const { data: updatedData, error: updateError } = await adminClient
@@ -918,6 +923,13 @@ export async function POST(request: Request) {
     if (updateError) {
       throw updateError;
     }
+
+    await syncShipmentWarehouseArrivedAt({
+      adminClient,
+      shipmentRecordId: track.shipment_record_id,
+      previousWarehouseArrivedTime: track.warehouse_arrived_time,
+      nextWarehouseArrivedTime: updateValues.warehouse_arrived_time,
+    });
 
     return NextResponse.json({
       data: updatedData,

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 
 import { APP_SESSION_COOKIE, verifySessionToken } from "@/lib/app-session";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { syncShipmentWarehouseArrivedAt } from "../_shipment-warehouse-sync";
 
 export const runtime = "nodejs";
 
@@ -22,6 +23,11 @@ type OperatorRow = {
 type ShipmentTrackUpdateBody = {
   sailing_time?: unknown;
   warehouse_arrived_time?: unknown;
+};
+
+type ShipmentTrackBeforeUpdateRow = {
+  shipment_record_id: string;
+  warehouse_arrived_time: string | null;
 };
 
 async function verifyShipmentTrackOperator() {
@@ -112,6 +118,29 @@ export async function PATCH(
     }
 
     const adminClient = createSupabaseAdminClient();
+    const shouldSyncWarehouseArrivedTime =
+      "warehouse_arrived_time" in updateValues &&
+      Boolean(updateValues.warehouse_arrived_time);
+    let previousWarehouseArrivedTime: string | null = null;
+    let shipmentRecordId: string | null = null;
+
+    if (shouldSyncWarehouseArrivedTime) {
+      const { data: existingTrackData, error: existingTrackError } =
+        await adminClient
+          .from("shipment_tracks")
+          .select("shipment_record_id, warehouse_arrived_time")
+          .eq("id", trackId)
+          .single();
+
+      if (existingTrackError) {
+        throw existingTrackError;
+      }
+
+      const existingTrack = existingTrackData as ShipmentTrackBeforeUpdateRow;
+      previousWarehouseArrivedTime = existingTrack.warehouse_arrived_time;
+      shipmentRecordId = existingTrack.shipment_record_id;
+    }
+
     const { data, error } = await adminClient
       .from("shipment_tracks")
       .update(updateValues)
@@ -123,6 +152,15 @@ export async function PATCH(
 
     if (error) {
       throw error;
+    }
+
+    if (shouldSyncWarehouseArrivedTime) {
+      await syncShipmentWarehouseArrivedAt({
+        adminClient,
+        shipmentRecordId,
+        previousWarehouseArrivedTime,
+        nextWarehouseArrivedTime: updateValues.warehouse_arrived_time,
+      });
     }
 
     return NextResponse.json({ data });
