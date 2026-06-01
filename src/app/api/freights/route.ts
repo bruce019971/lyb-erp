@@ -413,9 +413,41 @@ function recordContainsText(value: unknown, keyword: string): boolean {
   return Object.values(record).some((item) => recordContainsText(item, keyword));
 }
 
-function findSaleasyTransportPlanRow(rows: unknown[], shipmentNo: string) {
-  const normalizedShipmentNo = normalizeComparableText(shipmentNo);
+function findSaleasyTransportPlanRow(
+  rows: unknown[],
+  params: {
+    shipmentNo: string;
+    trackingNo: string;
+  },
+) {
+  const normalizedShipmentNo = normalizeComparableText(params.shipmentNo);
+  const normalizedTrackingNo = normalizeComparableText(params.trackingNo);
+  const matchedByTrackingNo = rows.find((row) => {
+    if (!normalizedTrackingNo) return false;
+
+    const trackingField = getRecursiveFieldText(row, [
+      "planno",
+      "transportplanno",
+      "transportplannumber",
+      "trackingno",
+      "trackingnumber",
+      "waybillno",
+      "waybillnumber",
+      "logisticsno",
+      "logisticsnumber",
+    ]);
+
+    return (
+      trackingField &&
+      normalizeComparableText(trackingField) === normalizedTrackingNo
+    );
+  });
+
+  if (matchedByTrackingNo) return matchedByTrackingNo;
+
   const matchedByField = rows.find((row) => {
+    if (!normalizedShipmentNo) return false;
+
     const shipmentField = getRecursiveFieldText(row, [
       "mcdshipmentid",
       "planname",
@@ -430,7 +462,19 @@ function findSaleasyTransportPlanRow(rows: unknown[], shipmentNo: string) {
 
   if (matchedByField) return matchedByField;
 
-  return rows.find((row) => recordContainsText(row, shipmentNo));
+  if (params.trackingNo) {
+    const matchedByTrackingText = rows.find((row) =>
+      recordContainsText(row, params.trackingNo),
+    );
+
+    if (matchedByTrackingText) return matchedByTrackingText;
+  }
+
+  if (params.shipmentNo) {
+    return rows.find((row) => recordContainsText(row, params.shipmentNo));
+  }
+
+  return undefined;
 }
 
 function buildSaleasyTransportPlanListPayload(shipmentNo: string) {
@@ -463,10 +507,14 @@ function buildSaleasyTransportPlanListPayload(shipmentNo: string) {
 async function appendSaleasyPlanInfo(
   records: ReturnType<typeof normalizeFreightRow>[],
   adminClient: ReturnType<typeof createSupabaseAdminClient>,
+  enabled: boolean,
 ) {
+  if (!enabled) return records;
+
   const saleasyRecords = records.filter(
     (record) =>
-      record.logistics_provider?.trim() === "赛易" && record.shipment_no?.trim(),
+      record.logistics_provider?.trim() === "赛易" &&
+      (record.shipment_no?.trim() || record.tracking_no?.trim()),
   );
 
   if (!saleasyRecords.length) return records;
@@ -504,20 +552,26 @@ async function appendSaleasyPlanInfo(
     await Promise.all(
       saleasyRecords.map(async (record) => {
         const shipmentNo = record.shipment_no?.trim();
-        if (!shipmentNo) return;
+        const trackingNo = record.tracking_no?.trim();
+        const searchKey = shipmentNo || trackingNo;
+
+        if (!searchKey) return;
 
         try {
           const result = await requestSaleasyJson<unknown>({
             baseUrl,
             path: SALEASY_TRANSPORT_PLAN_LIST_PATH,
             token,
-            body: buildSaleasyTransportPlanListPayload(shipmentNo),
+            body: buildSaleasyTransportPlanListPayload(searchKey),
             logScope: SALEASY_LOG_SCOPE,
             label: "transport plan list response",
             fallbackError: "赛易运输计划列表查询失败",
           });
           const rows = extractRows(result);
-          const row = findSaleasyTransportPlanRow(rows, shipmentNo);
+          const row = findSaleasyTransportPlanRow(rows, {
+            shipmentNo: shipmentNo || "",
+            trackingNo: trackingNo || "",
+          });
 
           if (row) {
             planInfoByFreightId.set(record.id, getSaleasyPlanInfo(row));
@@ -525,7 +579,7 @@ async function appendSaleasyPlanInfo(
         } catch (error) {
           console.error("[freights-saleasy-plan-status] plan lookup failed", {
             freightId: record.id,
-            shipmentNo,
+            searchKey,
             error,
           });
         }
@@ -736,6 +790,7 @@ export async function GET(request: Request) {
     const recordsWithSaleasyPlanInfo = await appendSaleasyPlanInfo(
       records,
       adminClient,
+      shipmentNoValues.length > 0 || trackingNoValues.length > 0,
     );
 
     return NextResponse.json({
