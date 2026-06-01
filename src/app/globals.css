@@ -218,6 +218,18 @@ td.shipment-delivery-done-cell:hover,
   font-weight: 600;
 }
 
+.freight-saleasy-plan-status-80-row > td {
+  color: #cf1322 !important;
+}
+
+.freight-saleasy-plan-status-80-row .ant-typography,
+.freight-saleasy-plan-status-80-row .ant-btn,
+.freight-saleasy-plan-status-80-row .ant-btn-link,
+.freight-saleasy-plan-status-80-row .ant-select-selection-item,
+.freight-saleasy-plan-status-80-row a {
+  color: #cf1322 !important;
+}
+
 .shipments-table-with-sticky-summary .shipment-summary-row > td,
 .freights-table-with-sticky-summary .freight-summary-row > td {
   background: #f8fafc !important;

@@ -21,6 +21,7 @@ type FreightsTableProps = {
   onFetchBill: (record: FreightRecord) => void;
   onFetchUnitPrice: (record: FreightRecord) => void;
   onFetchExtraFee: (record: FreightRecord) => void;
+  onConfirmSaleasyTotalFee: (record: FreightRecord) => void;
   onCalculateFreight: (record: FreightRecord) => void;
   onStartPaidStatusEdit: (record: FreightRecord) => void;
   onCancelPaidStatusEdit: () => void;
@@ -29,6 +30,7 @@ type FreightsTableProps = {
   isFetchingBill: (record: FreightRecord) => boolean;
   isFetchingUnitPrice: (record: FreightRecord) => boolean;
   isFetchingExtraFee: (record: FreightRecord) => boolean;
+  isConfirmingSaleasyTotalFee: (record: FreightRecord) => boolean;
   isCalculatingFreight: (record: FreightRecord) => boolean;
   isPaidStatusEditing: (record: FreightRecord) => boolean;
   isPaidStatusUpdating: (record: FreightRecord) => boolean;
@@ -78,6 +80,7 @@ export default function FreightsTable({
   onFetchBill,
   onFetchUnitPrice,
   onFetchExtraFee,
+  onConfirmSaleasyTotalFee,
   onCalculateFreight,
   onStartPaidStatusEdit,
   onCancelPaidStatusEdit,
@@ -86,6 +89,7 @@ export default function FreightsTable({
   isFetchingBill,
   isFetchingUnitPrice,
   isFetchingExtraFee,
+  isConfirmingSaleasyTotalFee,
   isCalculatingFreight,
   isPaidStatusEditing,
   isPaidStatusUpdating,
@@ -98,6 +102,7 @@ export default function FreightsTable({
         onFetchBill,
         onFetchUnitPrice,
         onFetchExtraFee,
+        onConfirmSaleasyTotalFee,
         onCalculateFreight,
         onStartPaidStatusEdit,
         onCancelPaidStatusEdit,
@@ -106,6 +111,7 @@ export default function FreightsTable({
         isFetchingBill,
         isFetchingUnitPrice,
         isFetchingExtraFee,
+        isConfirmingSaleasyTotalFee,
         isCalculatingFreight,
         isPaidStatusEditing,
         isPaidStatusUpdating,
@@ -118,6 +124,7 @@ export default function FreightsTable({
       isFetchingBill,
       isFetchingExtraFee,
       isFetchingUnitPrice,
+      isConfirmingSaleasyTotalFee,
       logisticsOptions,
       onCalculateFreight,
       onCancelPaidStatusEdit,
@@ -125,6 +132,7 @@ export default function FreightsTable({
       onEdit,
       onFetchBill,
       onFetchExtraFee,
+      onConfirmSaleasyTotalFee,
       onFetchUnitPrice,
       onFetchVolume,
       onStartPaidStatusEdit,
@@ -190,6 +198,12 @@ export default function FreightsTable({
       dataSource={dataSource}
       loading={loading}
       rowClassName={(record) => {
+        if (
+          record.logistics_provider?.trim() === "赛易" &&
+          record.saleasy_plan_status === 80
+        ) {
+          return "freight-saleasy-plan-status-80-row";
+        }
         if (record.freight_paid_status === "是") return "freight-paid-row";
         if (hasBillAmount(record.bill_amount)) return "freight-unpaid-billed-row";
         return "";

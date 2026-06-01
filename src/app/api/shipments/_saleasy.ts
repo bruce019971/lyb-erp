@@ -33,6 +33,8 @@ export const SALEASY_SET_TRANSPORT_INFO_PATH =
   "/api/WarehouseService/TransportPlan/SetTransportInfo";
 export const SALEASY_CONFIRM_TRANSPORT_PLAN_PATH =
   "/api/WarehouseService/TransportPlan/Confirm";
+export const SALEASY_CONFIRM_PAY_ON_ARRIVAL_PATH =
+  "/api/WarehouseService/TransportPlan/ConfirmPayOnArrival";
 export const SALEASY_TRANSPORT_PLAN_LIST_PATH =
   "/api/WarehouseService/TransportPlan/GetPlanPaged";
 export const SALEASY_TRANSPORT_PLAN_QUERY_TRACKS_PATH =

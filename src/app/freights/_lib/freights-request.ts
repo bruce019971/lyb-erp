@@ -396,6 +396,34 @@ export async function fetchSaleasyFreightExtraFee(values: {
   };
 }
 
+export async function confirmSaleasyFreightTotalFee(values: {
+  freightId: string;
+}) {
+  const response = await fetch("/api/freights/saleasy-confirm-total-fee", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(values),
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        transportPlanId?: string;
+        payFee?: number;
+        error?: string;
+      }
+    | null;
+
+  if (!response.ok || !payload?.transportPlanId) {
+    throw new Error(payload?.error || "赛易总费用确认失败");
+  }
+
+  return {
+    transportPlanId: payload.transportPlanId,
+    payFee: payload.payFee ?? null,
+  };
+}
+
 export async function fetchTongtuFreightBill(values: { freightId: string }) {
   const response = await fetch("/api/freights/tongtu-bill", {
     method: "POST",

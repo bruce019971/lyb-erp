@@ -29,6 +29,7 @@ import {
   fetchSaleasyFreightVolume,
   fetchTongtuFreightBill,
   fetchTongtuFreightVolume,
+  confirmSaleasyFreightTotalFee,
   type FreightVolumeBox,
   updateFreightRecord,
 } from "../_lib/freights-request";
@@ -78,6 +79,8 @@ export default function FreightsPage() {
   const [fetchingExtraFeeId, setFetchingExtraFeeId] = useState<string | null>(
     null,
   );
+  const [confirmingSaleasyTotalFeeId, setConfirmingSaleasyTotalFeeId] =
+    useState<string | null>(null);
   const [editingPaidStatusId, setEditingPaidStatusId] = useState<string | null>(
     null,
   );
@@ -581,6 +584,42 @@ export default function FreightsPage() {
     void fetchAndSaveExtraFee(record);
   }
 
+  async function confirmSaleasyTotalFee(record: FreightRecord) {
+    try {
+      setConfirmingSaleasyTotalFeeId(record.id);
+      await confirmSaleasyFreightTotalFee({ freightId: record.id });
+      messageApi.success("赛易总费用已确认");
+      tableActionRef.current?.reload();
+    } catch (error) {
+      const description =
+        error instanceof Error ? error.message : "赛易总费用确认失败";
+      messageApi.error(`确认总费用失败：${description}`);
+    } finally {
+      setConfirmingSaleasyTotalFeeId(null);
+    }
+  }
+
+  function handleConfirmSaleasyTotalFee(record: FreightRecord) {
+    if (record.logistics_provider?.trim() !== "赛易") {
+      messageApi.warning("当前货件不是赛易物流商，不能确认总费用");
+      return;
+    }
+
+    if (record.saleasy_plan_status !== 80) {
+      messageApi.warning("当前赛易运输计划状态不是待确认总费用");
+      return;
+    }
+
+    modalApi.confirm({
+      title: "确认总费用？",
+      content: `将按赛易返回总费用 ${record.saleasy_total_amount ?? "-"} 确认，是否继续？`,
+      okText: "确认总费用",
+      cancelText: "取消",
+      centered: true,
+      onOk: () => confirmSaleasyTotalFee(record),
+    });
+  }
+
   async function handleChangePaidStatus(record: FreightRecord, value: string) {
     const nextValue = value.trim() === "是" ? "是" : "否";
 
@@ -875,6 +914,7 @@ export default function FreightsPage() {
                 onFetchBill={handleFetchBill}
                 onFetchUnitPrice={handleFetchUnitPrice}
                 onFetchExtraFee={handleFetchExtraFee}
+                onConfirmSaleasyTotalFee={handleConfirmSaleasyTotalFee}
                 onCalculateFreight={handleCalculateFreight}
                 onStartPaidStatusEdit={(record) => {
                   if (!hasBillAmount(record)) {
@@ -894,6 +934,9 @@ export default function FreightsPage() {
                   fetchingUnitPriceId === record.id
                 }
                 isFetchingExtraFee={(record) => fetchingExtraFeeId === record.id}
+                isConfirmingSaleasyTotalFee={(record) =>
+                  confirmingSaleasyTotalFeeId === record.id
+                }
                 isCalculatingFreight={(record) =>
                   calculatingFreightId === record.id
                 }

@@ -3,6 +3,17 @@ import { NextResponse } from "next/server";
 
 import { APP_SESSION_COOKIE, verifySessionToken } from "@/lib/app-session";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import {
+  SALEASY_TRANSPORT_PLAN_LIST_PATH,
+  extractRows,
+  getOptionalNumber,
+  getOptionalText,
+  getRequiredText,
+  loginSaleasy,
+  normalizeSaleasyBaseUrl,
+  requestSaleasyJson,
+  toRecord,
+} from "../shipments/_saleasy";
 
 type OperatorRow = {
   id: string;
@@ -59,6 +70,18 @@ type FreightSummary = {
   bill_amount: number;
 };
 
+type LogisticsProviderRow = {
+  system_url: string | null;
+  username: string | null;
+  password: string | null;
+};
+
+type SaleasyPlanInfo = {
+  planStatus: number | null;
+  transportPlanId: string | null;
+  totalAmount: number | null;
+};
+
 const FREIGHT_SELECT_WITH_EXTRA_FEE_REMARK =
   "id, shipment_record_id, freight_unit_price, volume, extra_fee, extra_fee_remark, total_fee, bill_amount, freight_paid_status, created_at, updated_at, shipment:shipment_records!inner(shipment_no, tracking_no, logistics_provider, product_name, overseas_warehouse_arrived_at, box_count, total_qty, created_at)";
 const FREIGHT_SELECT =
@@ -67,6 +90,7 @@ const FREIGHT_PATCH_SELECT_WITH_EXTRA_FEE_REMARK =
   "id, shipment_record_id, freight_unit_price, volume, extra_fee, extra_fee_remark, total_fee, bill_amount, freight_paid_status, created_at, updated_at, shipment:shipment_records(shipment_no, tracking_no, logistics_provider, product_name, overseas_warehouse_arrived_at, box_count, total_qty, created_at)";
 const FREIGHT_PATCH_SELECT =
   "id, shipment_record_id, freight_unit_price, volume, extra_fee, total_fee, bill_amount, freight_paid_status, created_at, updated_at, shipment:shipment_records(shipment_no, tracking_no, logistics_provider, product_name, overseas_warehouse_arrived_at, box_count, total_qty, created_at)";
+const SALEASY_LOG_SCOPE = "freights-saleasy-plan-status";
 
 function calculateFreightUnitFee(
   totalFee?: number | null,
@@ -107,6 +131,9 @@ function normalizeFreightRow(row: FreightRow) {
     bill_amount: row.bill_amount,
     unit_fee: calculateFreightUnitFee(row.total_fee, shipment?.total_qty ?? null),
     freight_paid_status: row.freight_paid_status ?? "否",
+    saleasy_plan_status: null,
+    saleasy_transport_plan_id: null,
+    saleasy_total_amount: null,
     created_at: shipment?.created_at ?? row.created_at,
     updated_at: row.updated_at,
   };
@@ -248,6 +275,277 @@ async function verifyOperator() {
 
   if (!permissions.includes("freights")) {
     throw new Error("当前账号没有运费管理权限");
+  }
+}
+
+function normalizeSaleasyFieldKey(key: string) {
+  return key.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+}
+
+function getRecursiveFieldText(
+  value: unknown,
+  normalizedFieldNames: readonly string[],
+  depth = 0,
+): string {
+  if (!value || depth > 4) return "";
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const result = getRecursiveFieldText(
+        item,
+        normalizedFieldNames,
+        depth + 1,
+      );
+      if (result) return result;
+    }
+
+    return "";
+  }
+
+  const record = toRecord(value);
+  if (!record) return "";
+
+  for (const [key, item] of Object.entries(record)) {
+    if (!normalizedFieldNames.includes(normalizeSaleasyFieldKey(key))) {
+      continue;
+    }
+
+    const text = getOptionalText(item);
+    if (text) return text;
+  }
+
+  for (const item of Object.values(record)) {
+    const result = getRecursiveFieldText(
+      item,
+      normalizedFieldNames,
+      depth + 1,
+    );
+    if (result) return result;
+  }
+
+  return "";
+}
+
+function getRecursiveFieldNumber(
+  value: unknown,
+  normalizedFieldNames: readonly string[],
+  depth = 0,
+): number | undefined {
+  if (!value || depth > 4) return undefined;
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const result = getRecursiveFieldNumber(
+        item,
+        normalizedFieldNames,
+        depth + 1,
+      );
+      if (result !== undefined) return result;
+    }
+
+    return undefined;
+  }
+
+  const record = toRecord(value);
+  if (!record) return undefined;
+
+  for (const [key, item] of Object.entries(record)) {
+    if (!normalizedFieldNames.includes(normalizeSaleasyFieldKey(key))) {
+      continue;
+    }
+
+    const numberValue = getOptionalNumber(item);
+    if (numberValue !== undefined) return numberValue;
+  }
+
+  for (const item of Object.values(record)) {
+    const result = getRecursiveFieldNumber(
+      item,
+      normalizedFieldNames,
+      depth + 1,
+    );
+    if (result !== undefined) return result;
+  }
+
+  return undefined;
+}
+
+function getSaleasyPlanInfo(row: unknown): SaleasyPlanInfo {
+  const planStatus =
+    getRecursiveFieldNumber(row, [
+      "planstatus",
+      "status",
+      "transportplanstatus",
+    ]) ??
+    null;
+  const totalAmount =
+    getRecursiveFieldNumber(row, ["totalamount", "payfee", "totalfee"]) ??
+    null;
+  const transportPlanId =
+    getRecursiveFieldText(row, ["id", "planid", "transportplanid"]) || null;
+
+  return {
+    planStatus,
+    transportPlanId,
+    totalAmount,
+  };
+}
+
+function normalizeComparableText(value: string) {
+  return value.replace(/\s+/g, "").toLowerCase();
+}
+
+function recordContainsText(value: unknown, keyword: string): boolean {
+  const normalizedKeyword = normalizeComparableText(keyword);
+  if (!normalizedKeyword) return false;
+
+  if (typeof value === "string" || typeof value === "number") {
+    return normalizeComparableText(String(value)).includes(normalizedKeyword);
+  }
+
+  if (Array.isArray(value)) {
+    return value.some((item) => recordContainsText(item, keyword));
+  }
+
+  const record = toRecord(value);
+  if (!record) return false;
+
+  return Object.values(record).some((item) => recordContainsText(item, keyword));
+}
+
+function findSaleasyTransportPlanRow(rows: unknown[], shipmentNo: string) {
+  const normalizedShipmentNo = normalizeComparableText(shipmentNo);
+  const matchedByField = rows.find((row) => {
+    const shipmentField = getRecursiveFieldText(row, [
+      "mcdshipmentid",
+      "planname",
+      "shipmentno",
+    ]);
+
+    return (
+      shipmentField &&
+      normalizeComparableText(shipmentField) === normalizedShipmentNo
+    );
+  });
+
+  if (matchedByField) return matchedByField;
+
+  return rows.find((row) => recordContainsText(row, shipmentNo));
+}
+
+function buildSaleasyTransportPlanListPayload(shipmentNo: string) {
+  return {
+    operateType: 1,
+    queryTimeType: 1,
+    searchKey: shipmentNo,
+    destinationType: 4,
+    logisticsScheme: null,
+    isInsure: null,
+    fromCountryId: null,
+    fromCityId: null,
+    toCountryId: null,
+    toCityId: null,
+    startCreationTime: null,
+    endCreationTime: null,
+    planStatuses: [],
+    isRefund: null,
+    isLoseMoney: null,
+    inOrOutWarehouseNo: null,
+    currentIndex: 1,
+    skipCount: 0,
+    isNeedTransportBoxesTotal: true,
+    maxResultCount: 10,
+    sorting: null,
+    planNoes: [],
+  };
+}
+
+async function appendSaleasyPlanInfo(
+  records: ReturnType<typeof normalizeFreightRow>[],
+  adminClient: ReturnType<typeof createSupabaseAdminClient>,
+) {
+  const saleasyRecords = records.filter(
+    (record) =>
+      record.logistics_provider?.trim() === "赛易" && record.shipment_no?.trim(),
+  );
+
+  if (!saleasyRecords.length) return records;
+
+  const { data: logisticsData, error: logisticsError } = await adminClient
+    .from("logistics_providers")
+    .select("system_url, username, password")
+    .eq("provider_name", "赛易")
+    .single();
+
+  if (logisticsError) {
+    console.error("[freights-saleasy-plan-status] logistics lookup failed", logisticsError);
+    return records;
+  }
+
+  try {
+    const logisticsProvider = logisticsData as LogisticsProviderRow;
+    const baseUrl = normalizeSaleasyBaseUrl(logisticsProvider.system_url);
+    const username = getRequiredText(
+      logisticsProvider.username,
+      "赛易物流商用户名未配置",
+    );
+    const password = getRequiredText(
+      logisticsProvider.password,
+      "赛易物流商密码未配置",
+    );
+    const token = await loginSaleasy({
+      baseUrl,
+      username,
+      password,
+      logScope: SALEASY_LOG_SCOPE,
+    });
+    const planInfoByFreightId = new Map<string, SaleasyPlanInfo>();
+
+    await Promise.all(
+      saleasyRecords.map(async (record) => {
+        const shipmentNo = record.shipment_no?.trim();
+        if (!shipmentNo) return;
+
+        try {
+          const result = await requestSaleasyJson<unknown>({
+            baseUrl,
+            path: SALEASY_TRANSPORT_PLAN_LIST_PATH,
+            token,
+            body: buildSaleasyTransportPlanListPayload(shipmentNo),
+            logScope: SALEASY_LOG_SCOPE,
+            label: "transport plan list response",
+            fallbackError: "赛易运输计划列表查询失败",
+          });
+          const rows = extractRows(result);
+          const row = findSaleasyTransportPlanRow(rows, shipmentNo);
+
+          if (row) {
+            planInfoByFreightId.set(record.id, getSaleasyPlanInfo(row));
+          }
+        } catch (error) {
+          console.error("[freights-saleasy-plan-status] plan lookup failed", {
+            freightId: record.id,
+            shipmentNo,
+            error,
+          });
+        }
+      }),
+    );
+
+    return records.map((record) => {
+      const planInfo = planInfoByFreightId.get(record.id);
+      if (!planInfo) return record;
+
+      return {
+        ...record,
+        saleasy_plan_status: planInfo.planStatus,
+        saleasy_transport_plan_id: planInfo.transportPlanId,
+        saleasy_total_amount: planInfo.totalAmount,
+      };
+    });
+  } catch (error) {
+    console.error("[freights-saleasy-plan-status] lookup skipped", error);
+    return records;
   }
 }
 
@@ -435,9 +733,13 @@ export async function GET(request: Request) {
 
         return rightTime - leftTime;
       });
+    const recordsWithSaleasyPlanInfo = await appendSaleasyPlanInfo(
+      records,
+      adminClient,
+    );
 
     return NextResponse.json({
-      data: records,
+      data: recordsWithSaleasyPlanInfo,
       total: count ?? 0,
       summary: normalizeSummary(summary),
     });

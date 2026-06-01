@@ -6,6 +6,7 @@ import {
   FileSearchOutlined,
   InfoCircleOutlined,
   PlusCircleOutlined,
+  SafetyCertificateOutlined,
 } from "@ant-design/icons";
 import type { ProColumns } from "@ant-design/pro-components";
 import { Button, Select, Tag, Tooltip, Typography } from "antd";
@@ -38,6 +39,7 @@ export function getFreightColumns(
   onFetchBill: (record: FreightRecord) => void,
   onFetchUnitPrice: (record: FreightRecord) => void,
   onFetchExtraFee: (record: FreightRecord) => void,
+  onConfirmSaleasyTotalFee: (record: FreightRecord) => void,
   onCalculateFreight: (record: FreightRecord) => void,
   onStartPaidStatusEdit: (record: FreightRecord) => void,
   onCancelPaidStatusEdit: () => void,
@@ -46,6 +48,7 @@ export function getFreightColumns(
   isFetchingBill: (record: FreightRecord) => boolean,
   isFetchingUnitPrice: (record: FreightRecord) => boolean,
   isFetchingExtraFee: (record: FreightRecord) => boolean,
+  isConfirmingSaleasyTotalFee: (record: FreightRecord) => boolean,
   isCalculatingFreight: (record: FreightRecord) => boolean,
   isPaidStatusEditing: (record: FreightRecord) => boolean,
   isPaidStatusUpdating: (record: FreightRecord) => boolean,
@@ -74,6 +77,13 @@ export function getFreightColumns(
 
   function canFetchExtraFee(record: FreightRecord) {
     return record.logistics_provider?.trim() === "赛易";
+  }
+
+  function canConfirmSaleasyTotalFee(record: FreightRecord) {
+    return (
+      record.logistics_provider?.trim() === "赛易" &&
+      record.saleasy_plan_status === 80
+    );
   }
 
   function hasNonZeroAmount(value?: number | null) {
@@ -355,7 +365,7 @@ export function getFreightColumns(
     {
       title: "操作",
       valueType: "option",
-      width: 224,
+      width: 260,
       fixed: "right",
       search: false,
       render: (_, record) => {
@@ -396,6 +406,17 @@ export function getFreightColumns(
               />
             </Tooltip>
           ),
+          canConfirmSaleasyTotalFee(record) ? (
+            <Tooltip key="confirm-saleasy-total-fee" title="确认总费用">
+              <Button
+                type="text"
+                size="small"
+                icon={<SafetyCertificateOutlined />}
+                loading={isConfirmingSaleasyTotalFee(record)}
+                onClick={() => onConfirmSaleasyTotalFee(record)}
+              />
+            </Tooltip>
+          ) : null,
           locked ? null : (
             <Tooltip
               key="fetch-volume"

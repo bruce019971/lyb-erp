@@ -16,6 +16,9 @@ export type FreightRecord = {
   bill_amount: number | null;
   unit_fee: number | null;
   freight_paid_status: string | null;
+  saleasy_plan_status: number | null;
+  saleasy_transport_plan_id: string | null;
+  saleasy_total_amount: number | null;
   created_at: string | null;
   updated_at: string | null;
 };
