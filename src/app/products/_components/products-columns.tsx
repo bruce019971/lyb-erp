@@ -296,15 +296,17 @@ export function getProductColumns(
               onClick={() => onEdit(record)}
             />
           </Tooltip>
-          <Tooltip title="删除">
-            <Button
-              type="text"
-              size="small"
-              danger
-              icon={<DeleteOutlined />}
-              onClick={() => onDelete(record)}
-            />
-          </Tooltip>
+          {record.has_shipment_records ? null : (
+            <Tooltip title="删除">
+              <Button
+                type="text"
+                size="small"
+                danger
+                icon={<DeleteOutlined />}
+                onClick={() => onDelete(record)}
+              />
+            </Tooltip>
+          )}
         </div>
       ),
     },

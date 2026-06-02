@@ -22,6 +22,43 @@ type StoreLinkRecord = {
   seller_address: string | null;
 };
 
+async function attachShipmentReferenceFlags(records: ProductRecord[]) {
+  const productNames = Array.from(
+    new Set(
+      records
+        .map((record) => record.product_name?.trim())
+        .filter((productName): productName is string => Boolean(productName)),
+    ),
+  );
+
+  if (!productNames.length) {
+    return records.map((record) => ({
+      ...record,
+      has_shipment_records: false,
+    }));
+  }
+
+  const { data } = await supabase
+    .from("shipment_records")
+    .select("product_name")
+    .in("product_name", productNames)
+    .eq("status", "有效");
+
+  const referencedProductNames = new Set(
+    ((data ?? []) as Array<{ product_name: string | null }>)
+      .map((row) => row.product_name?.trim())
+      .filter((productName): productName is string => Boolean(productName)),
+  );
+
+  return records.map((record) => ({
+    ...record,
+    has_shipment_records: Boolean(
+      record.product_name?.trim() &&
+        referencedProductNames.has(record.product_name.trim()),
+    ),
+  }));
+}
+
 async function attachStoreUrls(records: ProductRecord[]) {
   const storeNames = Array.from(
     new Set(
@@ -111,7 +148,9 @@ export async function requestProductRecords(
     };
   }
 
-  const records = (data ?? []) as ProductRecord[];
+  const records = await attachShipmentReferenceFlags(
+    (data ?? []) as ProductRecord[],
+  );
 
   return {
     data: await attachStoreUrls(records),
@@ -389,7 +428,11 @@ export async function checkProductReferences(productName: string) {
 }
 
 export async function deleteProductRecord(id: string, productName: string) {
-  void productName;
+  const references = await checkProductReferences(productName);
+
+  if (references.length > 0) {
+    throw new Error("该产品已有货件关联，不允许删除");
+  }
 
   const { data, error } = await supabase
     .from("products")

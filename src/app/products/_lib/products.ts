@@ -8,6 +8,7 @@ export type ProductRecord = {
   store_name: string | null;
   store_code?: string | null;
   store_url?: string | null;
+  has_shipment_records?: boolean;
   product_image_url: string | null;
   product_label_url: string | null;
   product_parameters: string | null;
