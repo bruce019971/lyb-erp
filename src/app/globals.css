@@ -230,6 +230,13 @@ td.shipment-delivery-done-cell:hover,
   color: #cf1322 !important;
 }
 
+.freight-bill-amount-mismatch,
+.freight-paid-row .freight-bill-amount-mismatch,
+.freight-unpaid-billed-row .freight-bill-amount-mismatch {
+  color: #cf1322 !important;
+  font-weight: 600;
+}
+
 .shipments-table-with-sticky-summary .shipment-summary-row > td,
 .freights-table-with-sticky-summary .freight-summary-row > td {
   background: #f8fafc !important;

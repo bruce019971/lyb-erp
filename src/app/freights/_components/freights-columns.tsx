@@ -90,6 +90,22 @@ export function getFreightColumns(
     return typeof value === "number" && Number.isFinite(value) && value !== 0;
   }
 
+  function hasBillAmountMismatch(record: FreightRecord) {
+    if (
+      typeof record.bill_amount !== "number" ||
+      !Number.isFinite(record.bill_amount) ||
+      typeof record.total_fee !== "number" ||
+      !Number.isFinite(record.total_fee)
+    ) {
+      return false;
+    }
+
+    return (
+      Math.round(record.bill_amount * 100) !==
+      Math.round(record.total_fee * 100)
+    );
+  }
+
   const shipmentSelectOptions = Array.from(
     new Set(
       shipmentOptions
@@ -287,6 +303,12 @@ export function getFreightColumns(
       valueType: "money",
       width: 140,
       search: false,
+      render: (dom, record) =>
+        hasBillAmountMismatch(record) ? (
+          <span className="freight-bill-amount-mismatch">{dom}</span>
+        ) : (
+          dom
+        ),
     },
     {
       title: "单个运费",
