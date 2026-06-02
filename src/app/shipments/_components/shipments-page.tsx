@@ -3,7 +3,15 @@
 import type { ActionType } from "@ant-design/pro-components";
 import { ExclamationCircleFilled } from "@ant-design/icons";
 import type { FormInstance } from "antd";
-import { App as AntApp, ConfigProvider, Modal, Progress, Steps, message } from "antd";
+import {
+  App as AntApp,
+  Button,
+  ConfigProvider,
+  Modal,
+  Progress,
+  Steps,
+  message,
+} from "antd";
 import zhCN from "antd/locale/zh_CN";
 import dayjs from "dayjs";
 import "dayjs/locale/zh-cn";
@@ -94,13 +102,13 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
     useState<string | null>(null);
   const [submittingLogisticsOrderId, setSubmittingLogisticsOrderId] =
     useState<string | null>(null);
+  const [logisticsOrderProgressOpen, setLogisticsOrderProgressOpen] =
+    useState(false);
   const [logisticsOrderProgress, setLogisticsOrderProgress] = useState<{
-    open: boolean;
     providerName: string;
     shipmentNo: string;
     step: LogisticsOrderStepKey;
   }>({
-    open: false,
     providerName: "",
     shipmentNo: "",
     step: "invoice",
@@ -538,8 +546,8 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
 
     try {
       setSubmittingLogisticsOrderId(record.id);
+      setLogisticsOrderProgressOpen(true);
       setLogisticsOrderProgress({
-        open: true,
         providerName,
         shipmentNo,
         step: isSaleasy ? "order" : "invoice",
@@ -552,7 +560,6 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
         tableActionRef.current?.reload();
 
         setLogisticsOrderProgress({
-          open: true,
           providerName,
           shipmentNo,
           step: "boxMark",
@@ -576,7 +583,6 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
       tableActionRef.current?.reload();
 
       setLogisticsOrderProgress({
-        open: true,
         providerName,
         shipmentNo,
         step: "order",
@@ -594,7 +600,6 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
       tableActionRef.current?.reload();
 
       setLogisticsOrderProgress({
-        open: true,
         providerName,
         shipmentNo,
         step: "boxMark",
@@ -633,10 +638,7 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
         );
       }
     } finally {
-      setLogisticsOrderProgress((previous) => ({
-        ...previous,
-        open: false,
-      }));
+      setLogisticsOrderProgressOpen(false);
       setSubmittingLogisticsOrderId(null);
     }
   }
@@ -766,10 +768,15 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
         </main>
         {mounted ? (
           <Modal
-            open={logisticsOrderProgress.open}
+            open={logisticsOrderProgressOpen}
             title={`${logisticsOrderProgress.providerName || "物流"}物流下单`}
-            footer={null}
-            closable={false}
+            footer={
+              <Button onClick={() => setLogisticsOrderProgressOpen(false)}>
+                关闭，后台运行
+              </Button>
+            }
+            closable
+            onCancel={() => setLogisticsOrderProgressOpen(false)}
             maskClosable={false}
             centered
           >
