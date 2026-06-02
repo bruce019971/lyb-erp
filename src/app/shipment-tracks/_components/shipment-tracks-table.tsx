@@ -1,10 +1,11 @@
 "use client";
 
 import type { ActionType } from "@ant-design/pro-components";
+import { SyncOutlined } from "@ant-design/icons";
 import { ProTable } from "@ant-design/pro-components";
-import { App, Empty, Modal, Steps, Typography } from "antd";
+import { App, Button, Empty, Modal, Space, Steps, Typography } from "antd";
 import type { Dayjs } from "dayjs";
-import type { MutableRefObject } from "react";
+import type { Key, MutableRefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { ShipmentOption } from "../../shipments/_lib/shipments";
@@ -36,6 +37,7 @@ type ShipmentTracksTableProps = {
 
 const SHIPMENT_TRACKS_TABLE_SCROLL_Y_COLLAPSED = "calc(100vh - 240px)";
 const SHIPMENT_TRACKS_TABLE_SCROLL_Y_EXPANDED = "calc(100vh - 380px)";
+const TRACK_UPDATE_PROVIDER_NAMES = ["赛易", "日升辉", "通途", "唐朝"];
 type ShipmentTrackDateField = "sailing_time" | "warehouse_arrived_time";
 
 function buildSelectOptions(values: Array<string | null | undefined>) {
@@ -48,6 +50,15 @@ function buildSelectOptions(values: Array<string | null | undefined>) {
   ).map((value) => ({ label: value, value }));
 }
 
+function canUpdateShipmentTrack(record: ShipmentTrackRecord) {
+  const providerName = record.logistics_provider?.trim();
+  return Boolean(
+    providerName &&
+      TRACK_UPDATE_PROVIDER_NAMES.includes(providerName) &&
+      !record.warehouse_arrived_time,
+  );
+}
+
 export default function ShipmentTracksTable({
   actionRef,
   onRequireRishenghuiToken,
@@ -57,6 +68,8 @@ export default function ShipmentTracksTable({
   const searchParamsRef = useRef<Record<string, unknown>>({});
   const [dataSource, setDataSource] = useState<ShipmentTrackRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [batchUpdating, setBatchUpdating] = useState(false);
+  const [selectedTrackIds, setSelectedTrackIds] = useState<Key[]>([]);
   const [updatingTrackIds, setUpdatingTrackIds] = useState<string[]>([]);
   const [updatingTrackDateKeys, setUpdatingTrackDateKeys] = useState<string[]>(
     [],
@@ -83,6 +96,29 @@ export default function ShipmentTracksTable({
     setTrackDetailsRecord(record);
   }, []);
 
+  const requestTrackUpdate = useCallback(async (
+    record: ShipmentTrackRecord,
+    token: string,
+  ) => {
+    const providerName = record.logistics_provider?.trim();
+    const result =
+      providerName === "日升辉"
+        ? await updateRishenghuiShipmentTrack({
+            trackId: record.id,
+            accessToken: token,
+          })
+        : providerName === "通途"
+          ? await updateTongtuShipmentTrack({ trackId: record.id })
+        : providerName === "唐朝"
+          ? await updateTangchaoShipmentTrack({
+              trackId: record.id,
+              authKey: await getRequiredTangchaoAuthKey(),
+            })
+        : await updateSaleasyShipmentTrack({ trackId: record.id });
+
+    return result.record;
+  }, []);
+
   const runUpdateTrack = useCallback(async (
     record: ShipmentTrackRecord,
     token: string,
@@ -92,25 +128,10 @@ export default function ShipmentTracksTable({
     );
 
     try {
-      const providerName = record.logistics_provider?.trim();
-      const result =
-        providerName === "日升辉"
-          ? await updateRishenghuiShipmentTrack({
-              trackId: record.id,
-              accessToken: token,
-            })
-          : providerName === "通途"
-            ? await updateTongtuShipmentTrack({ trackId: record.id })
-          : providerName === "唐朝"
-            ? await updateTangchaoShipmentTrack({
-                trackId: record.id,
-                authKey: await getRequiredTangchaoAuthKey(),
-              })
-          : await updateSaleasyShipmentTrack({ trackId: record.id });
-
+      const nextRecord = await requestTrackUpdate(record, token);
       setDataSource((current) =>
         current.map((item) =>
-          item.id === result.record.id ? result.record : item,
+          item.id === nextRecord.id ? nextRecord : item,
         ),
       );
       messageApi.success(`${record.shipment_no || "货件"}轨迹更新成功`);
@@ -130,12 +151,21 @@ export default function ShipmentTracksTable({
     } finally {
       setUpdatingTrackIds((current) => current.filter((id) => id !== record.id));
     }
-  }, [messageApi, onRequireRishenghuiToken]);
+  }, [messageApi, onRequireRishenghuiToken, requestTrackUpdate]);
 
   const handleUpdateTrack = useCallback(async (
     record: ShipmentTrackRecord,
     accessTokenOverride?: string,
   ) => {
+    if (!canUpdateShipmentTrack(record)) {
+      messageApi.warning(
+        record.warehouse_arrived_time
+          ? "已到仓货件禁止更新轨迹"
+          : "当前物流商不支持更新轨迹",
+      );
+      return;
+    }
+
     const providerName = record.logistics_provider?.trim();
     const token = accessTokenOverride?.trim() || rishenghuiAccessToken.trim();
 
@@ -147,7 +177,115 @@ export default function ShipmentTracksTable({
     }
 
     await runUpdateTrack(record, token);
-  }, [onRequireRishenghuiToken, rishenghuiAccessToken, runUpdateTrack]);
+  }, [
+    messageApi,
+    onRequireRishenghuiToken,
+    rishenghuiAccessToken,
+    runUpdateTrack,
+  ]);
+
+  const selectedTrackRecords = useMemo(() => {
+    const selectedIdSet = new Set(selectedTrackIds);
+    return dataSource.filter((item) => selectedIdSet.has(item.id));
+  }, [dataSource, selectedTrackIds]);
+
+  const handleBatchUpdateTracks = useCallback(async (
+    records: ShipmentTrackRecord[],
+    token: string,
+  ) => {
+    const updatableRecords = records.filter(canUpdateShipmentTrack);
+
+    setBatchUpdating(true);
+    setUpdatingTrackIds((current) =>
+      Array.from(new Set([...current, ...updatableRecords.map((item) => item.id)])),
+    );
+
+    const failures: Array<{ shipmentNo: string; error: string }> = [];
+    let successCount = 0;
+
+    try {
+      for (const record of updatableRecords) {
+        try {
+          const nextRecord = await requestTrackUpdate(record, token);
+          successCount += 1;
+          setDataSource((current) =>
+            current.map((item) =>
+              item.id === nextRecord.id ? nextRecord : item,
+            ),
+          );
+        } catch (error) {
+          failures.push({
+            shipmentNo: record.shipment_no || record.tracking_no || record.id,
+            error: error instanceof Error ? error.message : "轨迹更新失败",
+          });
+        }
+      }
+    } finally {
+      setUpdatingTrackIds((current) =>
+        current.filter(
+          (id) => !updatableRecords.some((record) => record.id === id),
+        ),
+      );
+      setBatchUpdating(false);
+      setSelectedTrackIds([]);
+    }
+
+    if (successCount > 0) {
+      messageApi.success(`轨迹批量更新完成：成功 ${successCount} 个`);
+    }
+
+    if (failures.length > 0) {
+      Modal.warning({
+        title: "部分货件轨迹更新失败",
+        content: (
+          <div className="max-h-72 overflow-auto">
+            {failures.map((item) => (
+              <div key={item.shipmentNo} className="mb-1">
+                {item.shipmentNo}：{item.error}
+              </div>
+            ))}
+          </div>
+        ),
+      });
+    }
+  }, [
+    messageApi,
+    requestTrackUpdate,
+  ]);
+
+  const handleBatchUpdateTracksClick = useCallback(() => {
+    const updatableRecords = selectedTrackRecords.filter(canUpdateShipmentTrack);
+
+    if (!selectedTrackRecords.length) {
+      messageApi.warning("请先选择需要更新轨迹的货件");
+      return;
+    }
+
+    if (!updatableRecords.length) {
+      messageApi.warning("已选择货件均已到仓或物流商不支持更新轨迹");
+      return;
+    }
+
+    const hasRishenghui = updatableRecords.some(
+      (item) => item.logistics_provider?.trim() === "日升辉",
+    );
+    const token = rishenghuiAccessToken.trim();
+
+    if (hasRishenghui && !token) {
+      onRequireRishenghuiToken(undefined, (accessToken) =>
+        handleBatchUpdateTracks(updatableRecords, accessToken),
+      );
+      return;
+    }
+
+    void handleBatchUpdateTracks(updatableRecords, token);
+  }, [
+    handleBatchUpdateTracks,
+    messageApi,
+    onRequireRishenghuiToken,
+    rishenghuiAccessToken,
+    selectedTrackRecords,
+  ]);
 
   const isUpdatingTrack = useCallback(
     (record: ShipmentTrackRecord) => updatingTrackIds.includes(record.id),
@@ -254,6 +392,7 @@ export default function ShipmentTracksTable({
         handleCancelTrackDateEdit,
         isTrackDateEditing,
         isUpdatingTrack,
+        canUpdateShipmentTrack,
         isTrackDateUpdating,
         productSelectOptions,
         logisticsProviderOptions,
@@ -281,6 +420,7 @@ export default function ShipmentTracksTable({
         const nextData = result.data ?? [];
 
         setDataSource(nextData);
+        setSelectedTrackIds([]);
       } finally {
         setLoading(false);
       }
@@ -322,6 +462,19 @@ export default function ShipmentTracksTable({
         columns={columns}
         dataSource={dataSource}
         loading={loading}
+        rowSelection={{
+          selectedRowKeys: selectedTrackIds,
+          preserveSelectedRowKeys: true,
+          onChange: (keys) => setSelectedTrackIds(keys),
+          getCheckboxProps: (record) => ({
+            disabled:
+              batchUpdating ||
+              isUpdatingTrack(record) ||
+              !canUpdateShipmentTrack(record),
+          }),
+        }}
+        tableAlertRender={false}
+        tableAlertOptionRender={false}
         search={{
           labelWidth: "auto",
           defaultCollapsed: true,
@@ -342,7 +495,22 @@ export default function ShipmentTracksTable({
           reload: false,
           setting: true,
         }}
-        toolBarRender={false}
+        toolBarRender={() => [
+          <Space key="batch-track-actions">
+            <Typography.Text type="secondary">
+              已选 {selectedTrackRecords.length} 个
+            </Typography.Text>
+            <Button
+              type="primary"
+              icon={<SyncOutlined />}
+              loading={batchUpdating}
+              disabled={!selectedTrackRecords.length}
+              onClick={handleBatchUpdateTracksClick}
+            >
+              批量更新轨迹
+            </Button>
+          </Space>,
+        ]}
         scroll={{
           x: 1270,
           y: searchCollapsed

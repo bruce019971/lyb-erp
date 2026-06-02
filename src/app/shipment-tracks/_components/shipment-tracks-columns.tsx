@@ -118,6 +118,7 @@ export function getShipmentTrackColumns(
     field: ShipmentTrackDateField,
   ) => boolean,
   isUpdatingTrack: (record: ShipmentTrackRecord) => boolean,
+  canUpdateTrack: (record: ShipmentTrackRecord) => boolean,
   isTrackDateUpdating: (
     record: ShipmentTrackRecord,
     field: ShipmentTrackDateField,
@@ -316,26 +317,26 @@ export function getShipmentTrackColumns(
       search: false,
       render: (_, record) => {
         const providerName = record.logistics_provider?.trim();
-        const canUpdateTrack =
+        const hasSupportedProvider =
           providerName === "赛易" ||
           providerName === "日升辉" ||
           providerName === "通途" ||
           providerName === "唐朝";
+        const canUpdate = canUpdateTrack(record);
+        const updateDisabledTitle = record.warehouse_arrived_time
+          ? "已到仓货件禁止更新轨迹"
+          : "当前仅支持赛易/日升辉/通途/唐朝货件更新轨迹";
 
         return [
           <Tooltip
             key="update-track"
-            title={
-              canUpdateTrack
-                ? "更新轨迹"
-                : "当前仅支持赛易/日升辉/通途/唐朝货件更新轨迹"
-            }
+            title={hasSupportedProvider && canUpdate ? "更新轨迹" : updateDisabledTitle}
           >
             <Button
               type="text"
               size="small"
               icon={<SyncOutlined />}
-              disabled={!canUpdateTrack}
+              disabled={!canUpdate}
               loading={isUpdatingTrack(record)}
               onClick={() => onUpdateTrack(record)}
             />

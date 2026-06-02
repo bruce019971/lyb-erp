@@ -59,6 +59,25 @@ async function verifyOperator() {
   }
 }
 
+async function ensureShipmentTrack(
+  adminClient: ReturnType<typeof createSupabaseAdminClient>,
+  shipmentRecordId: string,
+) {
+  const { error } = await adminClient.from("shipment_tracks").upsert(
+    {
+      shipment_record_id: shipmentRecordId,
+    },
+    {
+      onConflict: "shipment_record_id",
+      ignoreDuplicates: true,
+    },
+  );
+
+  if (error) {
+    throw error;
+  }
+}
+
 export async function POST(request: Request) {
   try {
     await verifyOperator();
@@ -85,6 +104,13 @@ export async function POST(request: Request) {
     if (freightError) {
       await adminClient.from("shipment_records").delete().eq("id", data.id);
       throw freightError;
+    }
+
+    try {
+      await ensureShipmentTrack(adminClient, data.id);
+    } catch (trackError) {
+      await adminClient.from("shipment_records").delete().eq("id", data.id);
+      throw trackError;
     }
 
     try {
