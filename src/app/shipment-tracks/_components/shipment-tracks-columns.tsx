@@ -171,6 +171,14 @@ export function getShipmentTrackColumns(
       render: (_, record) => record.product_name || "-",
     },
     {
+      title: "产品数",
+      dataIndex: "total_qty",
+      valueType: "digit",
+      width: 90,
+      search: false,
+      render: (_, record) => record.total_qty ?? "-",
+    },
+    {
       title: "运单编号",
       dataIndex: "tracking_no",
       hideInTable: true,

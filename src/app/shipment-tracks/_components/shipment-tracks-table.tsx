@@ -512,7 +512,7 @@ export default function ShipmentTracksTable({
           </Space>,
         ]}
         scroll={{
-          x: 1270,
+          x: 1360,
           y: searchCollapsed
             ? SHIPMENT_TRACKS_TABLE_SCROLL_Y_COLLAPSED
             : SHIPMENT_TRACKS_TABLE_SCROLL_Y_EXPANDED,
