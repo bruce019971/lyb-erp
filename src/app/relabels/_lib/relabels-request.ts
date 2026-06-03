@@ -212,6 +212,60 @@ function compactPayload<T extends Record<string, unknown>>(payload: T) {
   ) as Partial<T>;
 }
 
+async function syncOriginalShipmentAppointmentTime(record: RelabelRecord) {
+  const originalShipmentNo = record.original_shipment_no?.trim();
+  if (!originalShipmentNo) return;
+
+  const { error } = await supabase
+    .from("shipment_records")
+    .update({
+      appointment_time: normalizeTextValue(record.delivery_time),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("shipment_no", originalShipmentNo)
+    .eq("status", "有效");
+
+  if (error) {
+    throw error;
+  }
+}
+
+async function syncOriginalShipmentDeliveryStatus(record: RelabelRecord) {
+  const originalShipmentNo = record.original_shipment_no?.trim();
+  if (!originalShipmentNo) return;
+
+  const { error } = await supabase
+    .from("shipment_records")
+    .update({
+      delivery_status: normalizeTextValue(record.delivery_status) ?? "否",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("shipment_no", originalShipmentNo)
+    .eq("status", "有效");
+
+  if (error) {
+    throw error;
+  }
+}
+
+async function markOriginalShipmentAsRelabel(record: RelabelRecord) {
+  const originalShipmentNo = record.original_shipment_no?.trim();
+  if (!originalShipmentNo) return;
+
+  const { error } = await supabase
+    .from("shipment_records")
+    .update({
+      is_relabel: "是",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("shipment_no", originalShipmentNo)
+    .eq("status", "有效");
+
+  if (error) {
+    throw error;
+  }
+}
+
 export async function createRelabelRecord(values: RelabelCreateValues) {
   const payload = {
     original_shipment_no: values.original_shipment_no.trim(),
@@ -237,7 +291,11 @@ export async function createRelabelRecord(values: RelabelCreateValues) {
     throw error;
   }
 
-  return data as RelabelRecord;
+  const relabelRecord = data as RelabelRecord;
+  await markOriginalShipmentAsRelabel(relabelRecord);
+  await syncOriginalShipmentAppointmentTime(relabelRecord);
+
+  return relabelRecord;
 }
 
 export async function updateRelabelRecord(
@@ -275,7 +333,13 @@ export async function updateRelabelRecord(
     throw error;
   }
 
-  return data as RelabelRecord;
+  const relabelRecord = data as RelabelRecord;
+  await syncOriginalShipmentAppointmentTime(relabelRecord);
+  if (values.delivery_status !== undefined) {
+    await syncOriginalShipmentDeliveryStatus(relabelRecord);
+  }
+
+  return relabelRecord;
 }
 
 export async function markRelabelStatusAsYes(
@@ -293,7 +357,12 @@ export async function markRelabelStatusAsYes(
     throw error;
   }
 
-  return data as RelabelRecord;
+  const relabelRecord = data as RelabelRecord;
+  if (field === "delivery_status") {
+    await syncOriginalShipmentDeliveryStatus(relabelRecord);
+  }
+
+  return relabelRecord;
 }
 
 export async function deleteRelabelRecord(id: string) {
