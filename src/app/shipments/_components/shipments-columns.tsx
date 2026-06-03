@@ -59,6 +59,14 @@ function renderShipmentSearchTagsInput() {
   );
 }
 
+function renderNowrapShipmentDate(value?: string | null) {
+  return (
+    <Typography.Text className="block min-w-max whitespace-nowrap">
+      {formatShipmentDate(value)}
+    </Typography.Text>
+  );
+}
+
 export function getShipmentColumns(
   onEdit: (record: ShipmentRecord) => void,
   onDownloadCartonLabel: (record: ShipmentRecord) => void,
@@ -327,7 +335,7 @@ export function getShipmentColumns(
       width: 88,
       hideInSearch: true,
       render: (_, record) =>
-        formatShipmentDate(record.overseas_warehouse_arrived_at),
+        renderNowrapShipmentDate(record.overseas_warehouse_arrived_at),
     },
     {
       title: "送仓时间",
@@ -342,7 +350,10 @@ export function getShipmentColumns(
           return deliveryTimes.length > 0 ? (
             <div className="flex flex-col gap-1">
               {deliveryTimes.map((value) => (
-                <Typography.Text key={value} className="whitespace-nowrap">
+                <Typography.Text
+                  key={value}
+                  className="block min-w-max whitespace-nowrap"
+                >
                   {formatShipmentDate(value)}
                 </Typography.Text>
               ))}
@@ -352,7 +363,7 @@ export function getShipmentColumns(
           );
         }
 
-        return formatShipmentDate(record.appointment_time);
+        return renderNowrapShipmentDate(record.appointment_time);
       },
     },
     {
@@ -479,7 +490,7 @@ export function getShipmentColumns(
       valueType: "dateRange",
       width: 88,
       hideInSearch: true,
-      render: (_, record) => formatShipmentDate(record.created_at),
+      render: (_, record) => renderNowrapShipmentDate(record.created_at),
     },
     {
       title: "更新时间",
@@ -487,7 +498,7 @@ export function getShipmentColumns(
       valueType: "dateRange",
       width: 88,
       hideInSearch: true,
-      render: (_, record) => formatShipmentDate(record.updated_at),
+      render: (_, record) => renderNowrapShipmentDate(record.updated_at),
     },
     {
       title: "操作",
