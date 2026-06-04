@@ -35,8 +35,8 @@ type ShipmentTracksTableProps = {
   ) => void;
 };
 
-const SHIPMENT_TRACKS_TABLE_SCROLL_Y_COLLAPSED = "calc(100vh - 240px)";
-const SHIPMENT_TRACKS_TABLE_SCROLL_Y_EXPANDED = "calc(100vh - 380px)";
+const SHIPMENT_TRACKS_TABLE_SCROLL_Y_COLLAPSED = "calc(100vh - 280px)";
+const SHIPMENT_TRACKS_TABLE_SCROLL_Y_EXPANDED = "calc(100vh - 420px)";
 const TRACK_UPDATE_PROVIDER_NAMES = ["赛易", "日升辉", "通途", "唐朝"];
 type ShipmentTrackDateField = "sailing_time" | "warehouse_arrived_time";
 
