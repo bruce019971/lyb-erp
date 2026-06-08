@@ -15,6 +15,7 @@ import type { FormProps } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import dayjs, { type Dayjs } from "dayjs";
 
+import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
 import type { StoreOption } from "../../stores/_lib/stores";
 import type { ShipmentOption } from "../../shipments/_lib/shipments";
 import type {
@@ -32,6 +33,7 @@ type RelabelFormDrawerProps = {
   open: boolean;
   mode: "create" | "edit";
   record?: RelabelRecord;
+  logisticsOptions: LogisticsProviderOption[];
   shipmentOptions: ShipmentOption[];
   storeOptions: StoreOption[];
   onClose: () => void;
@@ -57,6 +59,42 @@ function normalizeRequiredText(value?: string | null) {
   return value?.trim() ?? "";
 }
 
+function normalizeNumberValue(value?: number | null) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function calculateRelabelFee({
+  boxCount,
+  cartonLabelUnitPrice,
+  productCount,
+  productLabelUnitPrice,
+  relabelType,
+}: {
+  boxCount?: number | null;
+  cartonLabelUnitPrice?: number | null;
+  productCount?: number | null;
+  productLabelUnitPrice?: number | null;
+  relabelType?: string | null;
+}) {
+  const normalizedBoxCount = normalizeNumberValue(boxCount);
+  const normalizedCartonPrice = normalizeNumberValue(cartonLabelUnitPrice) ?? 0;
+  const normalizedProductCount = normalizeNumberValue(productCount);
+  const normalizedProductPrice = normalizeNumberValue(productLabelUnitPrice) ?? 0;
+
+  if (!relabelType || normalizedBoxCount === null) return undefined;
+
+  const cartonFee =
+    relabelType === "外箱标" || relabelType === "外箱标及产品标"
+      ? normalizedCartonPrice * normalizedBoxCount
+      : 0;
+  const productFee =
+    relabelType === "产品标" || relabelType === "外箱标及产品标"
+      ? normalizedProductPrice * (normalizedProductCount ?? 0)
+      : 0;
+
+  return Number((cartonFee + productFee).toFixed(2));
+}
+
 function getErrorMessage(error: unknown) {
   if (error && typeof error === "object" && "message" in error) {
     const message = (error as { message?: unknown }).message;
@@ -72,6 +110,7 @@ export default function RelabelFormDrawer({
   open,
   mode,
   record,
+  logisticsOptions,
   shipmentOptions,
   storeOptions,
   onClose,
@@ -82,6 +121,8 @@ export default function RelabelFormDrawer({
   const { message } = App.useApp();
   const selectedOriginalShipmentNo = Form.useWatch("original_shipment_no", form);
   const selectedRelabelType = Form.useWatch("relabel_type", form);
+  const selectedBoxCount = Form.useWatch("box_count", form);
+  const selectedProductCount = Form.useWatch("product_count", form);
   const shouldShowProductCount =
     Boolean(selectedRelabelType) && selectedRelabelType !== "外箱标";
 
@@ -131,6 +172,49 @@ export default function RelabelFormDrawer({
     return nextMap;
   }, [shipmentOptions]);
 
+  const shipmentOptionByShipmentNo = useMemo(() => {
+    const nextMap = new Map<string, ShipmentOption>();
+
+    shipmentOptions.forEach((item) => {
+      const shipmentNo = item.shipment_no?.trim();
+      if (shipmentNo && !nextMap.has(shipmentNo)) {
+        nextMap.set(shipmentNo, item);
+      }
+    });
+
+    return nextMap;
+  }, [shipmentOptions]);
+
+  const logisticsOptionByProviderName = useMemo(() => {
+    const nextMap = new Map<string, LogisticsProviderOption>();
+
+    logisticsOptions.forEach((item) => {
+      const providerName = item.provider_name?.trim();
+      if (providerName && !nextMap.has(providerName)) {
+        nextMap.set(providerName, item);
+      }
+    });
+
+    return nextMap;
+  }, [logisticsOptions]);
+
+  const selectedShipmentOption = useMemo(() => {
+    const shipmentNo = selectedOriginalShipmentNo?.trim();
+    return shipmentNo ? shipmentOptionByShipmentNo.get(shipmentNo) : undefined;
+  }, [selectedOriginalShipmentNo, shipmentOptionByShipmentNo]);
+
+  const selectedLogisticsOption = useMemo(() => {
+    const providerName = selectedShipmentOption?.logistics_provider?.trim();
+    return providerName
+      ? logisticsOptionByProviderName.get(providerName)
+      : undefined;
+  }, [logisticsOptionByProviderName, selectedShipmentOption]);
+  const selectedPcsPerBox = selectedShipmentOption?.pcs_per_box;
+  const selectedCartonLabelUnitPrice =
+    selectedLogisticsOption?.carton_label_unit_price;
+  const selectedProductLabelUnitPrice =
+    selectedLogisticsOption?.product_label_unit_price;
+
   const originalShipmentBoxCount = useMemo(() => {
     const shipmentNo = selectedOriginalShipmentNo?.trim();
     if (!shipmentNo) return null;
@@ -155,6 +239,75 @@ export default function RelabelFormDrawer({
   useEffect(() => {
     if (!open) return;
 
+    const boxCount = normalizeNumberValue(selectedBoxCount);
+    const pcsPerBox = normalizeNumberValue(selectedPcsPerBox);
+    const nextProductCount =
+      selectedRelabelType === "外箱标及产品标" &&
+      boxCount !== null &&
+      pcsPerBox !== null
+        ? boxCount * pcsPerBox
+        : undefined;
+    const currentProductCount = form.getFieldValue("product_count");
+    const nextFields: Array<{
+      name: keyof RelabelFormValues;
+      value: number | undefined;
+    }> = [];
+
+    if (
+      selectedRelabelType === "外箱标及产品标" &&
+      nextProductCount !== undefined &&
+      currentProductCount !== nextProductCount
+    ) {
+      nextFields.push({ name: "product_count", value: nextProductCount });
+    }
+
+    if (
+      selectedRelabelType === "外箱标及产品标" &&
+      nextProductCount === undefined &&
+      currentProductCount !== undefined
+    ) {
+      nextFields.push({ name: "product_count", value: undefined });
+    }
+
+    if (selectedRelabelType === "外箱标" && currentProductCount !== undefined) {
+      nextFields.push({ name: "product_count", value: undefined });
+    }
+
+    const effectiveProductCount =
+      nextFields.find((item) => item.name === "product_count")?.value ??
+      selectedProductCount;
+
+    const nextRelabelFee = calculateRelabelFee({
+      boxCount: selectedBoxCount,
+      cartonLabelUnitPrice: selectedCartonLabelUnitPrice,
+      productCount:
+        selectedRelabelType === "外箱标" ? null : effectiveProductCount,
+      productLabelUnitPrice: selectedProductLabelUnitPrice,
+      relabelType: selectedRelabelType,
+    });
+    const currentRelabelFee = form.getFieldValue("relabel_fee");
+
+    if (currentRelabelFee !== nextRelabelFee) {
+      nextFields.push({ name: "relabel_fee", value: nextRelabelFee });
+    }
+
+    if (nextFields.length > 0) {
+      form.setFields(nextFields);
+    }
+  }, [
+    form,
+    open,
+    selectedBoxCount,
+    selectedCartonLabelUnitPrice,
+    selectedPcsPerBox,
+    selectedProductCount,
+    selectedProductLabelUnitPrice,
+    selectedRelabelType,
+  ]);
+
+  useEffect(() => {
+    if (!open) return;
+
     if (mode === "edit" && record) {
       const originalShipmentNo = record.original_shipment_no ?? undefined;
 
@@ -164,6 +317,7 @@ export default function RelabelFormDrawer({
         delivery_shipment_no: record.delivery_shipment_no ?? undefined,
         box_count: record.box_count ?? undefined,
         product_count: record.product_count ?? undefined,
+        relabel_fee: record.relabel_fee ?? undefined,
         relabel_type: record.relabel_type ?? undefined,
         delivery_time: toDateInputValue(record.delivery_time),
         remark: record.remark ?? undefined,
@@ -192,6 +346,7 @@ export default function RelabelFormDrawer({
       box_count: values.box_count,
       product_count:
         values.relabel_type === "外箱标" ? null : values.product_count,
+      relabel_fee: values.relabel_fee,
       relabel_type: normalizeRequiredText(values.relabel_type),
       delivery_time: serializeDate(values.delivery_time),
       remark: values.remark,
@@ -374,6 +529,16 @@ export default function RelabelFormDrawer({
               />
             </Form.Item>
           ) : null}
+
+          <Form.Item label="换标费用" name="relabel_fee">
+            <InputNumber
+              className="!w-full"
+              min={0}
+              precision={2}
+              readOnly
+              placeholder="根据换标类型和物流商单价自动计算"
+            />
+          </Form.Item>
 
           <Form.Item label="送仓时间" name="delivery_time">
             <DatePicker className="!w-full" format="YYYY/MM/DD" />

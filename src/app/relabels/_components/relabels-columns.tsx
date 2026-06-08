@@ -144,7 +144,7 @@ export function getRelabelColumns(
       dataIndex: "relabel_fee",
       width: 92,
       search: false,
-      render: () => "",
+      render: (_, record) => record.relabel_fee ?? "",
     },
     {
       title: "送仓时间",

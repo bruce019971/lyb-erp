@@ -972,7 +972,7 @@ export async function requestShipmentOptions() {
   const { data, error } = await supabase
     .from("shipment_records")
     .select(
-      "id, shipment_no, tracking_no, product_name, order_store, box_count, logistics_provider, warehouse_arrived_status",
+      "id, shipment_no, tracking_no, product_name, order_store, box_count, pcs_per_box, logistics_provider, warehouse_arrived_status",
     )
     .eq("status", "有效")
     .order("created_at", { ascending: false, nullsFirst: false });
@@ -986,7 +986,7 @@ export async function requestShipmentOptions() {
   const { data: fallbackData, error: fallbackError } = await supabase
     .from("shipment_records")
     .select(
-      "id, shipment_no, tracking_no, product_name, logistics_provider, warehouse_arrived_status",
+      "id, shipment_no, tracking_no, product_name, logistics_provider, warehouse_arrived_status, pcs_per_box",
     )
     .eq("status", "有效")
     .order("created_at", { ascending: false, nullsFirst: false });

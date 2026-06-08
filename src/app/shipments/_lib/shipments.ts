@@ -56,6 +56,7 @@ export type ShipmentOption = {
   product_name: string | null;
   order_store: string | null;
   box_count: number | null;
+  pcs_per_box?: number | null;
   logistics_provider?: string | null;
   warehouse_arrived_status?: string | null;
 };

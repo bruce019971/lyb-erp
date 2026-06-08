@@ -216,6 +216,7 @@ export default function RelabelsPage() {
           <RelabelFormDrawer
             open={createOpen}
             mode="create"
+            logisticsOptions={logisticsOptions}
             shipmentOptions={shipmentOptions}
             storeOptions={storeOptions}
             onClose={() => setCreateOpen(false)}
@@ -230,6 +231,7 @@ export default function RelabelsPage() {
             open={editOpen}
             mode="edit"
             record={editingRecord}
+            logisticsOptions={logisticsOptions}
             shipmentOptions={shipmentOptions}
             storeOptions={storeOptions}
             onClose={() => {
