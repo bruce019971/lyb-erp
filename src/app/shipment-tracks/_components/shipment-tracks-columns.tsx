@@ -31,6 +31,8 @@ function renderShipmentTrackSearchTagsInput() {
       open={false}
       tokenSeparators={[" ", "\n", "\t", ",", "，"]}
       placeholder="可用回车、空格或逗号分隔"
+      maxTagCount="responsive"
+      maxTagTextLength={18}
       className="w-full"
     />
   );
@@ -177,6 +179,14 @@ export function getShipmentTrackColumns(
       width: 90,
       search: false,
       render: (_, record) => record.total_qty ?? "-",
+    },
+    {
+      title: "店铺",
+      dataIndex: "order_store",
+      width: 120,
+      ellipsis: true,
+      search: false,
+      render: (_, record) => record.order_store || "-",
     },
     {
       title: "运单编号",

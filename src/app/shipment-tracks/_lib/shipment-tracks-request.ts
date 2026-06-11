@@ -32,6 +32,7 @@ type ShipmentTrackRow = {
         logistics_provider: string | null;
         product_name: string | null;
         total_qty: number | null;
+        order_store: string | null;
       }
     | Array<{
         shipment_no: string | null;
@@ -39,6 +40,7 @@ type ShipmentTrackRow = {
         logistics_provider: string | null;
         product_name: string | null;
         total_qty: number | null;
+        order_store: string | null;
       }>
     | null;
 };
@@ -101,6 +103,7 @@ function normalizeTrackRow(row: ShipmentTrackRow): ShipmentTrackRecord {
     logistics_provider: shipment?.logistics_provider ?? null,
     product_name: shipment?.product_name ?? null,
     total_qty: shipment?.total_qty ?? null,
+    order_store: shipment?.order_store ?? null,
     latest_track: latestTrack,
     track_events: trackEvents,
     sailing_time: row.sailing_time,
@@ -181,7 +184,7 @@ export async function requestShipmentTrackRecords(
   let query = supabase
     .from("shipment_tracks")
     .select(
-      "id, shipment_record_id, latest_track, track_events, sailing_time, warehouse_arrived_time, track_updated_at, created_at, updated_at, shipment:shipment_records!inner(shipment_no, tracking_no, logistics_provider, product_name, total_qty)",
+      "id, shipment_record_id, latest_track, track_events, sailing_time, warehouse_arrived_time, track_updated_at, created_at, updated_at, shipment:shipment_records!inner(shipment_no, tracking_no, logistics_provider, product_name, total_qty, order_store)",
       { count: "exact" },
     )
     .eq("shipment.status", "有效");

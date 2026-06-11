@@ -11,6 +11,7 @@ export type ShipmentTrackRecord = {
   logistics_provider: string | null;
   product_name: string | null;
   total_qty: number | null;
+  order_store: string | null;
   latest_track: string | null;
   track_events: ShipmentTrackEvent[];
   sailing_time: string | null;
