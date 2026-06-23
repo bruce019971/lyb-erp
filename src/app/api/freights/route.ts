@@ -70,6 +70,19 @@ type FreightSummary = {
   bill_amount: number;
 };
 
+type FreightPaymentStatusRow = {
+  bill_amount: number | null;
+  freight_paid_status: string | null;
+  shipment:
+    | {
+        logistics_provider: string | null;
+      }
+    | Array<{
+        logistics_provider: string | null;
+      }>
+    | null;
+};
+
 type LogisticsProviderRow = {
   system_url: string | null;
   username: string | null;
@@ -829,7 +842,7 @@ export async function PATCH(request: Request) {
     const { data: currentFreight, error: currentFreightError } =
       await adminClient
         .from("freight_records")
-        .select("bill_amount, freight_paid_status")
+        .select("bill_amount, freight_paid_status, shipment:shipment_records(logistics_provider)")
         .eq("id", id)
         .single();
 
@@ -837,17 +850,23 @@ export async function PATCH(request: Request) {
       throw currentFreightError;
     }
 
+    const currentFreightRow = currentFreight as FreightPaymentStatusRow;
     const currentPaidStatus = normalizeFreightPaidStatus(
-      (currentFreight as Pick<FreightRow, "freight_paid_status">)
-        .freight_paid_status,
+      currentFreightRow.freight_paid_status,
     );
     const freightPaidStatus = hasPaidStatusInput
       ? normalizeFreightPaidStatus(body.freight_paid_status)
       : currentPaidStatus;
+    const currentShipment = Array.isArray(currentFreightRow.shipment)
+      ? currentFreightRow.shipment[0]
+      : currentFreightRow.shipment;
+    const isTangchaoFreight =
+      currentShipment?.logistics_provider?.trim() === "唐朝";
 
     if (
       freightPaidStatus !== currentPaidStatus &&
-      !hasBillAmount((currentFreight as Pick<FreightRow, "bill_amount">).bill_amount)
+      !hasBillAmount(currentFreightRow.bill_amount) &&
+      !isTangchaoFreight
     ) {
       throw new Error("账单金额为空时不能更改是否支付");
     }

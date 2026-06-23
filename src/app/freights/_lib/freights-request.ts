@@ -453,3 +453,33 @@ export async function fetchTongtuFreightBill(values: { freightId: string }) {
     matchedCount: payload.matchedCount ?? 0,
   };
 }
+
+export async function fetchTangchaoFreightBill(values: { freightId: string }) {
+  const response = await fetch("/api/freights/tangchao-bill", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(values),
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        billAmount?: number;
+        totalFee?: number;
+        isConsistent?: boolean;
+        matchedCount?: number;
+        error?: string;
+      }
+    | null;
+
+  if (!response.ok || typeof payload?.billAmount !== "number") {
+    throw new Error(payload?.error || "唐朝账单获取失败");
+  }
+
+  return {
+    billAmount: payload.billAmount,
+    totalFee: payload.totalFee,
+    isConsistent: payload.isConsistent ?? false,
+    matchedCount: payload.matchedCount ?? 0,
+  };
+}

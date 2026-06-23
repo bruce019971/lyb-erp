@@ -71,6 +71,10 @@ export function getFreightColumns(
     );
   }
 
+  function canEditPaidStatus(record: FreightRecord) {
+    return hasBillAmount(record) || record.logistics_provider?.trim() === "唐朝";
+  }
+
   function canFetchUnitPrice(record: FreightRecord) {
     return record.logistics_provider?.trim() === "日升辉";
   }
@@ -331,7 +335,7 @@ export function getFreightColumns(
       onCell: (record) => ({
         onDoubleClick: () => {
           if (
-            hasBillAmount(record) &&
+            canEditPaidStatus(record) &&
             record.freight_paid_status !== "是" &&
             !isPaidStatusUpdating(record)
           ) {
@@ -362,7 +366,7 @@ export function getFreightColumns(
         return (
           <span
             className={
-              hasBillAmount(record) && record.freight_paid_status !== "是"
+              canEditPaidStatus(record) && record.freight_paid_status !== "是"
                 ? "inline-flex cursor-pointer"
                 : "inline-flex"
             }

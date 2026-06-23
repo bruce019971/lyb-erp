@@ -27,6 +27,7 @@ import {
   fetchSaleasyFreightBill,
   fetchSaleasyFreightExtraFee,
   fetchSaleasyFreightVolume,
+  fetchTangchaoFreightBill,
   fetchTongtuFreightBill,
   fetchTongtuFreightVolume,
   confirmSaleasyFreightTotalFee,
@@ -218,6 +219,10 @@ export default function FreightsPage() {
     );
   }
 
+  function canChangePaidStatus(record: FreightRecord) {
+    return hasBillAmount(record) || record.logistics_provider?.trim() === "唐朝";
+  }
+
   function isPaidStatusEditing(record: FreightRecord) {
     return editingPaidStatusId === record.id;
   }
@@ -328,9 +333,13 @@ export default function FreightsPage() {
             ? await fetchTongtuFreightBill({
                 freightId: record.id,
               })
-            : await fetchSaleasyFreightBill({
-                freightId: record.id,
-              });
+            : providerName === "唐朝"
+              ? await fetchTangchaoFreightBill({
+                  freightId: record.id,
+                })
+              : await fetchSaleasyFreightBill({
+                  freightId: record.id,
+                });
 
       showBillResultModal({
         record,
@@ -370,14 +379,17 @@ export default function FreightsPage() {
     if (
       providerName !== "日升辉" &&
       providerName !== "通途" &&
-      providerName !== "赛易"
+      providerName !== "赛易" &&
+      providerName !== "唐朝"
     ) {
-      messageApi.warning("当前仅日升辉/通途/赛易货件支持获取账单");
+      messageApi.warning("当前仅日升辉/通途/赛易/唐朝货件支持获取账单");
       return;
     }
 
     if (
-      (providerName === "日升辉" || providerName === "赛易") &&
+      (providerName === "日升辉" ||
+        providerName === "赛易" ||
+        providerName === "唐朝") &&
       !record.tracking_no?.trim()
     ) {
       messageApi.warning("当前货件缺少运单编号");
@@ -647,7 +659,7 @@ export default function FreightsPage() {
       }
     }
 
-    if (!hasBillAmount(record)) {
+    if (!canChangePaidStatus(record)) {
       messageApi.warning("账单金额为空时不能更改是否支付");
       setEditingPaidStatusId(null);
       return;
