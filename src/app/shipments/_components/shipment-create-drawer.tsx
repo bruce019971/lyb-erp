@@ -15,7 +15,7 @@ import type { FormProps } from "antd";
 import { useEffect, useRef, useState } from "react";
 import type { Dayjs } from "dayjs";
 
-import type { ShipmentCreateValues } from "../_lib/shipments";
+import type { ShipmentCreateValues, ShipmentRecord } from "../_lib/shipments";
 import { createShipmentRecord } from "../_lib/shipments-request";
 import ShipmentLogisticsBoxMarkUpload from "./shipment-logistics-box-mark-upload";
 import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
@@ -25,7 +25,7 @@ import type { StoreOption } from "../../stores/_lib/stores";
 type ShipmentCreateDrawerProps = {
   open: boolean;
   onClose: () => void;
-  onCreated: () => void;
+  onCreated: (record: ShipmentRecord) => void;
   storeOptions: StoreOption[];
   productOptions: ProductShipmentOption[];
   logisticsOptions: LogisticsProviderOption[];
@@ -352,14 +352,14 @@ export default function ShipmentCreateDrawer({
             ? logisticsBoxMarkUrlRef.current
             : values.logistics_box_mark_url,
       };
-      await createShipmentRecord(
+      const record = await createShipmentRecord(
         serializeShipmentValues(applyCalculatedGoodsValue(nextValues)),
       );
       message.success("货件新增成功");
       form.resetFields();
       logisticsBoxMarkUrlRef.current = undefined;
       setLogisticsBoxMarkUrlState(undefined);
-      onCreated();
+      onCreated(record);
     } catch (error) {
       message.error(`货件新增失败：${getErrorMessage(error)}`);
     } finally {

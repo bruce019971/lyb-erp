@@ -1,15 +1,11 @@
 "use client";
 
-import type { ActionType } from "@ant-design/pro-components";
 import { ExclamationCircleFilled } from "@ant-design/icons";
 import type { FormInstance } from "antd";
 import {
   App as AntApp,
-  Button,
   ConfigProvider,
   Modal,
-  Progress,
-  Steps,
   message,
 } from "antd";
 import zhCN from "antd/locale/zh_CN";
@@ -49,32 +45,16 @@ import {
 import ShipmentCreateDrawer from "./shipment-create-drawer";
 import ShipmentEditDrawer from "./shipment-edit-drawer";
 import RishenghuiAuthModal from "./rishenghui-auth-modal";
-import ShipmentsTable from "./shipments-table";
+import ShipmentsTable, { type ShipmentsTableAction } from "./shipments-table";
 import ShipmentsTableSkeleton from "./shipments-table-skeleton";
 
 type ShipmentsPageProps = {
   embedded?: boolean;
 };
 
-type LogisticsOrderStepKey = "invoice" | "order" | "boxMark";
 type PendingRishenghuiAction = (accessToken: string) => void | Promise<void>;
 
-const logisticsOrderSteps: Array<{
-  key: LogisticsOrderStepKey;
-  title: string;
-}> = [
-  { key: "invoice", title: "发票生成中" },
-  { key: "order", title: "物流下单中" },
-  { key: "boxMark", title: "箱唛生成中" },
-];
-
 dayjs.locale("zh-cn");
-
-function waitForProgressStep(ms = 300) {
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, ms);
-  });
-}
 
 export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) {
   const searchParams = useSearchParams();
@@ -102,17 +82,6 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
     useState<string | null>(null);
   const [submittingLogisticsOrderId, setSubmittingLogisticsOrderId] =
     useState<string | null>(null);
-  const [logisticsOrderProgressOpen, setLogisticsOrderProgressOpen] =
-    useState(false);
-  const [logisticsOrderProgress, setLogisticsOrderProgress] = useState<{
-    providerName: string;
-    shipmentNo: string;
-    step: LogisticsOrderStepKey;
-  }>({
-    providerName: "",
-    shipmentNo: "",
-    step: "invoice",
-  });
   const [storeOptions, setStoreOptions] = useState<StoreOption[]>([]);
   const [productOptions, setProductOptions] = useState<ProductShipmentOption[]>(
     [],
@@ -122,7 +91,7 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
   >([]);
   const [messageApi, contextHolder] = message.useMessage();
   const [modalApi, modalContextHolder] = Modal.useModal();
-  const tableActionRef = useRef<ActionType>(undefined);
+  const tableActionRef = useRef<ShipmentsTableAction>(undefined);
   const searchFormRef = useRef<FormInstance>(undefined);
   const pendingRishenghuiActionRef = useRef<PendingRishenghuiAction | null>(
     null,
@@ -229,35 +198,6 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
 
   function isSubmittingLogisticsOrder(record: ShipmentRecord) {
     return submittingLogisticsOrderId === record.id;
-  }
-
-  function getLogisticsOrderVisibleSteps() {
-    if (logisticsOrderProgress.providerName === "赛易") {
-      return logisticsOrderSteps.filter((item) => item.key !== "invoice");
-    }
-
-    return logisticsOrderSteps;
-  }
-
-  function getLogisticsOrderProgressCurrent() {
-    const visibleSteps = getLogisticsOrderVisibleSteps();
-
-    return Math.max(
-      0,
-      visibleSteps.findIndex(
-        (item) => item.key === logisticsOrderProgress.step,
-      ),
-    );
-  }
-
-  function getLogisticsOrderProgressPercent() {
-    const visibleSteps = getLogisticsOrderVisibleSteps();
-
-    if (!visibleSteps.length) return 0;
-
-    return Math.round(
-      ((getLogisticsOrderProgressCurrent() + 1) / visibleSteps.length) * 100,
-    );
   }
 
   function showRishenghuiTokenRequiredModal(
@@ -527,7 +467,6 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
     accessTokenOverride?: string,
   ) {
     const providerName = record.logistics_provider?.trim() || "";
-    const shipmentNo = record.shipment_no?.trim() || "";
     const isRishenghui = providerName === "日升辉";
     const isTongtu = providerName === "通途";
     const isSaleasy = providerName === "赛易";
@@ -546,25 +485,12 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
 
     try {
       setSubmittingLogisticsOrderId(record.id);
-      setLogisticsOrderProgressOpen(true);
-      setLogisticsOrderProgress({
-        providerName,
-        shipmentNo,
-        step: isSaleasy ? "order" : "invoice",
-      });
 
       if (isSaleasy) {
         const orderResult = await submitSaleasyLogisticsOrder({
           shipmentId: record.id,
         });
-        tableActionRef.current?.reload();
 
-        setLogisticsOrderProgress({
-          providerName,
-          shipmentNo,
-          step: "boxMark",
-        });
-        await waitForProgressStep();
         messageApi.success(
           orderResult.packno
             ? `${orderResult.packno}物流下单成功，箱唛已生成`
@@ -580,13 +506,7 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
         shipmentId: record.id,
         shipmentNo: record.shipment_no,
       });
-      tableActionRef.current?.reload();
 
-      setLogisticsOrderProgress({
-        providerName,
-        shipmentNo,
-        step: "order",
-      });
       const orderResult = isTongtu
         ? await submitTongtuOrderInvoice({
             shipmentId: record.id,
@@ -597,13 +517,7 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
             fileName: invoiceResult.fileName,
             accessToken: token,
           });
-      tableActionRef.current?.reload();
 
-      setLogisticsOrderProgress({
-        providerName,
-        shipmentNo,
-        step: "boxMark",
-      });
       const boxMarkResult = isTongtu
         ? await generateShipmentTongtuLogisticsBoxMark({
             shipmentId: record.id,
@@ -638,7 +552,6 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
         );
       }
     } finally {
-      setLogisticsOrderProgressOpen(false);
       setSubmittingLogisticsOrderId(null);
     }
   }
@@ -767,40 +680,6 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
           </section>
         </main>
         {mounted ? (
-          <Modal
-            open={logisticsOrderProgressOpen}
-            title={`${logisticsOrderProgress.providerName || "物流"}物流下单`}
-            footer={
-              <Button onClick={() => setLogisticsOrderProgressOpen(false)}>
-                关闭，后台运行
-              </Button>
-            }
-            closable
-            onCancel={() => setLogisticsOrderProgressOpen(false)}
-            maskClosable={false}
-            centered
-          >
-            <div className="flex flex-col gap-4 py-2">
-              {logisticsOrderProgress.shipmentNo ? (
-                <div className="text-sm text-slate-500">
-                  货件号：{logisticsOrderProgress.shipmentNo}
-                </div>
-              ) : null}
-              <Steps
-                direction="vertical"
-                current={getLogisticsOrderProgressCurrent()}
-                items={getLogisticsOrderVisibleSteps().map((item) => ({
-                  title: item.title,
-                }))}
-              />
-              <Progress
-                percent={getLogisticsOrderProgressPercent()}
-                showInfo={false}
-              />
-            </div>
-          </Modal>
-        ) : null}
-        {mounted ? (
           <RishenghuiAuthModal
             open={rishenghuiAuthOpen}
             onClose={() => setRishenghuiAuthOpen(false)}
@@ -812,9 +691,14 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
           <ShipmentCreateDrawer
             open={createOpen}
             onClose={() => setCreateOpen(false)}
-            onCreated={() => {
+            onCreated={(record) => {
               setCreateOpen(false);
-              tableActionRef.current?.reload();
+              const updatedLocally =
+                tableActionRef.current?.prependCreatedRecord(record) ?? false;
+
+              if (!updatedLocally) {
+                tableActionRef.current?.reload();
+              }
             }}
             storeOptions={storeOptions}
             productOptions={productOptions}

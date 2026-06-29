@@ -35,7 +35,7 @@ import {
 } from "../_lib/carton-label";
 
 type ShipmentsTableProps = {
-  actionRef?: MutableRefObject<ActionType | undefined>;
+  actionRef?: MutableRefObject<ShipmentsTableAction | undefined>;
   formRef?: MutableRefObject<FormInstance | undefined>;
   onCreate: () => void;
   onBatchCalculateGoodsValue: (ids: string[]) => void;
@@ -74,6 +74,10 @@ const SHIPMENTS_TABLE_SCROLL_Y_COLLAPSED = "calc(100vh - 360px)";
 const SHIPMENTS_TABLE_SCROLL_Y_EXPANDED = "calc(100vh - 520px)";
 
 type ShipmentColumnsState = Record<string, { show?: boolean }>;
+
+export type ShipmentsTableAction = ActionType & {
+  prependCreatedRecord: (record: ShipmentRecord) => boolean;
+};
 
 function isWarehouseArrivedUndelivered(record: ShipmentRecord) {
   const isWarehouseArrived =
@@ -118,6 +122,25 @@ function formatSummaryMoney(value: number) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
+}
+
+function toFiniteNumber(value?: number | null) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function hasActiveSearchValue(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(hasActiveSearchValue);
+  if (typeof value === "string") return Boolean(value.trim());
+  return value !== undefined && value !== null && value !== "";
+}
+
+function normalizeCreatedShipmentRecord(record: ShipmentRecord): ShipmentRecord {
+  return {
+    ...record,
+    delivery_status: record.delivery_status ?? "否",
+    relabel_delivery_times: [],
+    is_delivery_completed: record.delivery_status === "是",
+  };
 }
 
 type ShipmentSummaryColumnKey =
@@ -281,6 +304,49 @@ export default function ShipmentsTable({
     await loadRecords(searchParamsRef.current);
   }, [loadRecords]);
 
+  const prependCreatedRecord = useCallback((record: ShipmentRecord) => {
+    const hasActiveSearch = Object.values(searchParamsRef.current).some(
+      hasActiveSearchValue,
+    );
+
+    if (hasActiveSearch) return false;
+
+    const normalizedRecord = normalizeCreatedShipmentRecord(record);
+
+    setDataSource((current) => {
+      if (current.some((item) => item.id === normalizedRecord.id)) {
+        return current;
+      }
+
+      return [normalizedRecord, ...current];
+    });
+    setSummary((current) =>
+      current
+        ? {
+            boxCount: Number(
+              (
+                current.boxCount + toFiniteNumber(normalizedRecord.box_count)
+              ).toFixed(2),
+            ),
+            totalQty: Number(
+              (
+                current.totalQty + toFiniteNumber(normalizedRecord.total_qty)
+              ).toFixed(2),
+            ),
+            goodsValue: Number(
+              (
+                current.goodsValue + toFiniteNumber(normalizedRecord.goods_value)
+              ).toFixed(2),
+            ),
+            total: current.total + 1,
+          }
+        : current,
+    );
+    setSelectedRowKeys([]);
+
+    return true;
+  }, []);
+
   const handleGenerateCartonLabel = useCallback(
     async (record: ShipmentRecord) => {
       const shipmentNo = record.shipment_no?.trim();
@@ -404,12 +470,13 @@ export default function ShipmentsTable({
         searchParamsRef.current = {};
         void loadRecords({});
       },
-    } as ActionType;
+      prependCreatedRecord,
+    } as ShipmentsTableAction;
 
     return () => {
       actionRef.current = undefined;
     };
-  }, [actionRef, loadRecords, reloadFirstPage]);
+  }, [actionRef, loadRecords, prependCreatedRecord, reloadFirstPage]);
 
   return (
     <ProTable<ShipmentRecord>
