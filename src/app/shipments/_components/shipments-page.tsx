@@ -24,6 +24,7 @@ import { requestStoreOptions } from "../../stores/_lib/stores-request";
 import {
   batchCalculateShipmentGoodsValue,
   clearShipmentFileUrls,
+  type ShipmentFileUrlField,
   deleteShipmentRecord,
   generateShipmentLogisticsBoxMark,
   generateShipmentSaleasyLogisticsBoxMark,
@@ -307,11 +308,14 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
     });
   }
 
-  function handleClearShipmentFiles(
-    ids: string[],
-    field: "carton_label_url" | "logistics_box_mark_url",
-  ) {
-    const label = field === "carton_label_url" ? "外箱标签" : "物流箱唛";
+  function getShipmentFileFieldLabel(field: ShipmentFileUrlField) {
+    if (field === "carton_label_url") return "外箱标签";
+    if (field === "logistics_box_mark_url") return "物流箱唛";
+    return "发票";
+  }
+
+  function handleClearShipmentFiles(ids: string[], field: ShipmentFileUrlField) {
+    const label = getShipmentFileFieldLabel(field);
 
     if (!ids.length) {
       messageApi.warning("请先选择需要处理的货件");

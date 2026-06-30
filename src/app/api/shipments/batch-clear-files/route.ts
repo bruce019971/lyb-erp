@@ -17,7 +17,10 @@ type OperatorRow = {
     | null;
 };
 
-type ClearFileField = "carton_label_url" | "logistics_box_mark_url";
+type ClearFileField =
+  | "carton_label_url"
+  | "logistics_box_mark_url"
+  | "order_invoice_url";
 
 async function verifyOperator() {
   const cookieStore = await cookies();
@@ -67,7 +70,11 @@ function normalizeIds(value: unknown) {
 }
 
 function normalizeField(value: unknown): ClearFileField {
-  if (value === "carton_label_url" || value === "logistics_box_mark_url") {
+  if (
+    value === "carton_label_url" ||
+    value === "logistics_box_mark_url" ||
+    value === "order_invoice_url"
+  ) {
     return value;
   }
 

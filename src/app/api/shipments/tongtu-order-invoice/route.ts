@@ -1,5 +1,6 @@
 import JSZip from "jszip";
 import { NextResponse } from "next/server";
+import sharp from "sharp";
 
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { verifyLogisticsOperator } from "../../logistics/rishenghui/_lib";
@@ -51,8 +52,8 @@ type InvoiceContext = {
 
 type CellValue = string | number;
 type ImageInfo = {
-  extension: string;
-  contentType: string;
+  extension: "png" | "jpeg" | "gif";
+  contentType: "image/png" | "image/jpeg" | "image/gif";
   width: number;
   height: number;
 };
@@ -505,6 +506,46 @@ function getImageInfo(contentType: string, buffer: Buffer): ImageInfo | null {
   return null;
 }
 
+function isWebpImage(contentType: string, buffer: Buffer) {
+  const normalized = contentType.toLowerCase();
+  const hasWebpSignature =
+    buffer.length >= 12 &&
+    buffer.toString("ascii", 0, 4) === "RIFF" &&
+    buffer.toString("ascii", 8, 12) === "WEBP";
+
+  return (
+    normalized.includes("webp") ||
+    normalized.includes("wepp") ||
+    hasWebpSignature
+  );
+}
+
+async function getExcelImage(
+  contentType: string,
+  buffer: Buffer,
+): Promise<{ buffer: Buffer; info: ImageInfo } | null> {
+  if (isWebpImage(contentType, buffer)) {
+    const converted = await sharp(buffer)
+      .png()
+      .toBuffer({ resolveWithObject: true });
+
+    return {
+      buffer: converted.data,
+      info: {
+        extension: "png",
+        contentType: "image/png",
+        width: converted.info.width,
+        height: converted.info.height,
+      },
+    };
+  }
+
+  const info = getImageInfo(contentType, buffer);
+  if (!info) return null;
+
+  return { buffer, info };
+}
+
 function appendRelationship(relsXml: string, relationshipXml: string) {
   const closeIndex = relsXml.indexOf("</Relationships>");
   if (closeIndex < 0) {
@@ -952,16 +993,16 @@ async function appendProductImage(
   if (!response.ok) return clearCellValue(sheetXml, "W17");
 
   const imageBuffer = Buffer.from(await response.arrayBuffer());
-  const imageInfo = getImageInfo(
+  const image = await getExcelImage(
     response.headers.get("content-type") ?? "",
     imageBuffer,
   );
-  if (!imageInfo) return clearCellValue(sheetXml, "W17");
+  if (!image) return clearCellValue(sheetXml, "W17");
 
   const imageIndex = getNextImageIndex(zip);
-  const imagePath = `xl/media/image${imageIndex}.${imageInfo.extension}`;
-  const imageTarget = `../media/image${imageIndex}.${imageInfo.extension}`;
-  zip.file(imagePath, imageBuffer);
+  const imagePath = `xl/media/image${imageIndex}.${image.info.extension}`;
+  const imageTarget = `../media/image${imageIndex}.${image.info.extension}`;
+  zip.file(imagePath, image.buffer);
 
   const contentTypesFile = zip.file(CONTENT_TYPES_PATH);
   if (!contentTypesFile) {
@@ -988,8 +1029,8 @@ async function appendProductImage(
   let contentTypesXml = await contentTypesFile.async("string");
   contentTypesXml = ensureContentType(
     contentTypesXml,
-    imageInfo.extension,
-    imageInfo.contentType,
+    image.info.extension,
+    image.info.contentType,
   );
   contentTypesXml = ensureOverrideContentType(
     contentTypesXml,
@@ -1020,9 +1061,9 @@ async function appendProductImage(
     appendPictureToDrawing(
       drawingXml,
       imageRelationshipId,
-      `product-image-${imageIndex}.${imageInfo.extension}`,
+      `product-image-${imageIndex}.${image.info.extension}`,
       sheetXml,
-      getPictureAnchor(sheetXml, "W17", imageInfo),
+      getPictureAnchor(sheetXml, "W17", image.info),
     ),
   );
 

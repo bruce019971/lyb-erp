@@ -137,3 +137,40 @@ export async function downloadShipmentLogisticsBoxMark(
   link.remove();
   window.URL.revokeObjectURL(objectUrl);
 }
+
+export function getShipmentOrderInvoiceFileName(record: ShipmentRecord) {
+  const providerName = record.logistics_provider?.trim();
+  const filePrefix = providerName === "通途" ? "TT" : "RSH";
+  const shipmentNo = safeFilePart(record.shipment_no) || record.id;
+
+  return `${filePrefix}_${shipmentNo}_发票.xlsx`;
+}
+
+export async function downloadShipmentOrderInvoice(record: ShipmentRecord) {
+  const url = record.order_invoice_url?.trim();
+  if (!url) {
+    throw new Error("当前货件未生成发票");
+  }
+
+  const fileName = getShipmentOrderInvoiceFileName(record);
+  const proxyUrl = `/api/proxy-download?${new URLSearchParams({
+    url,
+    filename: fileName,
+    t: String(Date.now()),
+  })}`;
+  const response = await fetch(proxyUrl, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error("下单发票文件读取失败");
+  }
+
+  const blob = await response.blob();
+  const objectUrl = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = objectUrl;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(objectUrl);
+}

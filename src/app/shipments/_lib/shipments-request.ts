@@ -581,7 +581,8 @@ export async function deleteShipmentRecords(ids: string[]) {
 
 export type ShipmentFileUrlField =
   | "carton_label_url"
-  | "logistics_box_mark_url";
+  | "logistics_box_mark_url"
+  | "order_invoice_url";
 
 export async function clearShipmentFileUrls(
   ids: string[],

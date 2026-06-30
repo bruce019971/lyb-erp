@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import type { Buffer as ExcelBuffer } from "exceljs";
 import { NextResponse } from "next/server";
+import sharp from "sharp";
 
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { verifyLogisticsOperator } from "../../logistics/rishenghui/_lib";
@@ -57,6 +58,24 @@ type InvoiceContext = {
   store: StoreRow | null;
 };
 
+type ImageInfo = {
+  extension: "png" | "jpeg" | "gif";
+  width: number;
+  height: number;
+};
+type CellRange = {
+  startColumnNumber: number;
+  endColumnNumber: number;
+  startRowNumber: number;
+  endRowNumber: number;
+};
+type WorksheetMergeRange = {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+};
+
 const DETAIL_LABELS = new Set([
   "箱唛号",
   "预约号ID",
@@ -82,6 +101,149 @@ function getRequiredText(value: unknown, message: string) {
   }
 
   return value.trim();
+}
+
+const POINT_TO_PIXEL = 96 / 72;
+const DEFAULT_EXCEL_COLUMN_WIDTH = 8.43;
+const DEFAULT_EXCEL_ROW_HEIGHT = 15;
+const IMAGE_CELL_PADDING_PX = 6;
+const IMAGE_CELL_LEFT_PADDING_PX = 36;
+const FALLBACK_IMAGE_WIDTH_PX = 92;
+const FALLBACK_IMAGE_HEIGHT_PX = 72;
+
+function getPngSize(buffer: Buffer) {
+  if (
+    buffer.length >= 24 &&
+    buffer.toString("ascii", 1, 4) === "PNG" &&
+    buffer.readUInt32BE(12) === 0x49484452
+  ) {
+    return {
+      width: buffer.readUInt32BE(16),
+      height: buffer.readUInt32BE(20),
+    };
+  }
+
+  return null;
+}
+
+function getGifSize(buffer: Buffer) {
+  const signature = buffer.toString("ascii", 0, 6);
+  if (buffer.length >= 10 && (signature === "GIF87a" || signature === "GIF89a")) {
+    return {
+      width: buffer.readUInt16LE(6),
+      height: buffer.readUInt16LE(8),
+    };
+  }
+
+  return null;
+}
+
+function getJpegSize(buffer: Buffer) {
+  if (buffer.length < 4 || buffer[0] !== 0xff || buffer[1] !== 0xd8) {
+    return null;
+  }
+
+  let offset = 2;
+  while (offset < buffer.length) {
+    if (buffer[offset] !== 0xff) {
+      offset += 1;
+      continue;
+    }
+
+    const marker = buffer[offset + 1];
+    offset += 2;
+    if (marker === 0xd9 || marker === 0xda) break;
+    if (offset + 2 > buffer.length) break;
+
+    const length = buffer.readUInt16BE(offset);
+    if (length < 2 || offset + length > buffer.length) break;
+
+    if (
+      marker >= 0xc0 &&
+      marker <= 0xcf &&
+      ![0xc4, 0xc8, 0xcc].includes(marker)
+    ) {
+      return {
+        height: buffer.readUInt16BE(offset + 3),
+        width: buffer.readUInt16BE(offset + 5),
+      };
+    }
+
+    offset += length;
+  }
+
+  return null;
+}
+
+function getImageSize(buffer: Buffer) {
+  return getPngSize(buffer) ?? getJpegSize(buffer) ?? getGifSize(buffer);
+}
+
+function getImageInfo(contentType: string, buffer: Buffer): ImageInfo | null {
+  const normalized = contentType.toLowerCase();
+  const size = getImageSize(buffer);
+  const fallbackSize = {
+    width: FALLBACK_IMAGE_WIDTH_PX,
+    height: FALLBACK_IMAGE_HEIGHT_PX,
+  };
+
+  if (normalized.includes("png") || getPngSize(buffer)) {
+    return { extension: "png", ...(size ?? fallbackSize) };
+  }
+  if (
+    normalized.includes("jpg") ||
+    normalized.includes("jpeg") ||
+    getJpegSize(buffer)
+  ) {
+    return { extension: "jpeg", ...(size ?? fallbackSize) };
+  }
+  if (normalized.includes("gif") || getGifSize(buffer)) {
+    return { extension: "gif", ...(size ?? fallbackSize) };
+  }
+
+  return null;
+}
+
+function isWebpImage(contentType: string, buffer: Buffer) {
+  const normalized = contentType.toLowerCase();
+  const hasWebpSignature =
+    buffer.length >= 12 &&
+    buffer.toString("ascii", 0, 4) === "RIFF" &&
+    buffer.toString("ascii", 8, 12) === "WEBP";
+
+  return (
+    normalized.includes("webp") ||
+    normalized.includes("wepp") ||
+    hasWebpSignature
+  );
+}
+
+async function getExcelImage(
+  contentType: string,
+  buffer: Buffer,
+): Promise<{ buffer: ExcelBuffer; info: ImageInfo } | null> {
+  if (isWebpImage(contentType, buffer)) {
+    const converted = await sharp(buffer)
+      .png()
+      .toBuffer({ resolveWithObject: true });
+
+    return {
+      buffer: converted.data as unknown as ExcelBuffer,
+      info: {
+        extension: "png",
+        width: converted.info.width || FALLBACK_IMAGE_WIDTH_PX,
+        height: converted.info.height || FALLBACK_IMAGE_HEIGHT_PX,
+      },
+    };
+  }
+
+  const info = getImageInfo(contentType, buffer);
+  if (!info) return null;
+
+  return {
+    buffer: buffer as unknown as ExcelBuffer,
+    info,
+  };
 }
 
 function normalizeCellText(value: unknown) {
@@ -212,6 +374,178 @@ function getBelowCell(worksheet: ExcelJS.Worksheet, cell: ExcelJS.Cell) {
   return worksheet.getCell(rowNumber + 1, columnNumber);
 }
 
+function getColumnWidthPx(width?: number) {
+  const normalizedWidth = width ?? DEFAULT_EXCEL_COLUMN_WIDTH;
+
+  if (normalizedWidth < 1) {
+    return Math.floor(normalizedWidth * 12 + 0.5);
+  }
+
+  return Math.floor(normalizedWidth * 7 + 5);
+}
+
+function getRowHeightPx(height?: number) {
+  return (height ?? DEFAULT_EXCEL_ROW_HEIGHT) * POINT_TO_PIXEL;
+}
+
+function getWorksheetMergeRanges(worksheet: ExcelJS.Worksheet) {
+  const mergeMap = (
+    worksheet as ExcelJS.Worksheet & {
+      _merges?: Record<string, WorksheetMergeRange>;
+    }
+  )._merges;
+
+  return mergeMap ? Object.values(mergeMap) : [];
+}
+
+function getCellRange(
+  worksheet: ExcelJS.Worksheet,
+  rowNumber: number,
+  columnNumber: number,
+): CellRange {
+  const mergedRange = getWorksheetMergeRanges(worksheet).find(
+    (range) =>
+      rowNumber >= range.top &&
+      rowNumber <= range.bottom &&
+      columnNumber >= range.left &&
+      columnNumber <= range.right,
+  );
+
+  if (mergedRange) {
+    return {
+      startColumnNumber: mergedRange.left,
+      endColumnNumber: mergedRange.right,
+      startRowNumber: mergedRange.top,
+      endRowNumber: mergedRange.bottom,
+    };
+  }
+
+  return {
+    startColumnNumber: columnNumber,
+    endColumnNumber: columnNumber,
+    startRowNumber: rowNumber,
+    endRowNumber: rowNumber,
+  };
+}
+
+function getRangeSizePx(worksheet: ExcelJS.Worksheet, range: CellRange) {
+  let width = 0;
+  let height = 0;
+
+  for (
+    let columnNumber = range.startColumnNumber;
+    columnNumber <= range.endColumnNumber;
+    columnNumber += 1
+  ) {
+    width += getColumnWidthPx(worksheet.getColumn(columnNumber).width);
+  }
+
+  for (
+    let rowNumber = range.startRowNumber;
+    rowNumber <= range.endRowNumber;
+    rowNumber += 1
+  ) {
+    height += getRowHeightPx(worksheet.getRow(rowNumber).height);
+  }
+
+  return { width, height };
+}
+
+function getColumnCoordinateFromOffset(
+  worksheet: ExcelJS.Worksheet,
+  range: CellRange,
+  offsetPx: number,
+) {
+  let remainingOffset = Math.max(0, offsetPx);
+
+  for (
+    let columnNumber = range.startColumnNumber;
+    columnNumber <= range.endColumnNumber;
+    columnNumber += 1
+  ) {
+    const columnWidth = Math.max(
+      1,
+      getColumnWidthPx(worksheet.getColumn(columnNumber).width),
+    );
+
+    if (remainingOffset <= columnWidth) {
+      return columnNumber - 1 + remainingOffset / columnWidth;
+    }
+
+    remainingOffset -= columnWidth;
+  }
+
+  return range.endColumnNumber - IMAGE_CELL_PADDING_PX / Math.max(
+    1,
+    getColumnWidthPx(worksheet.getColumn(range.endColumnNumber).width),
+  );
+}
+
+function getRowCoordinateFromOffset(
+  worksheet: ExcelJS.Worksheet,
+  range: CellRange,
+  offsetPx: number,
+) {
+  let remainingOffset = Math.max(0, offsetPx);
+
+  for (
+    let rowNumber = range.startRowNumber;
+    rowNumber <= range.endRowNumber;
+    rowNumber += 1
+  ) {
+    const rowHeight = Math.max(
+      1,
+      getRowHeightPx(worksheet.getRow(rowNumber).height),
+    );
+
+    if (remainingOffset <= rowHeight) {
+      return rowNumber - 1 + remainingOffset / rowHeight;
+    }
+
+    remainingOffset -= rowHeight;
+  }
+
+  return range.endRowNumber - IMAGE_CELL_PADDING_PX / Math.max(
+    1,
+    getRowHeightPx(worksheet.getRow(range.endRowNumber).height),
+  );
+}
+
+function getCenteredImagePosition(
+  worksheet: ExcelJS.Worksheet,
+  rowNumber: number,
+  columnNumber: number,
+  imageInfo: ImageInfo,
+): Parameters<ExcelJS.Worksheet["addImage"]>[1] {
+  const range = getCellRange(worksheet, rowNumber, columnNumber);
+  const rangeSize = getRangeSizePx(worksheet, range);
+  const availableWidth = Math.max(
+    1,
+    rangeSize.width - IMAGE_CELL_LEFT_PADDING_PX - IMAGE_CELL_PADDING_PX,
+  );
+  const availableHeight = Math.max(1, rangeSize.height - IMAGE_CELL_PADDING_PX * 2);
+  const scale = Math.min(
+    availableWidth / imageInfo.width,
+    availableHeight / imageInfo.height,
+  );
+  const width = Math.max(1, imageInfo.width * scale);
+  const height = Math.max(1, imageInfo.height * scale);
+  const columnOffsetPx = Math.max(
+    IMAGE_CELL_LEFT_PADDING_PX,
+    IMAGE_CELL_LEFT_PADDING_PX + (availableWidth - width) / 2,
+  );
+  const rowOffsetPx = Math.max(IMAGE_CELL_PADDING_PX, (rangeSize.height - height) / 2);
+
+  return {
+    editAs: "oneCell" as const,
+    tl: {
+      col: getColumnCoordinateFromOffset(worksheet, range, columnOffsetPx),
+      row: getRowCoordinateFromOffset(worksheet, range, rowOffsetPx),
+    },
+    ext: { width, height },
+  } as Parameters<ExcelJS.Worksheet["addImage"]>[1];
+}
+
 function setScalarField(
   workbook: ExcelJS.Workbook,
   label: string,
@@ -292,18 +626,11 @@ async function setProductImage(
   const response = await fetch(imageUrl);
   if (!response.ok) return;
 
-  const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
-  const extension = contentType.includes("png")
-    ? "png"
-    : contentType.includes("jpg") || contentType.includes("jpeg")
-      ? "jpeg"
-      : contentType.includes("gif")
-        ? "gif"
-        : undefined;
-
-  const imageBuffer = Buffer.from(
-    await response.arrayBuffer(),
-  ) as unknown as ExcelBuffer;
+  const imageBuffer = Buffer.from(await response.arrayBuffer());
+  const image = await getExcelImage(
+    response.headers.get("content-type")?.toLowerCase() ?? "",
+    imageBuffer,
+  );
 
   workbook.worksheets.forEach((worksheet) => {
     worksheet.eachRow((row) => {
@@ -324,7 +651,7 @@ async function setProductImage(
           16,
         );
 
-        if (!extension) {
+        if (!image) {
           target.value = {
             text: "产品图片",
             hyperlink: imageUrl,
@@ -333,13 +660,13 @@ async function setProductImage(
         }
 
         const imageId = workbook.addImage({
-          buffer: imageBuffer,
-          extension,
+          buffer: image.buffer,
+          extension: image.info.extension,
         });
-        worksheet.addImage(imageId, {
-          tl: { col: targetColumn - 1, row: targetRow - 1 },
-          ext: { width: 92, height: 72 },
-        });
+        worksheet.addImage(
+          imageId,
+          getCenteredImagePosition(worksheet, targetRow, targetColumn, image.info),
+        );
       });
     });
   });
