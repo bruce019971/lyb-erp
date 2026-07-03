@@ -347,7 +347,11 @@ export function getShipmentColumns(
         if (record.is_relabel === "是") {
           const deliveryTimes = record.relabel_delivery_times ?? [];
 
-          return deliveryTimes.length > 0 ? (
+          if (deliveryTimes.length === 0) {
+            return renderNowrapShipmentDate(record.appointment_time);
+          }
+
+          return (
             <div className="flex flex-col gap-1">
               {deliveryTimes.map((value) => (
                 <Typography.Text
@@ -358,8 +362,6 @@ export function getShipmentColumns(
                 </Typography.Text>
               ))}
             </div>
-          ) : (
-            ""
           );
         }
 
