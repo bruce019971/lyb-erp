@@ -1,15 +1,23 @@
 "use client";
 
-import { DownloadOutlined, PlusOutlined } from "@ant-design/icons";
+import { CopyOutlined, DownloadOutlined, PlusOutlined } from "@ant-design/icons";
 import type { ActionType } from "@ant-design/pro-components";
 import { ProTable } from "@ant-design/pro-components";
 import type { FormInstance } from "antd";
 import { App, Button, Tooltip, Typography } from "antd";
 import type { Key, MutableRefObject } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-import type { ProductFilterOption, ProductRecord } from "../_lib/products";
-import { requestProductRecords, deleteProductRecord } from "../_lib/products-request";
+import type {
+  ProductCreateValues,
+  ProductFilterOption,
+  ProductRecord,
+} from "../_lib/products";
+import {
+  createProductRecord,
+  requestProductRecords,
+  deleteProductRecord,
+} from "../_lib/products-request";
 import { getProductColumns } from "./products-columns";
 
 type ProductsTableProps = {
@@ -37,9 +45,47 @@ export default function ProductsTable({
   const [selectedProduct, setSelectedProduct] = useState<ProductRecord | null>(
     null,
   );
+  const [copyingProduct, setCopyingProduct] = useState(false);
   const [downloadingLabel, setDownloadingLabel] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
+  const [reloadSignal, setReloadSignal] = useState(0);
   const { message, modal } = App.useApp();
+
+  useEffect(() => {
+    if (reloadSignal === 0) return;
+
+    actionRef?.current?.reload();
+  }, [actionRef, reloadSignal]);
+
+  function buildCopiedProductValues(
+    product: ProductRecord,
+  ): ProductCreateValues | null {
+    const productName = product.product_name?.trim();
+    if (!productName) return null;
+
+    return {
+      product_name: productName,
+      product_english_name: product.product_english_name,
+      sku: product.sku,
+      store_name: product.store_name,
+      product_image_url: product.product_image_url,
+      product_parameters: product.product_parameters,
+      packing_list: product.packing_list,
+      color_box_size: product.color_box_size,
+      single_gross_weight: product.single_gross_weight,
+      product_unit_price: product.product_unit_price,
+      carton_spec: product.carton_spec,
+      pcs_per_carton: product.pcs_per_carton,
+      customs_code: product.customs_code,
+      product_category: product.product_category,
+      product_usage: product.product_usage,
+      product_attribute: product.product_attribute,
+      product_material: product.product_material,
+      product_id: null,
+      ml_code: null,
+      product_label_url: null,
+    };
+  }
 
   function buildLabelFilename(product: ProductRecord) {
     const safePart = (value?: string | null) =>
@@ -86,6 +132,32 @@ export default function ProductsTable({
     }
   }
 
+  async function handleCopyProduct() {
+    if (!selectedProduct) {
+      message.warning("请先选择一个产品");
+      return;
+    }
+
+    const values = buildCopiedProductValues(selectedProduct);
+    if (!values) {
+      message.error("当前产品缺少产品名称，不能复制");
+      return;
+    }
+
+    try {
+      setCopyingProduct(true);
+      await createProductRecord(values);
+      message.success("复制成功");
+      setReloadSignal((value) => value + 1);
+    } catch (error) {
+      const description =
+        error instanceof Error ? error.message : "复制产品失败";
+      message.error(description);
+    } finally {
+      setCopyingProduct(false);
+    }
+  }
+
   function handleDelete(record: ProductRecord) {
     modal.confirm({
       title: "确认删除",
@@ -97,7 +169,7 @@ export default function ProductsTable({
         try {
           await deleteProductRecord(record.id, record.product_name ?? "");
           message.success("删除成功");
-          actionRef?.current?.reload();
+          setReloadSignal((value) => value + 1);
         } catch (error) {
           const description =
             error instanceof Error ? error.message : "删除失败";
@@ -156,6 +228,18 @@ export default function ProductsTable({
         const actions = [
           <Tooltip key="create" title="新增产品">
             <Button type="text" icon={<PlusOutlined />} onClick={onCreate} />
+          </Tooltip>,
+          <Tooltip
+            key="copy"
+            title={selectedProduct ? "复制产品" : "请先选择一个产品"}
+          >
+            <Button
+              type="text"
+              icon={<CopyOutlined />}
+              loading={copyingProduct}
+              disabled={!selectedProduct}
+              onClick={handleCopyProduct}
+            />
           </Tooltip>,
         ];
 
