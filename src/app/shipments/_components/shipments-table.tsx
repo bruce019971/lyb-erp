@@ -161,6 +161,7 @@ type ShipmentSummaryColumnKey =
   | "updated_at";
 
 const SHIPMENT_SUMMARY_COLUMN_KEYS: ShipmentSummaryColumnKey[] = [
+  "created_at",
   "shipment_no",
   "product_name",
   "order_store",
@@ -174,7 +175,6 @@ const SHIPMENT_SUMMARY_COLUMN_KEYS: ShipmentSummaryColumnKey[] = [
   "delivery_status",
   "goods_value",
   "remark",
-  "created_at",
   "updated_at",
 ];
 

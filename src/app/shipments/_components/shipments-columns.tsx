@@ -17,33 +17,6 @@ import type { ProductShipmentOption } from "../../products/_lib/products";
 import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
 import type { StoreOption } from "../../stores/_lib/stores";
 
-function openProductPage(
-  productName?: string | null,
-  storeName?: string | null,
-  logisticsProvider?: string | null,
-) {
-  const params = new URLSearchParams();
-
-  const trimmedProductName = productName?.trim();
-  const trimmedStoreName = storeName?.trim();
-  const trimmedLogisticsProvider = logisticsProvider?.trim();
-
-  if (trimmedProductName) {
-    params.set("product_name", trimmedProductName);
-  }
-
-  if (trimmedStoreName) {
-    params.set("store_name", trimmedStoreName);
-  }
-
-  if (trimmedLogisticsProvider) {
-    params.set("logistics_provider", trimmedLogisticsProvider);
-  }
-
-  const href = params.size ? `/products?${params.toString()}` : "/products";
-  window.history.pushState(null, "", href);
-}
-
 function renderShipmentSearchTagsInput() {
   return (
     <Select
@@ -65,6 +38,39 @@ function renderNowrapShipmentDate(value?: string | null) {
       {formatShipmentDate(value)}
     </Typography.Text>
   );
+}
+
+function safeFilePart(value?: string | null) {
+  return value?.trim().replace(/[\\/:*?"<>|]+/g, "_") ?? "";
+}
+
+function buildProductLabelFilename(record: ShipmentRecord) {
+  const productName = safeFilePart(record.product_name) || "产品";
+  const mlCode = safeFilePart(record.ml_code) || "MLCode";
+  const storeCode = safeFilePart(record.store_code) || "StoreCode";
+
+  return `${productName}产品标签_${mlCode}_${storeCode}`;
+}
+
+async function downloadProductLabel(record: ShipmentRecord) {
+  const productLabelUrl = record.product_label_url?.trim();
+  if (!productLabelUrl) return;
+
+  const response = await fetch(productLabelUrl);
+  if (!response.ok) return;
+
+  const blob = await response.blob();
+  const objectUrl = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const suffix = productLabelUrl.split(".").pop()?.split("?")[0] ?? "";
+  const filenameBase = buildProductLabelFilename(record);
+
+  link.href = objectUrl;
+  link.download = suffix ? `${filenameBase}.${suffix}` : filenameBase;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(objectUrl);
 }
 
 export function getShipmentColumns(
@@ -136,8 +142,31 @@ export function getShipmentColumns(
       .filter((item) => item.product_name?.trim())
       .map((item) => [item.product_name!.trim(), item.store_name]),
   );
+  const productMetaMap = new Map(
+    productOptions
+      .filter((item) => item.product_name?.trim())
+      .map((item) => {
+        const productName = item.product_name!.trim();
+        const storeName = item.store_name?.trim() ?? "";
+
+        return [`${productName}\u0000${storeName}`, item];
+      }),
+  );
+  const productMetaFallbackMap = new Map(
+    productOptions
+      .filter((item) => item.product_name?.trim())
+      .map((item) => [item.product_name!.trim(), item]),
+  );
 
   return [
+    {
+      title: "创建时间",
+      dataIndex: "created_at",
+      valueType: "dateRange",
+      width: 88,
+      hideInSearch: true,
+      render: (_, record) => renderNowrapShipmentDate(record.created_at),
+    },
     {
       title: "货件号",
       dataIndex: "shipment_no",
@@ -206,12 +235,15 @@ export function getShipmentColumns(
       },
     },
     {
-      title: "产品名称",
+      title: "产品名称/ML Code",
       dataIndex: "product_name",
-      width: 104,
+      width: 150,
       fixed: "left",
       ellipsis: true,
       valueType: "select",
+      formItemProps: {
+        label: "产品名称",
+      },
       fieldProps: {
         mode: "multiple",
         showSearch: true,
@@ -222,18 +254,60 @@ export function getShipmentColumns(
       render: (_, record) => {
         const productName = record.product_name?.trim();
         const storeName = record.order_store?.trim();
-        const logisticsProvider = record.logistics_provider?.trim();
+        const productMeta =
+          productName && storeName
+            ? productMetaMap.get(`${productName}\u0000${storeName}`)
+            : undefined;
+        const mlCode =
+          record.ml_code?.trim() ||
+          productMeta?.ml_code?.trim() ||
+          (productName
+            ? productMetaFallbackMap.get(productName)?.ml_code?.trim()
+            : undefined);
+        const productLabelUrl =
+          record.product_label_url?.trim() ||
+          productMeta?.product_label_url?.trim() ||
+          (productName
+            ? productMetaFallbackMap.get(productName)?.product_label_url?.trim()
+            : undefined);
 
-        return productName ? (
-          <Typography.Link
-            onClick={() =>
-              openProductPage(productName, storeName, logisticsProvider)
-            }
-          >
-            {productName}
-          </Typography.Link>
+        const productNameNode = productName ? (
+          <Typography.Text>{productName}</Typography.Text>
         ) : (
-          "-"
+          <Typography.Text type="secondary">-</Typography.Text>
+        );
+
+        const mlCodeNode =
+          mlCode && productLabelUrl ? (
+            <Typography.Link
+              className="whitespace-nowrap"
+              copyable={{ text: mlCode }}
+              onClick={(event) => {
+                event.stopPropagation();
+                void downloadProductLabel({
+                  ...record,
+                  ml_code: mlCode,
+                  product_label_url: productLabelUrl,
+                });
+              }}
+            >
+              {mlCode}
+            </Typography.Link>
+          ) : (
+            <Typography.Text
+              className="whitespace-nowrap"
+              copyable={mlCode ? { text: mlCode } : false}
+              type={mlCode ? undefined : "secondary"}
+            >
+              {mlCode || "-"}
+            </Typography.Text>
+          );
+
+        return (
+          <div className="flex min-w-[130px] flex-col gap-1">
+            <div className="truncate">{productNameNode}</div>
+            {mlCodeNode}
+          </div>
         );
       },
     },
@@ -485,14 +559,6 @@ export function getShipmentColumns(
       ellipsis: true,
       search: false,
       render: (_, record) => record.remark ?? "",
-    },
-    {
-      title: "创建时间",
-      dataIndex: "created_at",
-      valueType: "dateRange",
-      width: 88,
-      hideInSearch: true,
-      render: (_, record) => renderNowrapShipmentDate(record.created_at),
     },
     {
       title: "更新时间",

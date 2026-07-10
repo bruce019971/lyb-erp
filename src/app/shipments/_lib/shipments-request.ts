@@ -176,6 +176,95 @@ function toFiniteNumber(value: unknown) {
   return 0;
 }
 
+function getProductKey(productName?: string | null, storeName?: string | null) {
+  return `${productName?.trim() ?? ""}\u0000${storeName?.trim() ?? ""}`;
+}
+
+async function attachProductMlCodes(records: ShipmentRecord[]) {
+  const productNames = Array.from(
+    new Set(
+      records
+        .map((item) => item.product_name?.trim())
+        .filter((item): item is string => Boolean(item)),
+    ),
+  );
+
+  if (productNames.length === 0) return records;
+
+  const { data, error } = await supabase
+    .from("products")
+    .select("product_name, store_name, ml_code, product_label_url")
+    .in("product_name", productNames);
+
+  if (error) {
+    message.error(error.message);
+    return records;
+  }
+
+  const productRows = (data ?? []) as Array<{
+    product_name: string | null;
+    store_name: string | null;
+    ml_code: string | null;
+    product_label_url: string | null;
+  }>;
+  const storeNames = Array.from(
+    new Set(
+      productRows
+        .map((item) => item.store_name?.trim())
+        .filter((item): item is string => Boolean(item)),
+    ),
+  );
+  const storeCodeMap = new Map<string, string | null>();
+
+  if (storeNames.length > 0) {
+    const { data: storeData, error: storeError } = await supabase
+      .from("stores")
+      .select("seller_name, seller_code")
+      .in("seller_name", storeNames);
+
+    if (storeError) {
+      message.error(storeError.message);
+    } else {
+      ((storeData ?? []) as Array<{
+        seller_name: string | null;
+        seller_code: string | null;
+      }>).forEach((item) => {
+        const storeName = item.seller_name?.trim();
+        if (!storeName) return;
+
+        storeCodeMap.set(storeName, item.seller_code);
+      });
+    }
+  }
+  const productMap = new Map(
+    productRows
+      .filter((item) => item.product_name?.trim())
+      .map((item) => [getProductKey(item.product_name, item.store_name), item]),
+  );
+  const productFallbackMap = new Map(
+    productRows
+      .filter((item) => item.product_name?.trim())
+      .map((item) => [item.product_name!.trim(), item]),
+  );
+
+  return records.map((record) => {
+    const productName = record.product_name?.trim();
+    const product =
+      productMap.get(getProductKey(productName, record.order_store)) ||
+      (productName ? productFallbackMap.get(productName) : undefined);
+
+    return {
+      ...record,
+      ml_code: product?.ml_code ?? record.ml_code ?? null,
+      product_label_url:
+        product?.product_label_url ?? record.product_label_url ?? null,
+      store_code: product?.store_name
+        ? (storeCodeMap.get(product.store_name.trim()) ?? record.store_code ?? null)
+        : (record.store_code ?? null),
+    };
+  });
+}
+
 export async function requestShipmentRecords(
   params: ShipmentRequestParams,
   sorter: Record<string, SortOrder>,
@@ -279,7 +368,9 @@ export async function requestShipmentRecords(
     };
   }
 
-  const shipmentRecords = (data ?? []) as ShipmentRecord[];
+  const shipmentRecords = await attachProductMlCodes(
+    (data ?? []) as ShipmentRecord[],
+  );
   const relabelShipmentNos = Array.from(
     new Set(
       shipmentRecords
