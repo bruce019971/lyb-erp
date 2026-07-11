@@ -26,6 +26,8 @@ import {
   clearShipmentFileUrls,
   type ShipmentFileUrlField,
   deleteShipmentRecord,
+  deleteShipmentRecords,
+  ShipmentBatchDeleteRequiresForceError,
   generateShipmentLogisticsBoxMark,
   generateShipmentSaleasyLogisticsBoxMark,
   generateShipmentRishenghuiOrderInvoice,
@@ -68,6 +70,7 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
     ShipmentRecord | undefined
   >(undefined);
   const [deletingShipmentId, setDeletingShipmentId] = useState<string | null>(null);
+  const [batchDeletingShipments, setBatchDeletingShipments] = useState(false);
   const [editingDeliveryStatusId, setEditingDeliveryStatusId] = useState<
     string | null
   >(null);
@@ -303,6 +306,73 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
           throw error;
         } finally {
           setDeletingShipmentId(null);
+        }
+      },
+    });
+  }
+
+  function handleBatchDelete(ids: string[]) {
+    if (ids.length === 0) {
+      messageApi.warning("请先选择需要删除的货件");
+      return;
+    }
+
+    async function runBatchDelete(force = false) {
+      try {
+        setBatchDeletingShipments(true);
+        await deleteShipmentRecords(ids, { force });
+        messageApi.success(force ? "货件已强制删除" : "货件批量删除成功");
+        tableActionRef.current?.reload();
+      } catch (error) {
+        if (!force && error instanceof ShipmentBatchDeleteRequiresForceError) {
+          throw error;
+        }
+
+        const description =
+          error instanceof Error ? error.message : "请检查数据库权限或字段内容";
+        messageApi.error(`货件批量删除失败：${description}`);
+        throw error;
+      } finally {
+        setBatchDeletingShipments(false);
+      }
+    }
+
+    function showForceDeleteConfirm(shipmentNos: string[]) {
+      const shipmentNoText = shipmentNos.length
+        ? shipmentNos.join("、")
+        : "选中货件";
+
+      modalApi.confirm({
+        title: "强制删除货件",
+        icon: <ExclamationCircleFilled className="!text-red-500" />,
+        content: `以下货件已有运单编号：${shipmentNoText}。是否确认强制删除？`,
+        okText: "强制删除",
+        cancelText: "取消",
+        okButtonProps: { danger: true },
+        centered: true,
+        onOk: async () => {
+          await runBatchDelete(true);
+        },
+      });
+    }
+
+    modalApi.confirm({
+      title: "提示",
+      icon: <ExclamationCircleFilled className="!text-amber-500" />,
+      content: `此操作将永久删除选中的 ${ids.length} 个货件，是否继续？`,
+      okText: "确定",
+      cancelText: "取消",
+      centered: true,
+      onOk: async () => {
+        try {
+          await runBatchDelete();
+        } catch (error) {
+          if (error instanceof ShipmentBatchDeleteRequiresForceError) {
+            showForceDeleteConfirm(error.shipmentNos);
+            return;
+          }
+
+          throw error;
         }
       },
     });
@@ -603,6 +673,7 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
                 formRef={searchFormRef}
                 onCreate={() => setCreateOpen(true)}
                 onBatchCalculateGoodsValue={handleBatchCalculateGoodsValue}
+                onBatchDelete={handleBatchDelete}
                 onClearCartonLabels={(ids) =>
                   handleClearShipmentFiles(ids, "carton_label_url")
                 }
@@ -665,6 +736,7 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
                 isRelabelEditing={isRelabelEditing}
                 isRelabelUpdating={isRelabelUpdating}
                 isDeleting={isDeleting}
+                isBatchDeleting={batchDeletingShipments}
                 isGeneratingCartonLabel={isGeneratingCartonLabel}
                 isGeneratingLogisticsBoxMark={isGeneratingLogisticsBoxMark}
                 isSubmittingLogisticsOrder={isSubmittingLogisticsOrder}

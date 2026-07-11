@@ -3,14 +3,16 @@
 import {
   BarcodeOutlined,
   CalculatorOutlined,
+  DeleteOutlined,
   FilePdfOutlined,
   KeyOutlined,
   PlusOutlined,
+  QuestionCircleOutlined,
 } from "@ant-design/icons";
 import type { ActionType } from "@ant-design/pro-components";
 import { ProTable } from "@ant-design/pro-components";
 import type { FormInstance } from "antd";
-import { App, Button, Table, Tooltip } from "antd";
+import { App, Button, Space, Switch, Table, Tooltip, Typography } from "antd";
 import type { Key } from "react";
 import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -39,6 +41,7 @@ type ShipmentsTableProps = {
   formRef?: MutableRefObject<FormInstance | undefined>;
   onCreate: () => void;
   onBatchCalculateGoodsValue: (ids: string[]) => void;
+  onBatchDelete: (ids: string[]) => void;
   onClearCartonLabels: (ids: string[]) => void;
   onClearLogisticsBoxMarks: (ids: string[]) => void;
   onOpenRishenghuiAuth: () => void;
@@ -58,6 +61,7 @@ type ShipmentsTableProps = {
   isRelabelEditing: (record: ShipmentRecord) => boolean;
   isRelabelUpdating: (record: ShipmentRecord) => boolean;
   isDeleting: (record: ShipmentRecord) => boolean;
+  isBatchDeleting: boolean;
   isGeneratingCartonLabel: (record: ShipmentRecord) => boolean;
   isGeneratingLogisticsBoxMark: (record: ShipmentRecord) => boolean;
   isSubmittingLogisticsOrder: (record: ShipmentRecord) => boolean;
@@ -143,6 +147,16 @@ function normalizeCreatedShipmentRecord(record: ShipmentRecord): ShipmentRecord 
   };
 }
 
+function buildRequestParams(
+  params: Record<string, unknown>,
+  longTermInventoryOnly: boolean,
+) {
+  return {
+    ...params,
+    long_term_inventory: longTermInventoryOnly || undefined,
+  };
+}
+
 type ShipmentSummaryColumnKey =
   | "shipment_no"
   | "product_name"
@@ -194,6 +208,7 @@ export default function ShipmentsTable({
   formRef,
   onCreate,
   onBatchCalculateGoodsValue,
+  onBatchDelete,
   onClearCartonLabels,
   onClearLogisticsBoxMarks,
   onOpenRishenghuiAuth,
@@ -213,6 +228,7 @@ export default function ShipmentsTable({
   isRelabelEditing,
   isRelabelUpdating,
   isDeleting,
+  isBatchDeleting,
   isGeneratingCartonLabel,
   isGeneratingLogisticsBoxMark,
   isSubmittingLogisticsOrder,
@@ -255,6 +271,7 @@ export default function ShipmentsTable({
   const [summary, setSummary] = useState<ShipmentSummary | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [searchCollapsed, setSearchCollapsed] = useState(true);
+  const [longTermInventoryOnly, setLongTermInventoryOnly] = useState(false);
   const [columnsStateMap, setColumnsStateMap] = useState<ShipmentColumnsState>(
     () => readShipmentColumnsState(),
   );
@@ -280,10 +297,14 @@ export default function ShipmentsTable({
 
       try {
         setSummaryLoading(true);
+        const requestParams = buildRequestParams(
+          params,
+          longTermInventoryOnly,
+        );
 
         const [result, summaryResult] = await Promise.all([
-          requestShipmentRecords(params, {}, {}),
-          requestShipmentSummary(params),
+          requestShipmentRecords(requestParams, {}, {}),
+          requestShipmentSummary(requestParams),
         ]);
 
         setSummary(summaryResult);
@@ -297,7 +318,7 @@ export default function ShipmentsTable({
         setSummaryLoading(false);
       }
     },
-    [],
+    [longTermInventoryOnly],
   );
 
   const reloadFirstPage = useCallback(async () => {
@@ -309,7 +330,7 @@ export default function ShipmentsTable({
       hasActiveSearchValue,
     );
 
-    if (hasActiveSearch) return false;
+    if (hasActiveSearch || longTermInventoryOnly) return false;
 
     const normalizedRecord = normalizeCreatedShipmentRecord(record);
 
@@ -345,7 +366,7 @@ export default function ShipmentsTable({
     setSelectedRowKeys([]);
 
     return true;
-  }, []);
+  }, [longTermInventoryOnly]);
 
   const handleGenerateCartonLabel = useCallback(
     async (record: ShipmentRecord) => {
@@ -484,6 +505,19 @@ export default function ShipmentsTable({
       formRef={formRef}
       rowKey="id"
       size="small"
+      headerTitle={
+        <Space size={8}>
+          <Typography.Text>长期库存</Typography.Text>
+          <Tooltip title="到仓25天及以上没有送仓的货件">
+            <QuestionCircleOutlined className="text-slate-400" />
+          </Tooltip>
+          <Switch
+            size="small"
+            checked={longTermInventoryOnly}
+            onChange={setLongTermInventoryOnly}
+          />
+        </Space>
+      }
       columns={columns}
       dataSource={dataSource}
       loading={loading}
@@ -614,6 +648,19 @@ export default function ShipmentsTable({
               disabled={!hasSelectedRows}
               icon={<CalculatorOutlined />}
               onClick={() => onBatchCalculateGoodsValue(selectedIds)}
+            />
+          </Tooltip>,
+          <Tooltip
+            key="batch-delete"
+            title={hasSelectedRows ? "删除货件" : "请先选择需要删除的货件"}
+          >
+            <Button
+              type="text"
+              danger
+              disabled={!hasSelectedRows}
+              loading={isBatchDeleting}
+              icon={<DeleteOutlined />}
+              onClick={() => onBatchDelete(selectedIds)}
             />
           </Tooltip>,
           <Tooltip

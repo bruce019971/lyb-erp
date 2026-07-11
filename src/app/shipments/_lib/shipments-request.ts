@@ -17,6 +17,7 @@ type ShipmentRequestParams = {
   current?: number;
   pageSize?: number;
   keyword?: string;
+  long_term_inventory?: boolean;
 } & Record<string, unknown>;
 
 type DateLikeValue = {
@@ -82,6 +83,17 @@ function normalizeDateRangeValue(
   return boundary === "start"
     ? `${dateValue}T00:00:00`
     : `${dateValue}T23:59:59.999`;
+}
+
+function getLongTermInventoryCutoffDate() {
+  const date = new Date();
+  date.setDate(date.getDate() - 25);
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
 }
 
 function applyShipmentSearchParams<TQuery extends ShipmentSearchQuery>(
@@ -162,6 +174,13 @@ function applyShipmentSearchParams<TQuery extends ShipmentSearchQuery>(
     if (normalizedStart) nextQuery = nextQuery.gte(field, normalizedStart);
     if (normalizedEnd) nextQuery = nextQuery.lte(field, normalizedEnd);
   });
+
+  if (params.long_term_inventory === true) {
+    nextQuery = nextQuery
+      .not("overseas_warehouse_arrived_at", "is", null)
+      .lte("overseas_warehouse_arrived_at", getLongTermInventoryCutoffDate())
+      .or("delivery_status.is.null,delivery_status.neq.是");
+  }
 
   return nextQuery as TQuery;
 }
@@ -652,20 +671,40 @@ export async function deleteShipmentRecord(id: string) {
   }
 }
 
-export async function deleteShipmentRecords(ids: string[]) {
+export class ShipmentBatchDeleteRequiresForceError extends Error {
+  shipmentNos: string[];
+
+  constructor(message: string, shipmentNos: string[]) {
+    super(message);
+    this.name = "ShipmentBatchDeleteRequiresForceError";
+    this.shipmentNos = shipmentNos;
+  }
+}
+
+export async function deleteShipmentRecords(
+  ids: string[],
+  options: { force?: boolean } = {},
+) {
   const response = await fetch("/api/shipments/batch-delete", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ ids }),
+    body: JSON.stringify({ ids, force: options.force === true }),
   });
 
   const payload = (await response.json().catch(() => null)) as
-    | { error?: string }
+    | { code?: string; error?: string; shipmentNos?: string[] }
     | null;
 
   if (!response.ok) {
+    if (payload?.code === "SHIPMENT_TRACKING_NO_EXISTS") {
+      throw new ShipmentBatchDeleteRequiresForceError(
+        payload.error || "存在已有运单编号的货件",
+        Array.isArray(payload.shipmentNos) ? payload.shipmentNos : [],
+      );
+    }
+
     throw new Error(payload?.error || "批量删除失败");
   }
 }
