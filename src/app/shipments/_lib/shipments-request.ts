@@ -17,6 +17,7 @@ type ShipmentRequestParams = {
   current?: number;
   pageSize?: number;
   keyword?: string;
+  long_term_inventory?: boolean;
 } & Record<string, unknown>;
 
 type DateLikeValue = {
@@ -82,6 +83,17 @@ function normalizeDateRangeValue(
   return boundary === "start"
     ? `${dateValue}T00:00:00`
     : `${dateValue}T23:59:59.999`;
+}
+
+function getLongTermInventoryCutoffDate() {
+  const date = new Date();
+  date.setDate(date.getDate() - 25);
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
 }
 
 function applyShipmentSearchParams<TQuery extends ShipmentSearchQuery>(
@@ -163,6 +175,13 @@ function applyShipmentSearchParams<TQuery extends ShipmentSearchQuery>(
     if (normalizedEnd) nextQuery = nextQuery.lte(field, normalizedEnd);
   });
 
+  if (params.long_term_inventory === true) {
+    nextQuery = nextQuery
+      .not("overseas_warehouse_arrived_at", "is", null)
+      .lte("overseas_warehouse_arrived_at", getLongTermInventoryCutoffDate())
+      .or("delivery_status.is.null,delivery_status.neq.是");
+  }
+
   return nextQuery as TQuery;
 }
 
@@ -174,6 +193,95 @@ function toFiniteNumber(value: unknown) {
   }
 
   return 0;
+}
+
+function getProductKey(productName?: string | null, storeName?: string | null) {
+  return `${productName?.trim() ?? ""}\u0000${storeName?.trim() ?? ""}`;
+}
+
+async function attachProductMlCodes(records: ShipmentRecord[]) {
+  const productNames = Array.from(
+    new Set(
+      records
+        .map((item) => item.product_name?.trim())
+        .filter((item): item is string => Boolean(item)),
+    ),
+  );
+
+  if (productNames.length === 0) return records;
+
+  const { data, error } = await supabase
+    .from("products")
+    .select("product_name, store_name, ml_code, product_label_url")
+    .in("product_name", productNames);
+
+  if (error) {
+    message.error(error.message);
+    return records;
+  }
+
+  const productRows = (data ?? []) as Array<{
+    product_name: string | null;
+    store_name: string | null;
+    ml_code: string | null;
+    product_label_url: string | null;
+  }>;
+  const storeNames = Array.from(
+    new Set(
+      productRows
+        .map((item) => item.store_name?.trim())
+        .filter((item): item is string => Boolean(item)),
+    ),
+  );
+  const storeCodeMap = new Map<string, string | null>();
+
+  if (storeNames.length > 0) {
+    const { data: storeData, error: storeError } = await supabase
+      .from("stores")
+      .select("seller_name, seller_code")
+      .in("seller_name", storeNames);
+
+    if (storeError) {
+      message.error(storeError.message);
+    } else {
+      ((storeData ?? []) as Array<{
+        seller_name: string | null;
+        seller_code: string | null;
+      }>).forEach((item) => {
+        const storeName = item.seller_name?.trim();
+        if (!storeName) return;
+
+        storeCodeMap.set(storeName, item.seller_code);
+      });
+    }
+  }
+  const productMap = new Map(
+    productRows
+      .filter((item) => item.product_name?.trim())
+      .map((item) => [getProductKey(item.product_name, item.store_name), item]),
+  );
+  const productFallbackMap = new Map(
+    productRows
+      .filter((item) => item.product_name?.trim())
+      .map((item) => [item.product_name!.trim(), item]),
+  );
+
+  return records.map((record) => {
+    const productName = record.product_name?.trim();
+    const product =
+      productMap.get(getProductKey(productName, record.order_store)) ||
+      (productName ? productFallbackMap.get(productName) : undefined);
+
+    return {
+      ...record,
+      ml_code: product?.ml_code ?? record.ml_code ?? null,
+      product_label_url:
+        product?.product_label_url ?? record.product_label_url ?? null,
+      store_code: product?.store_name
+        ? (storeCodeMap.get(product.store_name.trim()) ?? record.store_code ?? null)
+        : (record.store_code ?? null),
+    };
+  });
 }
 
 export async function requestShipmentRecords(
@@ -279,7 +387,9 @@ export async function requestShipmentRecords(
     };
   }
 
-  const shipmentRecords = (data ?? []) as ShipmentRecord[];
+  const shipmentRecords = await attachProductMlCodes(
+    (data ?? []) as ShipmentRecord[],
+  );
   const relabelShipmentNos = Array.from(
     new Set(
       shipmentRecords
@@ -561,20 +671,40 @@ export async function deleteShipmentRecord(id: string) {
   }
 }
 
-export async function deleteShipmentRecords(ids: string[]) {
+export class ShipmentBatchDeleteRequiresForceError extends Error {
+  shipmentNos: string[];
+
+  constructor(message: string, shipmentNos: string[]) {
+    super(message);
+    this.name = "ShipmentBatchDeleteRequiresForceError";
+    this.shipmentNos = shipmentNos;
+  }
+}
+
+export async function deleteShipmentRecords(
+  ids: string[],
+  options: { force?: boolean } = {},
+) {
   const response = await fetch("/api/shipments/batch-delete", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ ids }),
+    body: JSON.stringify({ ids, force: options.force === true }),
   });
 
   const payload = (await response.json().catch(() => null)) as
-    | { error?: string }
+    | { code?: string; error?: string; shipmentNos?: string[] }
     | null;
 
   if (!response.ok) {
+    if (payload?.code === "SHIPMENT_TRACKING_NO_EXISTS") {
+      throw new ShipmentBatchDeleteRequiresForceError(
+        payload.error || "存在已有运单编号的货件",
+        Array.isArray(payload.shipmentNos) ? payload.shipmentNos : [],
+      );
+    }
+
     throw new Error(payload?.error || "批量删除失败");
   }
 }

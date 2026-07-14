@@ -55,10 +55,11 @@ async function verifyOperator() {
 export async function POST(request: Request) {
   try {
     await verifyOperator();
-    const body = (await request.json()) as { ids?: string[] };
+    const body = (await request.json()) as { ids?: string[]; force?: boolean };
     const ids = Array.isArray(body.ids)
       ? body.ids.map((item) => item.trim()).filter(Boolean)
       : [];
+    const force = body.force === true;
 
     if (!ids.length) {
       throw new Error("请选择需要删除的货件");
@@ -86,9 +87,14 @@ export async function POST(request: Request) {
           : item.id,
       );
 
-    if (blockedShipmentNos.length > 0) {
-      throw new Error(
-        `已有运单编号的货件不允许删除：${blockedShipmentNos.join("、")}`,
+    if (blockedShipmentNos.length > 0 && !force) {
+      return NextResponse.json(
+        {
+          code: "SHIPMENT_TRACKING_NO_EXISTS",
+          error: `已有运单编号的货件不允许删除：${blockedShipmentNos.join("、")}`,
+          shipmentNos: blockedShipmentNos,
+        },
+        { status: 409 },
       );
     }
 

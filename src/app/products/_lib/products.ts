@@ -31,7 +31,9 @@ export type ProductRecord = {
 export type ProductShipmentOption = {
   id: string;
   product_name: string | null;
+  ml_code: string | null;
   store_name: string | null;
+  product_label_url: string | null;
   pcs_per_carton: number | null;
   product_unit_price: number | null;
 };

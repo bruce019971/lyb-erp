@@ -10,6 +10,9 @@ export type ShipmentRecord = {
   logistics_box_mark_url: string | null;
   order_invoice_url: string | null;
   product_name: string | null;
+  ml_code?: string | null;
+  product_label_url?: string | null;
+  store_code?: string | null;
   box_count: number | null;
   pcs_per_box: number | null;
   total_qty: number | null;
