@@ -236,6 +236,23 @@ export default function RelabelFormDrawer({
     ]);
   }, [boxCountByShipmentNo, form]);
 
+  const applyDefaultDeliveryStore = useCallback((shipmentNo?: string | null) => {
+    if (mode !== "create") return;
+
+    const trimmedShipmentNo = shipmentNo?.trim();
+    const shipmentOption = trimmedShipmentNo
+      ? shipmentOptionByShipmentNo.get(trimmedShipmentNo)
+      : undefined;
+    const nextDeliveryStore = shipmentOption?.order_store?.trim() || undefined;
+
+    form.setFields([
+      {
+        name: "delivery_store",
+        value: nextDeliveryStore,
+      },
+    ]);
+  }, [form, mode, shipmentOptionByShipmentNo]);
+
   useEffect(() => {
     if (!open) return;
 
@@ -422,6 +439,7 @@ export default function RelabelFormDrawer({
               onChange={(value) => {
                 const shipmentNo = typeof value === "string" ? value : undefined;
                 applyDefaultBoxCount(shipmentNo);
+                applyDefaultDeliveryStore(shipmentNo);
               }}
             />
           </Form.Item>
