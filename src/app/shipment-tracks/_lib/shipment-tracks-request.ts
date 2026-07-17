@@ -207,7 +207,7 @@ export async function requestShipmentTrackRecords(
       nullsFirst: false,
     });
   } else {
-    query = query.order("track_updated_at", {
+    query = query.order("created_at", {
       ascending: false,
       nullsFirst: false,
     });

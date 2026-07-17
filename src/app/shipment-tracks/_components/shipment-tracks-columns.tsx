@@ -318,14 +318,14 @@ export function getShipmentTrackColumns(
         record.duration_days == null ? "-" : `${record.duration_days}天`,
     },
     {
-      title: "轨迹更新时间",
-      dataIndex: "track_updated_at",
+      title: "创建时间",
+      dataIndex: "created_at",
       valueType: "date",
       width: 160,
       search: false,
       sorter: true,
       render: (_, record) =>
-        formatShipmentTrackDate(record.track_updated_at) || "-",
+        formatShipmentTrackDate(record.created_at) || "-",
     },
     {
       title: "操作",
