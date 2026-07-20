@@ -4,6 +4,7 @@ export type RelabelRecord = {
   id: string;
   original_shipment_no: string | null;
   product_name?: string | null;
+  original_store?: string | null;
   delivery_store: string | null;
   delivery_shipment_no: string | null;
   box_count: number | null;

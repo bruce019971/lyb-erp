@@ -135,11 +135,11 @@ export async function requestRelabelRecords(
     });
   } else {
     query = query
-      .order("delivery_status", { ascending: true })
-      .order("delivery_time", {
-        ascending: true,
+      .order("created_at", {
+        ascending: false,
         nullsFirst: false,
-      });
+      })
+      .order("id", { ascending: false });
   }
 
   const { data, error, count } = await query;
@@ -161,11 +161,12 @@ export async function requestRelabelRecords(
     ),
   );
   const productNameByShipmentNo = new Map<string, string | null>();
+  const originalStoreByShipmentNo = new Map<string, string | null>();
 
   if (relabelOriginalShipmentNos.length > 0) {
     const { data: shipmentRows } = await supabase
       .from("shipment_records")
-      .select("shipment_no, product_name")
+      .select("shipment_no, product_name, order_store")
       .eq("status", "有效")
       .in("shipment_no", relabelOriginalShipmentNos);
 
@@ -178,6 +179,10 @@ export async function requestRelabelRecords(
         shipmentNo,
         typeof item.product_name === "string" ? item.product_name : null,
       );
+      originalStoreByShipmentNo.set(
+        shipmentNo,
+        typeof item.order_store === "string" ? item.order_store : null,
+      );
     });
   }
 
@@ -189,6 +194,9 @@ export async function requestRelabelRecords(
         ...item,
         product_name: shipmentNo
           ? (productNameByShipmentNo.get(shipmentNo) ?? null)
+          : null,
+        original_store: shipmentNo
+          ? (originalStoreByShipmentNo.get(shipmentNo) ?? null)
           : null,
       };
     }),

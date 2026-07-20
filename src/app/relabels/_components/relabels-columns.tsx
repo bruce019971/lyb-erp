@@ -29,15 +29,6 @@ function openShipmentPage(shipmentNo?: string | null) {
   window.history.pushState(null, "", `/shipments?${params.toString()}`);
 }
 
-function openStorePage(storeName?: string | null) {
-  const trimmedStoreName = storeName?.trim();
-  if (!trimmedStoreName) return;
-
-  const params = new URLSearchParams();
-  params.set("seller_name", trimmedStoreName);
-  window.history.pushState(null, "", `/stores?${params.toString()}`);
-}
-
 function renderShipmentNoSearchInput() {
   return (
     <Select
@@ -75,44 +66,64 @@ export function getRelabelColumns(
 
   return [
     {
-      title: "送仓货件号",
-      dataIndex: "delivery_shipment_no",
-      width: 130,
-      fixed: "left",
-      renderFormItem: renderShipmentNoSearchInput,
-      render: (_, record) => (
-        <Typography.Text
-          className="whitespace-nowrap"
-          copyable={
-            record.delivery_shipment_no
-              ? { text: record.delivery_shipment_no }
-              : false
-          }
-        >
-          {record.delivery_shipment_no ?? ""}
-        </Typography.Text>
-      ),
-    },
-    {
       title: "原货件号",
       dataIndex: "original_shipment_no",
-      width: 130,
+      hideInTable: true,
       renderFormItem: renderShipmentNoSearchInput,
+    },
+    {
+      title: "送仓货件号",
+      dataIndex: "delivery_shipment_no",
+      hideInTable: true,
+      renderFormItem: renderShipmentNoSearchInput,
+    },
+    {
+      title: "原货件号/送仓货件号",
+      dataIndex: "original_shipment_no",
+      width: 190,
+      fixed: "left",
+      search: false,
       render: (_, record) => {
-        const shipmentNo = record.original_shipment_no?.trim();
-        const copyable = shipmentNo ? { text: shipmentNo } : false;
+        const originalShipmentNo = record.original_shipment_no?.trim();
+        const deliveryShipmentNo = record.delivery_shipment_no?.trim();
 
-        return shipmentNo ? (
-          <Typography.Link
-            className="whitespace-nowrap"
-            copyable={copyable}
-            onClick={() => openShipmentPage(shipmentNo)}
-          >
-            {shipmentNo}
-          </Typography.Link>
-        ) : (
-          <Typography.Text className="whitespace-nowrap" copyable={copyable}>
-            {record.original_shipment_no ?? ""}
+        return (
+          <div className="flex min-w-[160px] flex-col gap-1 whitespace-nowrap">
+            {originalShipmentNo ? (
+              <Typography.Link
+                copyable={{ text: originalShipmentNo }}
+                onClick={() => openShipmentPage(originalShipmentNo)}
+              >
+                {originalShipmentNo}
+              </Typography.Link>
+            ) : (
+              <Typography.Text type="secondary">-</Typography.Text>
+            )}
+            <Typography.Text
+              copyable={
+                deliveryShipmentNo ? { text: deliveryShipmentNo } : false
+              }
+              type={deliveryShipmentNo ? undefined : "secondary"}
+            >
+              {deliveryShipmentNo || "-"}
+            </Typography.Text>
+          </div>
+        );
+      },
+    },
+    {
+      title: "原店铺/送仓店铺",
+      dataIndex: "original_store",
+      width: 180,
+      ellipsis: true,
+      search: false,
+      render: (_, record) => {
+        const originalStore = record.original_store?.trim();
+        const deliveryStore = record.delivery_store?.trim();
+
+        return (
+          <Typography.Text className="whitespace-nowrap">
+            {originalStore || "-"}/{deliveryStore || "-"}
           </Typography.Text>
         );
       },
@@ -220,29 +231,6 @@ export function getRelabelColumns(
         optionFilterProp: "label",
         placeholder: "请选择物流商",
         options: logisticsSelectOptions,
-      },
-    },
-    {
-      title: "送仓店铺",
-      dataIndex: "delivery_store",
-      width: 110,
-      ellipsis: true,
-      search: false,
-      render: (_, record) => {
-        const storeName = record.delivery_store?.trim();
-
-        return storeName ? (
-          <Typography.Link
-            className="whitespace-nowrap"
-            onClick={() => openStorePage(storeName)}
-          >
-            {storeName}
-          </Typography.Link>
-        ) : (
-          <Typography.Text className="whitespace-nowrap">
-            {record.delivery_store ?? ""}
-          </Typography.Text>
-        );
       },
     },
     {

@@ -55,28 +55,10 @@ function mergeRelabelsById(
 
 function sortRelabelRows(records: RelabelRecord[]) {
   return [...records].sort((left, right) => {
-    const leftDelivered = left.delivery_status === "是";
-    const rightDelivered = right.delivery_status === "是";
+    const leftTime = left.created_at ? new Date(left.created_at).getTime() : 0;
+    const rightTime = right.created_at ? new Date(right.created_at).getTime() : 0;
 
-    if (leftDelivered !== rightDelivered) {
-      return leftDelivered ? 1 : -1;
-    }
-
-    const leftOverdue = isRelabelDeliveryOverdue(left);
-    const rightOverdue = isRelabelDeliveryOverdue(right);
-
-    if (leftOverdue !== rightOverdue) {
-      return leftOverdue ? -1 : 1;
-    }
-
-    const leftTime = left.delivery_time
-      ? new Date(left.delivery_time).getTime()
-      : Number.POSITIVE_INFINITY;
-    const rightTime = right.delivery_time
-      ? new Date(right.delivery_time).getTime()
-      : Number.POSITIVE_INFINITY;
-
-    return leftTime - rightTime;
+    return rightTime - leftTime || right.id.localeCompare(left.id);
   });
 }
 
