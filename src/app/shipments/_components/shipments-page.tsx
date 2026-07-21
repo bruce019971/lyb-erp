@@ -631,22 +631,6 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
     }
   }
 
-  function handleLogisticsOrder(record: ShipmentRecord) {
-    const providerName = record.logistics_provider?.trim() || "";
-
-    modalApi.confirm({
-      title: "是否确认下单",
-      icon: <ExclamationCircleFilled className="!text-amber-500" />,
-      content: `确认对货件 ${record.shipment_no?.trim() || record.id} 执行${providerName || "物流"}下单吗？`,
-      okText: "确认",
-      cancelText: "取消",
-      centered: true,
-      onOk: () => {
-        void runLogisticsOrder(record);
-      },
-    });
-  }
-
   return (
     <ConfigProvider
       locale={zhCN}
@@ -710,9 +694,7 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
                     accessToken: token,
                   });
                 }}
-                onLogisticsOrder={(record) => {
-                  handleLogisticsOrder(record);
-                }}
+                onLogisticsOrder={(record) => void runLogisticsOrder(record)}
                 onEdit={(record) => {
                   setEditingRecord(record);
                   setEditOpen(true);
