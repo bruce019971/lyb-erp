@@ -258,18 +258,17 @@ export function getShipmentColumns(
           productName && storeName
             ? productMetaMap.get(`${productName}\u0000${storeName}`)
             : undefined;
+        const resolvedProductMeta =
+          productMeta ||
+          (!storeName && productName
+            ? productMetaFallbackMap.get(productName)
+            : undefined);
         const mlCode =
           record.ml_code?.trim() ||
-          productMeta?.ml_code?.trim() ||
-          (productName
-            ? productMetaFallbackMap.get(productName)?.ml_code?.trim()
-            : undefined);
+          resolvedProductMeta?.ml_code?.trim();
         const productLabelUrl =
           record.product_label_url?.trim() ||
-          productMeta?.product_label_url?.trim() ||
-          (productName
-            ? productMetaFallbackMap.get(productName)?.product_label_url?.trim()
-            : undefined);
+          resolvedProductMeta?.product_label_url?.trim();
 
         const productNameNode = productName ? (
           <Typography.Text>{productName}</Typography.Text>

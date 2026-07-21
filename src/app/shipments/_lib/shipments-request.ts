@@ -268,9 +268,12 @@ async function attachProductMlCodes(records: ShipmentRecord[]) {
 
   return records.map((record) => {
     const productName = record.product_name?.trim();
+    const storeName = record.order_store?.trim();
     const product =
-      productMap.get(getProductKey(productName, record.order_store)) ||
-      (productName ? productFallbackMap.get(productName) : undefined);
+      productMap.get(getProductKey(productName, storeName)) ||
+      (!storeName && productName
+        ? productFallbackMap.get(productName)
+        : undefined);
 
     return {
       ...record,
