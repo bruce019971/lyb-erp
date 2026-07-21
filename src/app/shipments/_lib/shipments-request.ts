@@ -213,7 +213,8 @@ async function attachProductMlCodes(records: ShipmentRecord[]) {
   const { data, error } = await supabase
     .from("products")
     .select("product_name, store_name, ml_code, product_label_url")
-    .in("product_name", productNames);
+    .in("product_name", productNames)
+    .eq("status", "有效");
 
   if (error) {
     message.error(error.message);

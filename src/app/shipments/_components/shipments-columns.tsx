@@ -266,9 +266,9 @@ export function getShipmentColumns(
         const mlCode =
           record.ml_code?.trim() ||
           resolvedProductMeta?.ml_code?.trim();
-        const productLabelUrl =
-          record.product_label_url?.trim() ||
-          resolvedProductMeta?.product_label_url?.trim();
+        const productLabelUrl = resolvedProductMeta
+          ? resolvedProductMeta.product_label_url?.trim()
+          : record.product_label_url?.trim();
 
         const productNameNode = productName ? (
           <Typography.Text>{productName}</Typography.Text>
