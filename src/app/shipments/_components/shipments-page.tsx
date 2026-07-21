@@ -484,7 +484,6 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
     } catch (error) {
       const description =
         error instanceof Error ? error.message : "物流箱唛生成失败";
-      messageApi.error(description);
       if (isRishenghuiTokenError(error)) {
         showRishenghuiTokenRequiredModal(description, (accessToken) =>
           handleGenerateLogisticsBoxMark({
@@ -492,6 +491,8 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
             accessToken,
           }),
         );
+      } else {
+        messageApi.error(description);
       }
     } finally {
       setGeneratingLogisticsBoxMarkId(null);
@@ -618,12 +619,12 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
     } catch (error) {
       const description =
         error instanceof Error ? error.message : `${providerName}物流下单失败`;
-      messageApi.error(description);
-
       if (isRishenghui && isRishenghuiTokenError(error)) {
         showRishenghuiTokenRequiredModal(description, (accessToken) =>
           runLogisticsOrder(record, accessToken),
         );
+      } else {
+        messageApi.error(description);
       }
     } finally {
       setSubmittingLogisticsOrderId(null);

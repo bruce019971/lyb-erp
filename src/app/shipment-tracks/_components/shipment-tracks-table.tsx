@@ -138,15 +138,16 @@ export default function ShipmentTracksTable({
     } catch (error) {
       const description =
         error instanceof Error ? error.message : "轨迹更新失败";
-      messageApi.error(description);
-
-      if (
+      const requiresRishenghuiToken =
         record.logistics_provider?.trim() === "日升辉" &&
         /token|access.?token|authorization|unauthorized|401|403|登录|认证|过期|失效|无效|未授权|权限|身份/i.test(
           description,
-        )
-      ) {
+        );
+
+      if (requiresRishenghuiToken) {
         onRequireRishenghuiToken(description);
+      } else {
+        messageApi.error(description);
       }
     } finally {
       setUpdatingTrackIds((current) => current.filter((id) => id !== record.id));

@@ -351,12 +351,12 @@ export default function FreightsPage() {
     } catch (error) {
       const description =
         error instanceof Error ? error.message : "日升辉账单获取失败";
-      messageApi.error(`账单获取失败：${description}`);
-
       if (providerName === "日升辉" && isRishenghuiTokenError(error)) {
         showRishenghuiTokenRequiredModal(description, (accessToken) =>
           fetchAndSaveBill(record, providerName, accessToken),
         );
+      } else {
+        messageApi.error(`账单获取失败：${description}`);
       }
     } finally {
       setFetchingBillId(null);
@@ -478,8 +478,6 @@ export default function FreightsPage() {
     } catch (error) {
       const description =
         error instanceof Error ? error.message : "日升辉运费单价获取失败";
-      messageApi.error(`运费单价获取失败：${description}`);
-
       if (isRishenghuiTokenError(error)) {
         showRishenghuiTokenRequiredModal(description, (accessToken) =>
           fetchAndSaveUnitPrice(record, {
@@ -487,6 +485,8 @@ export default function FreightsPage() {
             accessToken,
           }),
         );
+      } else {
+        messageApi.error(`运费单价获取失败：${description}`);
       }
     } finally {
       setFetchingUnitPriceId(null);
@@ -764,12 +764,12 @@ export default function FreightsPage() {
     } catch (error) {
       const description =
         error instanceof Error ? error.message : "方数获取失败";
-      messageApi.error(`方数获取失败：${description}`);
-
       if (providerName === "日升辉" && isRishenghuiTokenError(error)) {
         showRishenghuiTokenRequiredModal(description, (accessToken) =>
           fetchAndSaveVolume(record, accessToken),
         );
+      } else {
+        messageApi.error(`方数获取失败：${description}`);
       }
     } finally {
       setFetchingVolumeId(null);
