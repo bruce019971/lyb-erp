@@ -143,7 +143,6 @@ export default function ShipmentCreateDrawer({
   onCreated,
   storeOptions,
   productOptions,
-  logisticsOptions,
 }: ShipmentCreateDrawerProps) {
   const [form] = Form.useForm<ShipmentCreateFormValues>();
   const [submitting, setSubmitting] = useState(false);
@@ -170,13 +169,6 @@ export default function ShipmentCreateDrawer({
       label: item.product_name,
       value: item.product_name!,
     }));
-  const logisticsSelectOptions = logisticsOptions
-    .filter((item) => item.provider_name?.trim())
-    .map((item) => ({
-      label: item.provider_name,
-      value: item.provider_name!,
-    }));
-
   function calculateGoodsValue(productName?: string | null, totalQty?: number | null) {
     const selectedProduct = productOptions.find(
       (item) =>
@@ -391,6 +383,9 @@ export default function ShipmentCreateDrawer({
         <Form.Item name="is_relabel" hidden>
           <Input />
         </Form.Item>
+        <Form.Item name="logistics_provider" hidden>
+          <Input />
+        </Form.Item>
         <div className="grid grid-cols-1 gap-x-4 md:grid-cols-2">
           <Form.Item
             label="下单店铺"
@@ -429,15 +424,6 @@ export default function ShipmentCreateDrawer({
             />
           </Form.Item>
           <NumberField label="箱数" name="box_count" precision={0} required />
-          <Form.Item label="物流商" name="logistics_provider">
-            <Select
-              showSearch
-              allowClear
-              placeholder="请选择物流商"
-              options={logisticsSelectOptions}
-              optionFilterProp="label"
-            />
-          </Form.Item>
           <DateField
             label="到仓时间"
             name="overseas_warehouse_arrived_at"

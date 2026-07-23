@@ -12,12 +12,11 @@ import {
   Space,
 } from "antd";
 import type { FormProps } from "antd";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import dayjs, { type Dayjs } from "dayjs";
 
 import type { ShipmentRecord, ShipmentUpdateValues } from "../_lib/shipments";
 import { updateShipmentRecord } from "../_lib/shipments-request";
-import ShipmentLogisticsBoxMarkUpload from "./shipment-logistics-box-mark-upload";
 import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
 import type { ProductShipmentOption } from "../../products/_lib/products";
 import type { StoreOption } from "../../stores/_lib/stores";
@@ -153,23 +152,11 @@ export default function ShipmentEditDrawer({
   onUpdated,
   storeOptions,
   productOptions,
-  logisticsOptions,
 }: ShipmentEditDrawerProps) {
   const [form] = Form.useForm<ShipmentUpdateFormValues>();
   const [submitting, setSubmitting] = useState(false);
-  const [boxMarkUploading, setBoxMarkUploading] = useState(false);
-  const [logisticsBoxMarkUrlState, setLogisticsBoxMarkUrlState] = useState<
-    string | null | undefined
-  >(() => record?.logistics_box_mark_url ?? undefined);
-  const logisticsBoxMarkUrlRef = useRef<string | null | undefined>(
-    record?.logistics_box_mark_url ?? undefined,
-  );
   const { message } = App.useApp();
   const selectedStoreName = Form.useWatch("order_store", form);
-  const selectedLogisticsProvider = Form.useWatch("logistics_provider", form);
-  const shipmentNo = Form.useWatch("shipment_no", form);
-  const productName = Form.useWatch("product_name", form);
-  const boxCount = Form.useWatch("box_count", form);
   const warehouseArrivedAt = Form.useWatch("overseas_warehouse_arrived_at", form);
   const appointmentTime = Form.useWatch("appointment_time", form);
   const isRelabel = Form.useWatch("is_relabel", form);
@@ -190,13 +177,6 @@ export default function ShipmentEditDrawer({
       label: item.product_name,
       value: item.product_name!,
     }));
-  const logisticsSelectOptions = logisticsOptions
-    .filter((item) => item.provider_name?.trim())
-    .map((item) => ({
-      label: item.provider_name,
-      value: item.provider_name!,
-    }));
-
   function calculateGoodsValue(productName?: string | null, totalQty?: number | null) {
     const selectedProduct = productOptions.find(
       (item) =>
@@ -274,17 +254,6 @@ export default function ShipmentEditDrawer({
     });
   }
 
-  function handleLogisticsChange(logisticsProvider?: string) {
-    if (logisticsProvider) return;
-
-    form.setFieldValue("tracking_no", undefined);
-  }
-
-  function handleLogisticsBoxMarkUrlChange(url: string | null) {
-    logisticsBoxMarkUrlRef.current = url;
-    setLogisticsBoxMarkUrlState(url ?? undefined);
-  }
-
   function handleValuesChange(
     changedValues: Partial<ShipmentUpdateFormValues>,
     values: ShipmentUpdateFormValues,
@@ -357,8 +326,6 @@ export default function ShipmentEditDrawer({
       order_store: record.order_store ?? undefined,
       logistics_provider: record.logistics_provider ?? undefined,
       shipment_no: record.shipment_no ?? "",
-      tracking_no: record.tracking_no ?? "",
-      logistics_box_mark_url: record.logistics_box_mark_url ?? undefined,
       product_name: record.product_name ?? "",
       box_count: record.box_count,
       pcs_per_box: record.pcs_per_box,
@@ -371,7 +338,6 @@ export default function ShipmentEditDrawer({
       goods_value: record.goods_value,
       remark: record.remark ?? undefined,
     });
-    logisticsBoxMarkUrlRef.current = record.logistics_box_mark_url ?? undefined;
   }, [form, open, record]);
 
   const handleFinish: FormProps<ShipmentUpdateFormValues>["onFinish"] = async (
@@ -381,16 +347,9 @@ export default function ShipmentEditDrawer({
 
     try {
       setSubmitting(true);
-      const nextValues = {
-        ...values,
-        logistics_box_mark_url:
-          logisticsBoxMarkUrlRef.current !== undefined
-            ? logisticsBoxMarkUrlRef.current
-            : values.logistics_box_mark_url,
-      };
       await updateShipmentRecord(
         record.id,
-        serializeShipmentValues(applyCalculatedGoodsValue(nextValues)),
+        serializeShipmentValues(applyCalculatedGoodsValue(values)),
       );
       message.success("货件修改成功");
       onUpdated();
@@ -403,9 +362,6 @@ export default function ShipmentEditDrawer({
 
   function handleClose() {
     form.resetFields();
-    logisticsBoxMarkUrlRef.current = record?.logistics_box_mark_url ?? undefined;
-    setLogisticsBoxMarkUrlState(record?.logistics_box_mark_url ?? undefined);
-    setBoxMarkUploading(false);
     onClose();
   }
 
@@ -423,8 +379,7 @@ export default function ShipmentEditDrawer({
             <Button onClick={handleClose}>取消</Button>
             <Button
               type="primary"
-              loading={submitting || boxMarkUploading}
-              disabled={boxMarkUploading}
+              loading={submitting}
               onClick={() => {
                 form.submit();
               }}
@@ -452,13 +407,13 @@ export default function ShipmentEditDrawer({
         <Form.Item name="pcs_per_box" hidden>
           <InputNumber />
         </Form.Item>
-          <Form.Item name="total_qty" hidden>
-            <InputNumber />
-          </Form.Item>
+        <Form.Item name="total_qty" hidden>
+          <InputNumber />
+        </Form.Item>
         <Form.Item name="is_relabel" hidden>
           <Input />
         </Form.Item>
-        <Form.Item name="logistics_box_mark_url" hidden>
+        <Form.Item name="logistics_provider" hidden>
           <Input />
         </Form.Item>
         <div className="grid grid-cols-1 gap-x-4 md:grid-cols-2">
@@ -499,40 +454,6 @@ export default function ShipmentEditDrawer({
             />
           </Form.Item>
           <NumberField label="箱数" name="box_count" precision={0} required />
-          <Form.Item label="物流商" name="logistics_provider">
-            <Select
-              showSearch
-              allowClear
-              placeholder="请选择物流商"
-              options={logisticsSelectOptions}
-              optionFilterProp="label"
-              onChange={handleLogisticsChange}
-            />
-          </Form.Item>
-          <TextField
-            label="运单编号"
-            name="tracking_no"
-            disabled={!selectedLogisticsProvider}
-            placeholder={
-              selectedLogisticsProvider ? "请输入运单编号" : "请先选择物流商"
-            }
-          />
-          <Form.Item label="物流箱唛">
-            <ShipmentLogisticsBoxMarkUpload
-              fileUrl={logisticsBoxMarkUrlState}
-              record={{
-                id: record?.id ?? "new",
-                order_store: selectedStoreName,
-                shipment_no: shipmentNo,
-                product_name: productName,
-                box_count: boxCount,
-              }}
-              storeOptions={storeOptions}
-              uploading={boxMarkUploading}
-              onUploadingChange={setBoxMarkUploading}
-              onUrlChange={handleLogisticsBoxMarkUrlChange}
-            />
-          </Form.Item>
           <DateField
             label="到仓时间"
             name="overseas_warehouse_arrived_at"
