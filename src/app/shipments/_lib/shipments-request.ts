@@ -525,7 +525,10 @@ function buildShipmentPayload(values: ShipmentUpdateValues) {
     order_store: normalizeTextValue(values.order_store),
     logistics_provider: normalizeTextValue(values.logistics_provider),
     shipment_no: normalizeTextValue(values.shipment_no),
-    tracking_no: normalizeTextValue(values.tracking_no),
+    tracking_no:
+      values.tracking_no === undefined
+        ? undefined
+        : normalizeTextValue(values.tracking_no),
     product_name: normalizeTextValue(values.product_name),
     box_count: normalizeNumberValue(values.box_count),
     pcs_per_box: normalizeNumberValue(values.pcs_per_box),
