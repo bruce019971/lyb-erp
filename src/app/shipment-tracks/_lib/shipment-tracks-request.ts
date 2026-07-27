@@ -126,6 +126,7 @@ export async function requestShipmentTrackRecords(
 ) {
   const shipmentNoValues = splitSearchTexts(params.shipment_no);
   const trackingNoValues = splitSearchTexts(params.tracking_no);
+  const orderStoreValues = normalizeMultiSelectValues(params.order_store);
   const productNameValues = normalizeMultiSelectValues(params.product_name);
   const logisticsProviderValues = normalizeMultiSelectValues(
     params.logistics_provider,
@@ -136,6 +137,7 @@ export async function requestShipmentTrackRecords(
   const shouldFilterShipments =
     shipmentNoValues.length > 0 ||
     trackingNoValues.length > 0 ||
+    orderStoreValues.length > 0 ||
     productNameValues.length > 0 ||
     logisticsProviderValues.length > 0 ||
     Boolean(warehouseArrived);
@@ -153,6 +155,10 @@ export async function requestShipmentTrackRecords(
 
     if (trackingNoValues.length > 0) {
       shipmentQuery = shipmentQuery.in("tracking_no", trackingNoValues);
+    }
+
+    if (orderStoreValues.length > 0) {
+      shipmentQuery = shipmentQuery.in("order_store", orderStoreValues);
     }
 
     if (productNameValues.length > 0) {

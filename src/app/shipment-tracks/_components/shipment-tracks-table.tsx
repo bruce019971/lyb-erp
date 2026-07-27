@@ -372,6 +372,10 @@ export default function ShipmentTracksTable({
     [getTrackDateKey, updatingTrackDateKeys],
   );
 
+  const orderStoreOptions = useMemo(
+    () => buildSelectOptions(shipmentOptions.map((item) => item.order_store)),
+    [shipmentOptions],
+  );
   const productSelectOptions = useMemo(
     () => buildSelectOptions(shipmentOptions.map((item) => item.product_name)),
     [shipmentOptions],
@@ -395,6 +399,7 @@ export default function ShipmentTracksTable({
         isUpdatingTrack,
         canUpdateShipmentTrack,
         isTrackDateUpdating,
+        orderStoreOptions,
         productSelectOptions,
         logisticsProviderOptions,
       ),
@@ -407,6 +412,7 @@ export default function ShipmentTracksTable({
       isTrackDateEditing,
       isUpdatingTrack,
       isTrackDateUpdating,
+      orderStoreOptions,
       productSelectOptions,
       logisticsProviderOptions,
     ],

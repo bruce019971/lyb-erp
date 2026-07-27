@@ -125,6 +125,7 @@ export function getShipmentTrackColumns(
     record: ShipmentTrackRecord,
     field: ShipmentTrackDateField,
   ) => boolean,
+  orderStoreOptions: ShipmentTrackSearchOption[],
   productSelectOptions: ShipmentTrackSearchOption[],
   logisticsProviderOptions: ShipmentTrackSearchOption[],
 ): ProColumns<ShipmentTrackRecord>[] {
@@ -134,6 +135,19 @@ export function getShipmentTrackColumns(
       dataIndex: "shipment_no",
       hideInTable: true,
       renderFormItem: renderShipmentTrackSearchTagsInput,
+    },
+    {
+      title: "下单店铺",
+      dataIndex: "order_store",
+      hideInTable: true,
+      valueType: "select",
+      fieldProps: {
+        mode: "multiple",
+        showSearch: true,
+        optionFilterProp: "label",
+        placeholder: "请选择下单店铺",
+        options: orderStoreOptions,
+      },
     },
     {
       title: "货件号/运单编号",
