@@ -46,6 +46,7 @@ type FreightRow = {
         tracking_no: string | null;
         logistics_provider: string | null;
         product_name: string | null;
+        order_store: string | null;
         overseas_warehouse_arrived_at: string | null;
         box_count: number | null;
         total_qty: number | null;
@@ -56,6 +57,7 @@ type FreightRow = {
         tracking_no: string | null;
         logistics_provider: string | null;
         product_name: string | null;
+        order_store: string | null;
         overseas_warehouse_arrived_at: string | null;
         box_count: number | null;
         total_qty: number | null;
@@ -96,13 +98,13 @@ type SaleasyPlanInfo = {
 };
 
 const FREIGHT_SELECT_WITH_EXTRA_FEE_REMARK =
-  "id, shipment_record_id, freight_unit_price, volume, extra_fee, extra_fee_remark, total_fee, bill_amount, freight_paid_status, created_at, updated_at, shipment:shipment_records!inner(shipment_no, tracking_no, logistics_provider, product_name, overseas_warehouse_arrived_at, box_count, total_qty, created_at)";
+  "id, shipment_record_id, freight_unit_price, volume, extra_fee, extra_fee_remark, total_fee, bill_amount, freight_paid_status, created_at, updated_at, shipment:shipment_records!inner(shipment_no, tracking_no, logistics_provider, product_name, order_store, overseas_warehouse_arrived_at, box_count, total_qty, created_at)";
 const FREIGHT_SELECT =
-  "id, shipment_record_id, freight_unit_price, volume, extra_fee, total_fee, bill_amount, freight_paid_status, created_at, updated_at, shipment:shipment_records!inner(shipment_no, tracking_no, logistics_provider, product_name, overseas_warehouse_arrived_at, box_count, total_qty, created_at)";
+  "id, shipment_record_id, freight_unit_price, volume, extra_fee, total_fee, bill_amount, freight_paid_status, created_at, updated_at, shipment:shipment_records!inner(shipment_no, tracking_no, logistics_provider, product_name, order_store, overseas_warehouse_arrived_at, box_count, total_qty, created_at)";
 const FREIGHT_PATCH_SELECT_WITH_EXTRA_FEE_REMARK =
-  "id, shipment_record_id, freight_unit_price, volume, extra_fee, extra_fee_remark, total_fee, bill_amount, freight_paid_status, created_at, updated_at, shipment:shipment_records(shipment_no, tracking_no, logistics_provider, product_name, overseas_warehouse_arrived_at, box_count, total_qty, created_at)";
+  "id, shipment_record_id, freight_unit_price, volume, extra_fee, extra_fee_remark, total_fee, bill_amount, freight_paid_status, created_at, updated_at, shipment:shipment_records(shipment_no, tracking_no, logistics_provider, product_name, order_store, overseas_warehouse_arrived_at, box_count, total_qty, created_at)";
 const FREIGHT_PATCH_SELECT =
-  "id, shipment_record_id, freight_unit_price, volume, extra_fee, total_fee, bill_amount, freight_paid_status, created_at, updated_at, shipment:shipment_records(shipment_no, tracking_no, logistics_provider, product_name, overseas_warehouse_arrived_at, box_count, total_qty, created_at)";
+  "id, shipment_record_id, freight_unit_price, volume, extra_fee, total_fee, bill_amount, freight_paid_status, created_at, updated_at, shipment:shipment_records(shipment_no, tracking_no, logistics_provider, product_name, order_store, overseas_warehouse_arrived_at, box_count, total_qty, created_at)";
 const SALEASY_LOG_SCOPE = "freights-saleasy-plan-status";
 
 function calculateFreightUnitFee(
@@ -132,6 +134,7 @@ function normalizeFreightRow(row: FreightRow) {
     tracking_no: shipment?.tracking_no ?? null,
     logistics_provider: shipment?.logistics_provider ?? null,
     product_name: shipment?.product_name ?? null,
+    order_store: shipment?.order_store ?? null,
     overseas_warehouse_arrived_at:
       shipment?.overseas_warehouse_arrived_at ?? null,
     freight_unit_price: row.freight_unit_price,
@@ -630,6 +633,9 @@ export async function GET(request: Request) {
     const productNameValues = splitSearchTexts(
       searchParams.getAll("product_name"),
     );
+    const orderStoreValues = splitSearchTexts(
+      searchParams.getAll("order_store"),
+    );
     const logisticsProviderValues = normalizeMultiSelectValues(
       searchParams.getAll("logistics_provider"),
     );
@@ -649,6 +655,7 @@ export async function GET(request: Request) {
       shipmentNoValues.length > 0 ||
       trackingNoValues.length > 0 ||
       productNameValues.length > 0 ||
+      orderStoreValues.length > 0 ||
       logisticsProviderValues.length > 0 ||
       Boolean(createdAtStart) ||
       Boolean(createdAtEnd)
@@ -668,6 +675,10 @@ export async function GET(request: Request) {
 
       if (productNameValues.length > 0) {
         shipmentQuery = shipmentQuery.in("product_name", productNameValues);
+      }
+
+      if (orderStoreValues.length > 0) {
+        shipmentQuery = shipmentQuery.in("order_store", orderStoreValues);
       }
 
       if (logisticsProviderValues.length > 0) {

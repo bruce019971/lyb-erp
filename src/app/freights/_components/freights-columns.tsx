@@ -140,6 +140,16 @@ export function getFreightColumns(
     label: item,
     value: item,
   }));
+  const orderStoreSelectOptions = Array.from(
+    new Set(
+      shipmentOptions
+        .map((item) => item.order_store?.trim())
+        .filter((item): item is string => Boolean(item)),
+    ),
+  ).map((item) => ({
+    label: item,
+    value: item,
+  }));
   const logisticsSelectOptions = Array.from(
     new Set(
       logisticsOptions
@@ -166,6 +176,22 @@ export function getFreightColumns(
         maxTagTextLength: 18,
         placeholder: "可粘贴多个货件号",
         options: shipmentSelectOptions,
+      },
+    },
+    {
+      title: "下单店铺",
+      dataIndex: "order_store",
+      valueType: "select",
+      hideInTable: true,
+      fieldProps: {
+        mode: "tags",
+        showSearch: true,
+        optionFilterProp: "label",
+        tokenSeparators: TOKEN_SEPARATORS,
+        maxTagCount: "responsive",
+        maxTagTextLength: 18,
+        placeholder: "可粘贴多个下单店铺",
+        options: orderStoreSelectOptions,
       },
     },
     {
@@ -225,6 +251,14 @@ export function getFreightColumns(
         placeholder: "可粘贴多个产品名称",
         options: productSelectOptions,
       },
+    },
+    {
+      title: "下单店铺",
+      dataIndex: "order_store",
+      width: 160,
+      fixed: "left",
+      ellipsis: true,
+      search: false,
     },
     {
       title: "物流商",

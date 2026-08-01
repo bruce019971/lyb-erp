@@ -89,16 +89,22 @@ export default function FreightsEditDrawer({
     >
       <div className="mb-4 grid grid-cols-1 gap-4 rounded-md bg-slate-50 p-4 md:grid-cols-2">
         <div>
-          <div className="mb-1 text-xs text-slate-500">货件号</div>
-          <div>{record?.shipment_no ?? ""}</div>
+          <div className="mb-1 text-xs text-slate-500">货件号/运单编号</div>
+          <div className="space-y-1">
+            <div>{record?.shipment_no || "-"}</div>
+            <div>{record?.tracking_no || "-"}</div>
+          </div>
         </div>
         <div>
           <div className="mb-1 text-xs text-slate-500">物流商</div>
           <div>{record?.logistics_provider ?? ""}</div>
         </div>
         <div className="md:col-span-2">
-          <div className="mb-1 text-xs text-slate-500">产品名称</div>
-          <div>{record?.product_name ?? ""}</div>
+          <div className="mb-1 text-xs text-slate-500">下单店铺/产品名称</div>
+          <div className="space-y-1">
+            <div>{record?.order_store || "-"}</div>
+            <div>{record?.product_name || "-"}</div>
+          </div>
         </div>
       </div>
 

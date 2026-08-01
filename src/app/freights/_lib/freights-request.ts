@@ -62,6 +62,9 @@ export async function requestFreightRecords(params: FreightRequestParams) {
   splitSearchTexts(params.shipment_no).forEach((value) => {
     searchParams.append("shipment_no", value);
   });
+  splitSearchTexts(params.order_store).forEach((value) => {
+    searchParams.append("order_store", value);
+  });
   splitSearchTexts(params.tracking_no).forEach((value) => {
     searchParams.append("tracking_no", value);
   });
