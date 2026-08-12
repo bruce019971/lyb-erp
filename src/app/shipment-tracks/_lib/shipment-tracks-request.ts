@@ -33,6 +33,7 @@ type ShipmentTrackRow = {
         product_name: string | null;
         total_qty: number | null;
         order_store: string | null;
+        delivery_status: string | null;
       }
     | Array<{
         shipment_no: string | null;
@@ -41,6 +42,7 @@ type ShipmentTrackRow = {
         product_name: string | null;
         total_qty: number | null;
         order_store: string | null;
+        delivery_status: string | null;
       }>
     | null;
 };
@@ -104,6 +106,7 @@ function normalizeTrackRow(row: ShipmentTrackRow): ShipmentTrackRecord {
     product_name: shipment?.product_name ?? null,
     total_qty: shipment?.total_qty ?? null,
     order_store: shipment?.order_store ?? null,
+    delivery_status: shipment?.delivery_status ?? "否",
     latest_track: latestTrack,
     track_events: trackEvents,
     sailing_time: row.sailing_time,
@@ -134,6 +137,7 @@ export async function requestShipmentTrackRecords(
   const warehouseArrived = typeof params.warehouse_arrived === "string"
     ? params.warehouse_arrived.trim()
     : "";
+  const showDeliveredShipments = params.show_delivered_shipments === true;
   const shouldFilterShipments =
     shipmentNoValues.length > 0 ||
     trackingNoValues.length > 0 ||
@@ -190,10 +194,16 @@ export async function requestShipmentTrackRecords(
   let query = supabase
     .from("shipment_tracks")
     .select(
-      "id, shipment_record_id, latest_track, track_events, sailing_time, warehouse_arrived_time, track_updated_at, created_at, updated_at, shipment:shipment_records!inner(shipment_no, tracking_no, logistics_provider, product_name, total_qty, order_store)",
+      "id, shipment_record_id, latest_track, track_events, sailing_time, warehouse_arrived_time, track_updated_at, created_at, updated_at, shipment:shipment_records!inner(shipment_no, tracking_no, logistics_provider, product_name, total_qty, order_store, delivery_status)",
       { count: "exact" },
     )
     .eq("shipment.status", "有效");
+
+  if (!showDeliveredShipments) {
+    query = query.or("delivery_status.is.null,delivery_status.neq.是", {
+      referencedTable: "shipment",
+    });
+  }
 
   if (matchedShipmentIds && matchedShipmentIds.length > 0) {
     query = query.in("shipment_record_id", matchedShipmentIds);

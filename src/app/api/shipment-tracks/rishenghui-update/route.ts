@@ -36,6 +36,7 @@ type ShipmentTrackRow = {
         shipment_no: string | null;
         tracking_no: string | null;
         logistics_provider: string | null;
+        overseas_warehouse_arrived_at: string | null;
         created_at: string | null;
       }
     | Array<{
@@ -43,6 +44,7 @@ type ShipmentTrackRow = {
         shipment_no: string | null;
         tracking_no: string | null;
         logistics_provider: string | null;
+        overseas_warehouse_arrived_at: string | null;
         created_at: string | null;
       }>
     | null;
@@ -526,7 +528,7 @@ export async function POST(request: Request) {
     const { data: trackData, error: trackError } = await adminClient
       .from("shipment_tracks")
       .select(
-        "id, shipment_record_id, warehouse_arrived_time, shipment:shipment_records!inner(id, shipment_no, tracking_no, logistics_provider, created_at, status)",
+        "id, shipment_record_id, warehouse_arrived_time, shipment:shipment_records!inner(id, shipment_no, tracking_no, logistics_provider, overseas_warehouse_arrived_at, created_at, status)",
       )
       .eq("id", trackId)
       .eq("shipment.status", "有效")
@@ -605,6 +607,7 @@ export async function POST(request: Request) {
       })),
       sailing_time: resolvedEventsResult.sailingTime,
       warehouse_arrived_time:
+        shipment?.overseas_warehouse_arrived_at ||
         resolvedEventsResult.warehouseArrivedTime ||
         track.warehouse_arrived_time,
       track_updated_at: resolvedEventsResult.trackUpdatedAt,
@@ -614,7 +617,7 @@ export async function POST(request: Request) {
       .update(updateValues)
       .eq("id", trackId)
       .select(
-        "id, shipment_record_id, latest_track, track_events, sailing_time, warehouse_arrived_time, track_updated_at, created_at, updated_at, shipment:shipment_records!inner(shipment_no, tracking_no, logistics_provider, product_name, total_qty, order_store)",
+        "id, shipment_record_id, latest_track, track_events, sailing_time, warehouse_arrived_time, track_updated_at, created_at, updated_at, shipment:shipment_records!inner(shipment_no, tracking_no, logistics_provider, product_name, total_qty, order_store, delivery_status)",
       )
       .single();
 

@@ -3,7 +3,7 @@
 import type { ActionType } from "@ant-design/pro-components";
 import { SyncOutlined } from "@ant-design/icons";
 import { ProTable } from "@ant-design/pro-components";
-import { App, Button, Empty, Modal, Space, Steps, Typography } from "antd";
+import { App, Button, Empty, Modal, Space, Steps, Switch, Typography } from "antd";
 import type { Dayjs } from "dayjs";
 import type { Key, MutableRefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -69,6 +69,7 @@ export default function ShipmentTracksTable({
   const [dataSource, setDataSource] = useState<ShipmentTrackRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [batchUpdating, setBatchUpdating] = useState(false);
+  const [showDeliveredShipments, setShowDeliveredShipments] = useState(false);
   const [selectedTrackIds, setSelectedTrackIds] = useState<Key[]>([]);
   const [updatingTrackIds, setUpdatingTrackIds] = useState<string[]>([]);
   const [updatingTrackDateKeys, setUpdatingTrackDateKeys] = useState<string[]>(
@@ -423,7 +424,10 @@ export default function ShipmentTracksTable({
       setLoading(true);
 
       try {
-        const result = await requestShipmentTrackRecords(params);
+        const result = await requestShipmentTrackRecords({
+          ...params,
+          show_delivered_shipments: showDeliveredShipments,
+        });
         const nextData = result.data ?? [];
 
         setDataSource(nextData);
@@ -432,7 +436,7 @@ export default function ShipmentTracksTable({
         setLoading(false);
       }
     },
-    [],
+    [showDeliveredShipments],
   );
 
   const reloadFirstPage = useCallback(async () => {
@@ -504,6 +508,12 @@ export default function ShipmentTracksTable({
         }}
         toolBarRender={() => [
           <Space key="batch-track-actions">
+            <Typography.Text type="secondary">显示已送仓</Typography.Text>
+            <Switch
+              size="small"
+              checked={showDeliveredShipments}
+              onChange={setShowDeliveredShipments}
+            />
             <Typography.Text type="secondary">
               已选 {selectedTrackRecords.length} 个
             </Typography.Text>
