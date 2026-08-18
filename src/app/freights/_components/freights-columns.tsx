@@ -261,6 +261,13 @@ export function getFreightColumns(
       search: false,
     },
     {
+      title: "下单时间",
+      dataIndex: "created_at",
+      width: 100,
+      search: false,
+      render: (_, record) => formatFreightDate(record.created_at),
+    },
+    {
       title: "物流商",
       dataIndex: "logistics_provider",
       width: 160,
