@@ -335,8 +335,7 @@ export function getShipmentColumns(
     {
       title: "物流商",
       dataIndex: "logistics_provider",
-      width: 88,
-      ellipsis: true,
+      hideInTable: true,
       valueType: "select",
       fieldProps: {
         mode: "multiple",
@@ -344,15 +343,6 @@ export function getShipmentColumns(
         optionFilterProp: "label",
         placeholder: "请选择物流商",
         options: logisticsSelectOptions,
-      },
-      render: (_, record) => {
-        const providerName = record.logistics_provider?.trim();
-
-        return providerName ? (
-          <Typography.Text>{providerName}</Typography.Text>
-        ) : (
-          "-"
-        );
       },
     },
     {

@@ -161,7 +161,6 @@ type ShipmentSummaryColumnKey =
   | "shipment_no"
   | "product_name"
   | "order_store"
-  | "logistics_provider"
   | "box_count"
   | "pcs_per_box"
   | "total_qty"
@@ -179,7 +178,6 @@ const SHIPMENT_SUMMARY_COLUMN_KEYS: ShipmentSummaryColumnKey[] = [
   "shipment_no",
   "product_name",
   "order_store",
-  "logistics_provider",
   "box_count",
   "pcs_per_box",
   "total_qty",

@@ -50,7 +50,10 @@ type ShipmentTracksTableProps = {
 const SHIPMENT_TRACKS_TABLE_SCROLL_Y_COLLAPSED = "calc(100vh - 280px)";
 const SHIPMENT_TRACKS_TABLE_SCROLL_Y_EXPANDED = "calc(100vh - 420px)";
 const TRACK_UPDATE_PROVIDER_NAMES = ["赛易", "日升辉", "通途", "唐朝"];
+const COLUMNS_STATE_STORAGE_KEY =
+  "mercado-inbound-planning:shipment-tracks:columns:v1";
 type ShipmentTrackDateField = "sailing_time" | "warehouse_arrived_time";
+type ShipmentTrackColumnsState = Record<string, { show?: boolean }>;
 type ShipmentTrackSummaryColumnKey =
   | "shipment_no"
   | "product_name"
@@ -89,6 +92,17 @@ function formatSummaryNumber(value?: number | null) {
   return Number.isInteger(value) ? String(value) : value.toFixed(2);
 }
 
+function readShipmentTrackColumnsState(): ShipmentTrackColumnsState {
+  if (typeof window === "undefined") return {};
+
+  try {
+    const value = window.localStorage.getItem(COLUMNS_STATE_STORAGE_KEY);
+    return value ? (JSON.parse(value) as ShipmentTrackColumnsState) : {};
+  } catch {
+    return {};
+  }
+}
+
 function canUpdateShipmentTrack(record: ShipmentTrackRecord) {
   const providerName = record.logistics_provider?.trim();
   return Boolean(
@@ -109,6 +123,8 @@ export default function ShipmentTracksTable({
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState<ShipmentTrackSummary | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
+  const [columnsStateMap, setColumnsStateMap] =
+    useState<ShipmentTrackColumnsState>(() => readShipmentTrackColumnsState());
   const [batchUpdating, setBatchUpdating] = useState(false);
   const [showDeliveredShipments, setShowDeliveredShipments] = useState(false);
   const [selectedTrackIds, setSelectedTrackIds] = useState<Key[]>([]);
@@ -123,6 +139,11 @@ export default function ShipmentTracksTable({
     useState<ShipmentTrackRecord | null>(null);
   const [searchCollapsed, setSearchCollapsed] = useState(true);
   const { message: messageApi } = App.useApp();
+
+  function isColumnVisible(key: string) {
+    return columnsStateMap[key]?.show !== false;
+  }
+
   const trackDetailEvents = useMemo(
     () =>
       [...(trackDetailsRecord?.track_events ?? [])].sort((left, right) => {
@@ -556,6 +577,12 @@ export default function ShipmentTracksTable({
           reload: false,
           setting: true,
         }}
+        columnsState={{
+          persistenceKey: COLUMNS_STATE_STORAGE_KEY,
+          persistenceType: "localStorage",
+          onChange: (value) =>
+            setColumnsStateMap(value as ShipmentTrackColumnsState),
+        }}
         toolBarRender={() => [
           <Space key="batch-track-actions">
             <Typography.Text type="secondary">显示已送仓</Typography.Text>
@@ -585,37 +612,44 @@ export default function ShipmentTracksTable({
             : SHIPMENT_TRACKS_TABLE_SCROLL_Y_EXPANDED,
         }}
         summary={() =>
-          summary ? (
-            <Table.Summary fixed="bottom">
-              <Table.Summary.Row className="shipment-track-summary-row">
-                <Table.Summary.Cell index={0} />
-                {SHIPMENT_TRACK_SUMMARY_COLUMN_KEYS.map((key, index) => {
-                  let content = null;
+          summary
+            ? (() => {
+                let cellIndex = 0;
+                const visibleSummaryColumns =
+                  SHIPMENT_TRACK_SUMMARY_COLUMN_KEYS.filter(isColumnVisible);
+                const leadingColumnKey = visibleSummaryColumns[0];
 
-                  if (key === "shipment_no") {
-                    content = (
-                      <span className="text-slate-700">
-                        合计{summaryLoading ? "（计算中）" : ""}
-                      </span>
-                    );
-                  }
+                return (
+                  <Table.Summary fixed="bottom">
+                    <Table.Summary.Row className="shipment-track-summary-row">
+                      <Table.Summary.Cell index={cellIndex++} />
+                      {visibleSummaryColumns.map((key) => {
+                        let content = null;
 
-                  if (key === "total_qty") {
-                    content = formatSummaryNumber(summary.totalQty);
-                  }
+                        if (key === leadingColumnKey) {
+                          content = (
+                            <span className="text-slate-700">
+                              合计{summaryLoading ? "（计算中）" : ""}
+                            </span>
+                          );
+                        }
 
-                  return (
-                    <Table.Summary.Cell key={key} index={index + 1}>
-                      {content}
-                    </Table.Summary.Cell>
-                  );
-                })}
-                <Table.Summary.Cell
-                  index={SHIPMENT_TRACK_SUMMARY_COLUMN_KEYS.length + 1}
-                />
-              </Table.Summary.Row>
-            </Table.Summary>
-          ) : null
+                        if (key === "total_qty") {
+                          content = formatSummaryNumber(summary.totalQty);
+                        }
+
+                        return (
+                          <Table.Summary.Cell key={key} index={cellIndex++}>
+                            {content}
+                          </Table.Summary.Cell>
+                        );
+                      })}
+                      <Table.Summary.Cell index={cellIndex} />
+                    </Table.Summary.Row>
+                  </Table.Summary>
+                );
+              })()
+            : null
         }
         pagination={false}
         dateFormatter="string"
