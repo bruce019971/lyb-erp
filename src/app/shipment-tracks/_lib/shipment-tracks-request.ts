@@ -14,6 +14,24 @@ type ShipmentTrackRequestParams = {
   pageSize?: number;
 } & Record<string, unknown>;
 
+export type ShipmentTrackSummary = {
+  totalQty: number;
+  total: number;
+};
+
+type ShipmentTrackFilterState = {
+  matchedShipmentIds: string[] | null;
+  showDeliveredShipments: boolean;
+  warehouseArrived: string;
+};
+
+interface ShipmentTrackSearchQuery {
+  in(field: string, values: string[]): this;
+  not(field: string, operator: string, value: unknown): this;
+  is(field: string, value: unknown): this;
+  or(filters: string, options?: { referencedTable?: string }): this;
+}
+
 type ShipmentTrackRow = {
   id: string;
   shipment_record_id: string;
@@ -43,6 +61,17 @@ type ShipmentTrackRow = {
         total_qty: number | null;
         order_store: string | null;
         delivery_status: string | null;
+      }>
+    | null;
+};
+
+type ShipmentTrackSummaryRow = {
+  shipment:
+    | {
+        total_qty: number | null;
+      }
+    | Array<{
+        total_qty: number | null;
       }>
     | null;
 };
@@ -91,6 +120,16 @@ function normalizeTrackEvents(value: unknown): ShipmentTrackEvent[] {
     .filter((item): item is ShipmentTrackEvent => Boolean(item));
 }
 
+function toFiniteNumber(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value.trim());
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  return 0;
+}
+
 function normalizeTrackRow(row: ShipmentTrackRow): ShipmentTrackRecord {
   const shipment = Array.isArray(row.shipment) ? row.shipment[0] : row.shipment;
   const trackEvents = normalizeTrackEvents(row.track_events);
@@ -123,10 +162,11 @@ function normalizeTrackRow(row: ShipmentTrackRow): ShipmentTrackRecord {
   };
 }
 
-export async function requestShipmentTrackRecords(
+async function resolveShipmentTrackFilterState(
   params: ShipmentTrackRequestParams,
-  sorter: Record<string, SortOrder> = {},
-) {
+): Promise<
+  { success: true; state: ShipmentTrackFilterState } | { success: false }
+> {
   const shipmentNoValues = splitSearchTexts(params.shipment_no);
   const trackingNoValues = splitSearchTexts(params.tracking_no);
   const orderStoreValues = normalizeMultiSelectValues(params.order_store);
@@ -179,16 +219,68 @@ export async function requestShipmentTrackRecords(
     const { data: shipmentRows, error: shipmentError } = await shipmentQuery;
 
     if (shipmentError) {
-      return { data: [], success: false, total: 0 };
+      return { success: false };
     }
 
     matchedShipmentIds = (shipmentRows ?? [])
       .map((item) => item.id)
       .filter((item): item is string => Boolean(item));
+  }
 
-    if (matchedShipmentIds.length === 0) {
-      return { data: [], success: true, total: 0 };
-    }
+  return {
+    success: true,
+    state: {
+      matchedShipmentIds,
+      showDeliveredShipments,
+      warehouseArrived,
+    },
+  };
+}
+
+function applyShipmentTrackFilterState<TQuery extends ShipmentTrackSearchQuery>(
+  query: TQuery,
+  state: ShipmentTrackFilterState,
+) {
+  let nextQuery = query;
+
+  if (!state.showDeliveredShipments) {
+    nextQuery = nextQuery.or("delivery_status.is.null,delivery_status.neq.是", {
+      referencedTable: "shipment",
+    });
+  }
+
+  if (state.matchedShipmentIds && state.matchedShipmentIds.length > 0) {
+    nextQuery = nextQuery.in("shipment_record_id", state.matchedShipmentIds);
+  }
+
+  if (state.warehouseArrived === "是") {
+    nextQuery = nextQuery.not("warehouse_arrived_time", "is", null);
+  } else if (state.warehouseArrived === "否") {
+    nextQuery = nextQuery.is("warehouse_arrived_time", null);
+  }
+
+  return nextQuery as TQuery;
+}
+
+function getEmptyShipmentTrackSummary(): ShipmentTrackSummary {
+  return {
+    totalQty: 0,
+    total: 0,
+  };
+}
+
+export async function requestShipmentTrackRecords(
+  params: ShipmentTrackRequestParams,
+  sorter: Record<string, SortOrder> = {},
+) {
+  const filterResult = await resolveShipmentTrackFilterState(params);
+
+  if (!filterResult.success) {
+    return { data: [], success: false, total: 0 };
+  }
+
+  if (filterResult.state.matchedShipmentIds?.length === 0) {
+    return { data: [], success: true, total: 0 };
   }
 
   let query = supabase
@@ -199,21 +291,7 @@ export async function requestShipmentTrackRecords(
     )
     .eq("shipment.status", "有效");
 
-  if (!showDeliveredShipments) {
-    query = query.or("delivery_status.is.null,delivery_status.neq.是", {
-      referencedTable: "shipment",
-    });
-  }
-
-  if (matchedShipmentIds && matchedShipmentIds.length > 0) {
-    query = query.in("shipment_record_id", matchedShipmentIds);
-  }
-
-  if (warehouseArrived === "是") {
-    query = query.not("warehouse_arrived_time", "is", null);
-  } else if (warehouseArrived === "否") {
-    query = query.is("warehouse_arrived_time", null);
-  }
+  query = applyShipmentTrackFilterState(query, filterResult.state);
 
   const orderField = Object.keys(sorter ?? {})[0];
   const orderDirection = orderField ? sorter[orderField] : undefined;
@@ -240,6 +318,63 @@ export async function requestShipmentTrackRecords(
     success: true,
     total: count ?? 0,
   };
+}
+
+export async function requestShipmentTrackSummary(
+  params: ShipmentTrackRequestParams,
+): Promise<ShipmentTrackSummary> {
+  const filterResult = await resolveShipmentTrackFilterState(params);
+
+  if (
+    !filterResult.success ||
+    filterResult.state.matchedShipmentIds?.length === 0
+  ) {
+    return getEmptyShipmentTrackSummary();
+  }
+
+  const pageSize = 1000;
+  let page = 0;
+  let summary = getEmptyShipmentTrackSummary();
+
+  while (true) {
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+    let query = supabase
+      .from("shipment_tracks")
+      .select("shipment:shipment_records!inner(total_qty)")
+      .eq("shipment.status", "有效")
+      .order("id", { ascending: true })
+      .range(from, to);
+
+    query = applyShipmentTrackFilterState(query, filterResult.state);
+
+    const { data, error } = await query;
+
+    if (error) {
+      return getEmptyShipmentTrackSummary();
+    }
+
+    const rows = (data ?? []) as ShipmentTrackSummaryRow[];
+    rows.forEach((row) => {
+      const shipment = Array.isArray(row.shipment)
+        ? row.shipment[0]
+        : row.shipment;
+
+      summary = {
+        totalQty: summary.totalQty + toFiniteNumber(shipment?.total_qty),
+        total: summary.total + 1,
+      };
+    });
+
+    if (rows.length < pageSize) {
+      return {
+        ...summary,
+        totalQty: Number(summary.totalQty.toFixed(2)),
+      };
+    }
+
+    page += 1;
+  }
 }
 
 export async function updateSaleasyShipmentTrack(values: { trackId: string }) {

@@ -238,12 +238,14 @@ td.shipment-delivery-done-cell:hover,
 }
 
 .shipments-table-with-sticky-summary .shipment-summary-row > td,
+.shipment-tracks-table-with-sticky-summary .shipment-track-summary-row > td,
 .freights-table-with-sticky-summary .freight-summary-row > td {
   background: #f8fafc !important;
   box-shadow: 0 -1px 0 #e5e7eb;
 }
 
-.shipments-table-with-sticky-summary .shipment-summary-row > td {
+.shipments-table-with-sticky-summary .shipment-summary-row > td,
+.shipment-tracks-table-with-sticky-summary .shipment-track-summary-row > td {
   font-weight: 600;
 }
 

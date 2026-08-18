@@ -3,7 +3,17 @@
 import type { ActionType } from "@ant-design/pro-components";
 import { SyncOutlined } from "@ant-design/icons";
 import { ProTable } from "@ant-design/pro-components";
-import { App, Button, Empty, Modal, Space, Steps, Switch, Typography } from "antd";
+import {
+  App,
+  Button,
+  Empty,
+  Modal,
+  Space,
+  Steps,
+  Switch,
+  Table,
+  Typography,
+} from "antd";
 import type { Dayjs } from "dayjs";
 import type { Key, MutableRefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -12,6 +22,8 @@ import type { ShipmentOption } from "../../shipments/_lib/shipments";
 import {
   getRequiredTangchaoAuthKey,
   requestShipmentTrackRecords,
+  requestShipmentTrackSummary,
+  type ShipmentTrackSummary,
   updateShipmentTrackRecord,
   updateTangchaoShipmentTrack,
   updateRishenghuiShipmentTrack,
@@ -39,6 +51,28 @@ const SHIPMENT_TRACKS_TABLE_SCROLL_Y_COLLAPSED = "calc(100vh - 280px)";
 const SHIPMENT_TRACKS_TABLE_SCROLL_Y_EXPANDED = "calc(100vh - 420px)";
 const TRACK_UPDATE_PROVIDER_NAMES = ["赛易", "日升辉", "通途", "唐朝"];
 type ShipmentTrackDateField = "sailing_time" | "warehouse_arrived_time";
+type ShipmentTrackSummaryColumnKey =
+  | "shipment_no"
+  | "product_name"
+  | "total_qty"
+  | "order_store"
+  | "latest_track"
+  | "sailing_time"
+  | "warehouse_arrived_time"
+  | "duration_days"
+  | "created_at";
+
+const SHIPMENT_TRACK_SUMMARY_COLUMN_KEYS: ShipmentTrackSummaryColumnKey[] = [
+  "shipment_no",
+  "product_name",
+  "total_qty",
+  "order_store",
+  "latest_track",
+  "sailing_time",
+  "warehouse_arrived_time",
+  "duration_days",
+  "created_at",
+];
 
 function buildSelectOptions(values: Array<string | null | undefined>) {
   return Array.from(
@@ -48,6 +82,11 @@ function buildSelectOptions(values: Array<string | null | undefined>) {
         .filter((item): item is string => Boolean(item)),
     ),
   ).map((value) => ({ label: value, value }));
+}
+
+function formatSummaryNumber(value?: number | null) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "-";
+  return Number.isInteger(value) ? String(value) : value.toFixed(2);
 }
 
 function canUpdateShipmentTrack(record: ShipmentTrackRecord) {
@@ -68,6 +107,8 @@ export default function ShipmentTracksTable({
   const searchParamsRef = useRef<Record<string, unknown>>({});
   const [dataSource, setDataSource] = useState<ShipmentTrackRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [summary, setSummary] = useState<ShipmentTrackSummary | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
   const [batchUpdating, setBatchUpdating] = useState(false);
   const [showDeliveredShipments, setShowDeliveredShipments] = useState(false);
   const [selectedTrackIds, setSelectedTrackIds] = useState<Key[]>([]);
@@ -424,16 +465,24 @@ export default function ShipmentTracksTable({
       setLoading(true);
 
       try {
-        const result = await requestShipmentTrackRecords({
+        setSummaryLoading(true);
+        const requestParams = {
           ...params,
           show_delivered_shipments: showDeliveredShipments,
-        });
+        };
+        const [result, summaryResult] = await Promise.all([
+          requestShipmentTrackRecords(requestParams),
+          requestShipmentTrackSummary(requestParams),
+        ]);
         const nextData = result.data ?? [];
 
+        setSummary(summaryResult);
+        setSummaryLoading(false);
         setDataSource(nextData);
         setSelectedTrackIds([]);
       } finally {
         setLoading(false);
+        setSummaryLoading(false);
       }
     },
     [showDeliveredShipments],
@@ -468,6 +517,7 @@ export default function ShipmentTracksTable({
   return (
     <>
       <ProTable<ShipmentTrackRecord>
+        className="shipment-tracks-table-with-sticky-summary"
         rowKey="id"
         size="small"
         columns={columns}
@@ -534,6 +584,39 @@ export default function ShipmentTracksTable({
             ? SHIPMENT_TRACKS_TABLE_SCROLL_Y_COLLAPSED
             : SHIPMENT_TRACKS_TABLE_SCROLL_Y_EXPANDED,
         }}
+        summary={() =>
+          summary ? (
+            <Table.Summary fixed="bottom">
+              <Table.Summary.Row className="shipment-track-summary-row">
+                <Table.Summary.Cell index={0} />
+                {SHIPMENT_TRACK_SUMMARY_COLUMN_KEYS.map((key, index) => {
+                  let content = null;
+
+                  if (key === "shipment_no") {
+                    content = (
+                      <span className="text-slate-700">
+                        合计{summaryLoading ? "（计算中）" : ""}
+                      </span>
+                    );
+                  }
+
+                  if (key === "total_qty") {
+                    content = formatSummaryNumber(summary.totalQty);
+                  }
+
+                  return (
+                    <Table.Summary.Cell key={key} index={index + 1}>
+                      {content}
+                    </Table.Summary.Cell>
+                  );
+                })}
+                <Table.Summary.Cell
+                  index={SHIPMENT_TRACK_SUMMARY_COLUMN_KEYS.length + 1}
+                />
+              </Table.Summary.Row>
+            </Table.Summary>
+          ) : null
+        }
         pagination={false}
         dateFormatter="string"
       />
