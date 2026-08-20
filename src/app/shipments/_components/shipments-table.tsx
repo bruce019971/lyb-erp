@@ -8,6 +8,7 @@ import {
   KeyOutlined,
   PlusOutlined,
   QuestionCircleOutlined,
+  ShoppingCartOutlined,
 } from "@ant-design/icons";
 import type { ActionType } from "@ant-design/pro-components";
 import { ProTable } from "@ant-design/pro-components";
@@ -40,6 +41,7 @@ type ShipmentsTableProps = {
   actionRef?: MutableRefObject<ShipmentsTableAction | undefined>;
   formRef?: MutableRefObject<FormInstance | undefined>;
   onCreate: () => void;
+  onBatchLogisticsOrder: (records: ShipmentRecord[]) => void;
   onBatchCalculateGoodsValue: (ids: string[]) => void;
   onBatchDelete: (ids: string[]) => void;
   onClearCartonLabels: (ids: string[]) => void;
@@ -62,6 +64,7 @@ type ShipmentsTableProps = {
   isRelabelUpdating: (record: ShipmentRecord) => boolean;
   isDeleting: (record: ShipmentRecord) => boolean;
   isBatchDeleting: boolean;
+  isBatchSubmittingLogisticsOrder: boolean;
   isGeneratingCartonLabel: (record: ShipmentRecord) => boolean;
   isGeneratingLogisticsBoxMark: (record: ShipmentRecord) => boolean;
   isSubmittingLogisticsOrder: (record: ShipmentRecord) => boolean;
@@ -205,6 +208,7 @@ export default function ShipmentsTable({
   actionRef,
   formRef,
   onCreate,
+  onBatchLogisticsOrder,
   onBatchCalculateGoodsValue,
   onBatchDelete,
   onClearCartonLabels,
@@ -227,6 +231,7 @@ export default function ShipmentsTable({
   isRelabelUpdating,
   isDeleting,
   isBatchDeleting,
+  isBatchSubmittingLogisticsOrder,
   isGeneratingCartonLabel,
   isGeneratingLogisticsBoxMark,
   isSubmittingLogisticsOrder,
@@ -273,6 +278,10 @@ export default function ShipmentsTable({
   const [columnsStateMap, setColumnsStateMap] = useState<ShipmentColumnsState>(
     () => readShipmentColumnsState(),
   );
+  const selectedRecords = useMemo(() => {
+    const selectedIdSet = new Set(selectedRowKeys.map((item) => String(item)));
+    return dataSource.filter((item) => selectedIdSet.has(item.id));
+  }, [dataSource, selectedRowKeys]);
 
   function isColumnVisible(key: string) {
     return columnsStateMap[key]?.show !== false;
@@ -634,6 +643,22 @@ export default function ShipmentsTable({
         const actions = [
           <Tooltip key="create" title="新增货件">
             <Button type="text" icon={<PlusOutlined />} onClick={onCreate} />
+          </Tooltip>,
+          <Tooltip
+            key="batch-logistics-order"
+            title={
+              hasSelectedRows ? "批量物流下单" : "请先选择需要下单的货件"
+            }
+          >
+            <Button
+              type="primary"
+              disabled={!hasSelectedRows}
+              loading={isBatchSubmittingLogisticsOrder}
+              icon={<ShoppingCartOutlined />}
+              onClick={() => onBatchLogisticsOrder(selectedRecords)}
+            >
+              批量物流下单
+            </Button>
           </Tooltip>,
           <Tooltip
             key="calculate-goods-value"

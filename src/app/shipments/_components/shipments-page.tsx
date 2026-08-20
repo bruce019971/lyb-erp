@@ -57,6 +57,15 @@ type ShipmentsPageProps = {
 
 type PendingRishenghuiAction = (accessToken: string) => void | Promise<void>;
 
+const LOGISTICS_ORDER_PROVIDER_NAMES = ["日升辉", "通途", "赛易"];
+
+function supportsLogisticsOrder(record: ShipmentRecord) {
+  const providerName = record.logistics_provider?.trim();
+  return Boolean(
+    providerName && LOGISTICS_ORDER_PROVIDER_NAMES.includes(providerName),
+  );
+}
+
 dayjs.locale("zh-cn");
 
 export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) {
@@ -71,6 +80,8 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
   >(undefined);
   const [deletingShipmentId, setDeletingShipmentId] = useState<string | null>(null);
   const [batchDeletingShipments, setBatchDeletingShipments] = useState(false);
+  const [batchSubmittingLogisticsOrders, setBatchSubmittingLogisticsOrders] =
+    useState(false);
   const [editingDeliveryStatusId, setEditingDeliveryStatusId] = useState<
     string | null
   >(null);
@@ -537,16 +548,84 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
     }
   }
 
-  async function runLogisticsOrder(
-    record: ShipmentRecord,
-    accessTokenOverride?: string,
-  ) {
+  async function submitLogisticsOrder(record: ShipmentRecord, accessToken: string) {
     const providerName = record.logistics_provider?.trim() || "";
     const isRishenghui = providerName === "日升辉";
     const isTongtu = providerName === "通途";
     const isSaleasy = providerName === "赛易";
 
     if (!isRishenghui && !isTongtu && !isSaleasy) {
+      throw new Error("当前仅支持日升辉、通途和赛易物流下单");
+    }
+
+    if (record.tracking_no?.trim()) {
+      throw new Error("当前货件已存在运单编号，不能重复下单");
+    }
+
+    const token = accessToken.trim();
+    if (isRishenghui && !token) {
+      throw new Error("当前没有可用的日升辉Token");
+    }
+
+    if (isSaleasy) {
+      const orderResult = await submitSaleasyLogisticsOrder({
+        shipmentId: record.id,
+      });
+
+      return {
+        providerName,
+        trackingNo: orderResult.packno,
+      };
+    }
+
+    const invoiceResult = await (isTongtu
+      ? generateShipmentTongtuOrderInvoice
+      : generateShipmentRishenghuiOrderInvoice)({
+      shipmentId: record.id,
+      shipmentNo: record.shipment_no,
+    });
+
+    const orderResult = isTongtu
+      ? await submitTongtuOrderInvoice({
+          shipmentId: record.id,
+        })
+      : await submitRishenghuiOrderInvoice({
+          shipmentId: record.id,
+          fileUrl: invoiceResult.fileUrl,
+          fileName: invoiceResult.fileName,
+          accessToken: token,
+        });
+
+    const boxMarkResult = isTongtu
+      ? await generateShipmentTongtuLogisticsBoxMark({
+          shipmentId: record.id,
+        })
+      : {
+          record: await generateShipmentLogisticsBoxMark({
+            shipmentId: record.id,
+            accessToken: token,
+          }),
+          trackingNo: "",
+        };
+
+    return {
+      providerName,
+      trackingNo:
+        boxMarkResult.trackingNo ||
+        orderResult.packno ||
+        boxMarkResult.record?.tracking_no?.trim() ||
+        "",
+    };
+  }
+
+  async function runLogisticsOrder(
+    record: ShipmentRecord,
+    accessTokenOverride?: string,
+  ) {
+    const providerName = record.logistics_provider?.trim() || "";
+    const isRishenghui = providerName === "日升辉";
+
+    if (!supportsLogisticsOrder(record)) {
       return;
     }
 
@@ -560,59 +639,11 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
 
     try {
       setSubmittingLogisticsOrderId(record.id);
-
-      if (isSaleasy) {
-        const orderResult = await submitSaleasyLogisticsOrder({
-          shipmentId: record.id,
-        });
-
-        messageApi.success(
-          orderResult.packno
-            ? `${orderResult.packno}物流下单成功，箱唛已生成`
-            : "赛易物流下单成功，箱唛已生成",
-        );
-        tableActionRef.current?.reload();
-        return;
-      }
-
-      const invoiceResult = await (isTongtu
-        ? generateShipmentTongtuOrderInvoice
-        : generateShipmentRishenghuiOrderInvoice)({
-        shipmentId: record.id,
-        shipmentNo: record.shipment_no,
-      });
-
-      const orderResult = isTongtu
-        ? await submitTongtuOrderInvoice({
-            shipmentId: record.id,
-          })
-        : await submitRishenghuiOrderInvoice({
-            shipmentId: record.id,
-            fileUrl: invoiceResult.fileUrl,
-            fileName: invoiceResult.fileName,
-            accessToken: token,
-          });
-
-      const boxMarkResult = isTongtu
-        ? await generateShipmentTongtuLogisticsBoxMark({
-            shipmentId: record.id,
-          })
-        : {
-            record: await generateShipmentLogisticsBoxMark({
-              shipmentId: record.id,
-              accessToken: token,
-            }),
-            trackingNo: "",
-          };
-      const trackingNo =
-        boxMarkResult.trackingNo ||
-        orderResult.packno ||
-        boxMarkResult.record?.tracking_no?.trim() ||
-        "";
+      const result = await submitLogisticsOrder(record, token);
 
       messageApi.success(
-        trackingNo
-          ? `${trackingNo}物流下单成功，箱唛已生成`
+        result.trackingNo
+          ? `${result.trackingNo}物流下单成功，箱唛已生成`
           : `${providerName}物流下单成功，箱唛已生成`,
       );
       tableActionRef.current?.reload();
@@ -628,6 +659,99 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
       }
     } finally {
       setSubmittingLogisticsOrderId(null);
+    }
+  }
+
+  async function handleBatchLogisticsOrder(
+    records: ShipmentRecord[],
+    accessTokenOverride?: string,
+  ) {
+    if (!records.length) {
+      messageApi.warning("请先选择需要下单的货件");
+      return;
+    }
+
+    const orderableRecords = records.filter((record) => {
+      return !record.tracking_no?.trim() && supportsLogisticsOrder(record);
+    });
+
+    if (!orderableRecords.length) {
+      messageApi.warning("已选择货件均已下单或物流商不支持下单");
+      return;
+    }
+
+    const token = accessTokenOverride?.trim() || rishenghuiAccessToken.trim();
+    const hasRishenghui = orderableRecords.some(
+      (record) => record.logistics_provider?.trim() === "日升辉",
+    );
+
+    if (hasRishenghui && !token) {
+      showRishenghuiTokenRequiredModal(undefined, (accessToken) =>
+        handleBatchLogisticsOrder(records, accessToken),
+      );
+      return;
+    }
+
+    const orderableIdSet = new Set(orderableRecords.map((record) => record.id));
+    const failures: Array<{ id: string; shipmentNo: string; error: string }> =
+      records
+        .filter((record) => !orderableIdSet.has(record.id))
+        .map((record) => ({
+          id: record.id,
+          shipmentNo: record.shipment_no?.trim() || record.id,
+          error: record.tracking_no?.trim()
+            ? "已有运单编号，不能重复下单"
+            : "物流商不支持下单",
+        }));
+    let successCount = 0;
+
+    try {
+      setBatchSubmittingLogisticsOrders(true);
+
+      for (const record of orderableRecords) {
+        try {
+          setSubmittingLogisticsOrderId(record.id);
+          await submitLogisticsOrder(record, token);
+          successCount += 1;
+        } catch (error) {
+          failures.push({
+            id: record.id,
+            shipmentNo: record.shipment_no?.trim() || record.id,
+            error:
+              error instanceof Error ? error.message : "物流下单失败",
+          });
+        }
+      }
+    } finally {
+      setSubmittingLogisticsOrderId(null);
+      setBatchSubmittingLogisticsOrders(false);
+      tableActionRef.current?.reload();
+    }
+
+    if (successCount > 0) {
+      messageApi.success(
+        `物流批量下单完成：成功 ${successCount} 个${
+          failures.length ? `，失败 ${failures.length} 个` : ""
+        }`,
+      );
+    }
+
+    if (failures.length > 0) {
+      modalApi.warning({
+        title:
+          successCount > 0
+            ? "部分货件物流下单失败"
+            : "货件物流批量下单失败",
+        content: (
+          <div className="max-h-72 overflow-auto">
+            {failures.map((item) => (
+              <div key={item.id} className="mb-1">
+                {item.shipmentNo}：{item.error}
+              </div>
+            ))}
+          </div>
+        ),
+      });
     }
   }
 
@@ -657,6 +781,9 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
                 actionRef={tableActionRef}
                 formRef={searchFormRef}
                 onCreate={() => setCreateOpen(true)}
+                onBatchLogisticsOrder={(records) =>
+                  void handleBatchLogisticsOrder(records)
+                }
                 onBatchCalculateGoodsValue={handleBatchCalculateGoodsValue}
                 onBatchDelete={handleBatchDelete}
                 onClearCartonLabels={(ids) =>
@@ -720,6 +847,9 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
                 isRelabelUpdating={isRelabelUpdating}
                 isDeleting={isDeleting}
                 isBatchDeleting={batchDeletingShipments}
+                isBatchSubmittingLogisticsOrder={
+                  batchSubmittingLogisticsOrders
+                }
                 isGeneratingCartonLabel={isGeneratingCartonLabel}
                 isGeneratingLogisticsBoxMark={isGeneratingLogisticsBoxMark}
                 isSubmittingLogisticsOrder={isSubmittingLogisticsOrder}
