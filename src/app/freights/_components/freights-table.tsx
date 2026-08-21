@@ -41,7 +41,6 @@ const FREIGHT_SUMMARY_COLUMN_KEYS = [
   "product_name",
   "order_store",
   "created_at",
-  "logistics_provider",
   "freight_unit_price",
   "volume",
   "extra_fee",
@@ -220,7 +219,7 @@ export default function FreightsTable({
         reload: false,
         setting: true,
       }}
-      scroll={{ x: 2160, y: "calc(100vh - 360px)" }}
+      scroll={{ x: 2000, y: "calc(100vh - 360px)" }}
       onSubmit={(values) => {
         searchParamsRef.current = values;
         void loadRecords(values);

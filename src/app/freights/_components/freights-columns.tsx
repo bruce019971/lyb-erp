@@ -270,8 +270,7 @@ export function getFreightColumns(
     {
       title: "物流商",
       dataIndex: "logistics_provider",
-      width: 160,
-      ellipsis: true,
+      hideInTable: true,
       valueType: "select",
       fieldProps: {
         mode: "multiple",
