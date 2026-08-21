@@ -13,6 +13,7 @@ import {
   ShoppingOutlined,
   TruckOutlined,
   UserOutlined,
+  WarningOutlined,
 } from "@ant-design/icons";
 import type { MenuProps } from "antd";
 import { Menu, Typography } from "antd";
@@ -27,6 +28,7 @@ export type PageKey =
   | "logistics"
   | "relabels"
   | "freights"
+  | "damages"
   | "shipment_tracks"
   | "profile"
   | "users"
@@ -64,6 +66,13 @@ export const pageConfigs: PageConfig[] = [
     label: "运费管理",
     icon: <DollarOutlined />,
     href: "/freights",
+    section: "core",
+  },
+  {
+    key: "damages",
+    label: "货损记录",
+    icon: <WarningOutlined />,
+    href: "/damages",
     section: "core",
   },
   {

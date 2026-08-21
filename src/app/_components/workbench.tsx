@@ -6,6 +6,7 @@ import { Layout, Spin, Tabs } from "antd";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
+import DamagesPage from "../damages/_components/damages-page";
 import FreightsPage from "../freights/_components/freights-page";
 import LogisticsPage from "../logistics/_components/logistics-page";
 import ProfilePage from "../profile/_components/profile-page";
@@ -39,6 +40,7 @@ function renderPage(key: PageKey) {
   if (key === "stores") return <StoresPage />;
   if (key === "relabels") return <RelabelsPage />;
   if (key === "freights") return <FreightsPage />;
+  if (key === "damages") return <DamagesPage />;
   if (key === "shipment_tracks") return <ShipmentTracksPage />;
   if (key === "profile") return <ProfilePage />;
   if (key === "users") return <UsersPage />;
@@ -74,8 +76,18 @@ export default function Workbench({
     () =>
       pageConfigs
         .filter(
-          (item) =>
-            item.key === "profile" || authSession?.menuPermissions.includes(item.key),
+          (item) => {
+            const hasLegacyDamagePermission =
+              item.key === "damages" &&
+              (authSession?.roleName === "系统管理员" ||
+                authSession?.roleName === "普通管理员");
+
+            return (
+              item.key === "profile" ||
+              authSession?.menuPermissions.includes(item.key) ||
+              hasLegacyDamagePermission
+            );
+          },
         )
         .map((item) => item.key),
     [authSession],
