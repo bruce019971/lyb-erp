@@ -1,7 +1,9 @@
 "use client";
 
+import { ReloadOutlined } from "@ant-design/icons";
 import {
   App,
+  Button,
   DatePicker,
   Form,
   Input,
@@ -9,6 +11,7 @@ import {
   Modal,
   Select,
   Statistic,
+  Tooltip,
 } from "antd";
 import type { FormProps } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
@@ -24,6 +27,7 @@ import { createDamageRecord } from "../_lib/damages-request";
 type DamageCreateModalProps = {
   open: boolean;
   shipmentOptions: DamageShipmentOption[];
+  onRefreshShipmentOptions: () => Promise<void>;
   onClose: () => void;
   onCreated: () => void;
 };
@@ -36,23 +40,25 @@ type DamageFormValues = Omit<
   delivery_date?: Dayjs | null;
 };
 
-function getErrorMessage(error: unknown) {
+function getErrorMessage(error: unknown, fallback: string) {
   if (error && typeof error === "object" && "message" in error) {
     const message = (error as { message?: unknown }).message;
     if (typeof message === "string" && message.trim()) return message;
   }
 
-  return "请检查数据库权限或字段内容";
+  return fallback;
 }
 
 export default function DamageCreateModal({
   open,
   shipmentOptions,
+  onRefreshShipmentOptions,
   onClose,
   onCreated,
 }: DamageCreateModalProps) {
   const [form] = Form.useForm<DamageFormValues>();
   const [submitting, setSubmitting] = useState(false);
+  const [refreshingShipments, setRefreshingShipments] = useState(false);
   const { message } = App.useApp();
   const productCount = Form.useWatch("product_count", form);
   const damageCount = Form.useWatch("damage_count", form);
@@ -99,6 +105,20 @@ export default function DamageCreateModal({
     });
   }
 
+  async function handleRefreshShipmentOptions() {
+    try {
+      setRefreshingShipments(true);
+      await onRefreshShipmentOptions();
+      message.success("货件已更新");
+    } catch (error) {
+      message.error(
+        `货件更新失败：${getErrorMessage(error, "请稍后重试")}`,
+      );
+    } finally {
+      setRefreshingShipments(false);
+    }
+  }
+
   const handleFinish: FormProps<DamageFormValues>["onFinish"] = async (
     values,
   ) => {
@@ -115,7 +135,9 @@ export default function DamageCreateModal({
       form.resetFields();
       onCreated();
     } catch (error) {
-      message.error(`货损记录新增失败：${getErrorMessage(error)}`);
+      message.error(
+        `货损记录新增失败：${getErrorMessage(error, "请检查数据库权限或字段内容")}`,
+      );
     } finally {
       setSubmitting(false);
     }
@@ -147,24 +169,36 @@ export default function DamageCreateModal({
         onFinishFailed={() => message.error("请先完善必填信息")}
       >
         <div className="grid grid-cols-1 gap-x-4 md:grid-cols-2">
-          <Form.Item
-            label="送仓货件号"
-            name="delivery_shipment_no"
-            rules={[
-              {
-                required: true,
-                message: "请选择送仓货件号",
-              },
-            ]}
-          >
-            <Select
-              showSearch
-              allowClear
-              optionFilterProp="label"
-              placeholder="请选择送仓货件号"
-              options={selectOptions}
-              onChange={handleShipmentChange}
-            />
+          <Form.Item label="送仓货件号" required>
+            <div className="flex items-start gap-2">
+              <Form.Item
+                name="delivery_shipment_no"
+                className="!mb-0 min-w-0 flex-1"
+                rules={[
+                  {
+                    required: true,
+                    message: "请选择送仓货件号",
+                  },
+                ]}
+              >
+                <Select
+                  showSearch
+                  allowClear
+                  optionFilterProp="label"
+                  placeholder="请选择送仓货件号"
+                  options={selectOptions}
+                  onChange={handleShipmentChange}
+                />
+              </Form.Item>
+              <Tooltip title="更新货件">
+                <Button
+                  aria-label="更新货件"
+                  icon={<ReloadOutlined />}
+                  loading={refreshingShipments}
+                  onClick={() => void handleRefreshShipmentOptions()}
+                />
+              </Tooltip>
+            </div>
           </Form.Item>
 
           <Form.Item

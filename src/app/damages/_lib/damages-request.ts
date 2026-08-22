@@ -178,7 +178,9 @@ export async function requestDamageTotalValue(params: DamageRequestParams) {
 }
 
 export async function requestDamageShipmentOptions() {
-  const response = await fetch("/api/damages/shipment-options");
+  const response = await fetch("/api/damages/shipment-options", {
+    cache: "no-store",
+  });
   const payload = (await response.json().catch(() => null)) as
     | { data?: DamageShipmentOption[]; error?: string }
     | null;

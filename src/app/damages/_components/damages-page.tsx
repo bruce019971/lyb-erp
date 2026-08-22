@@ -5,7 +5,7 @@ import { App, ConfigProvider } from "antd";
 import zhCN from "antd/locale/zh_CN";
 import dayjs from "dayjs";
 import "dayjs/locale/zh-cn";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import ShipmentsTableSkeleton from "../../shipments/_components/shipments-table-skeleton";
 import type { DamageShipmentOption } from "../_lib/damages";
@@ -20,6 +20,11 @@ export default function DamagesPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [shipmentOptions, setShipmentOptions] = useState<DamageShipmentOption[]>([]);
   const tableActionRef = useRef<ActionType>(undefined);
+
+  const refreshShipmentOptions = useCallback(async () => {
+    const options = await requestDamageShipmentOptions();
+    setShipmentOptions(options);
+  }, []);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setMounted(true), 0);
@@ -65,6 +70,7 @@ export default function DamagesPage() {
           <DamageCreateModal
             open={createOpen}
             shipmentOptions={shipmentOptions}
+            onRefreshShipmentOptions={refreshShipmentOptions}
             onClose={() => setCreateOpen(false)}
             onCreated={() => {
               setCreateOpen(false);
