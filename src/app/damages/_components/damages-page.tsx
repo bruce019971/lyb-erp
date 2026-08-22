@@ -7,6 +7,8 @@ import dayjs from "dayjs";
 import "dayjs/locale/zh-cn";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
+import { requestLogisticsProviderOptions } from "../../logistics/_lib/logistics-request";
 import ShipmentsTableSkeleton from "../../shipments/_components/shipments-table-skeleton";
 import type { DamageShipmentOption } from "../_lib/damages";
 import { requestDamageShipmentOptions } from "../_lib/damages-request";
@@ -19,6 +21,9 @@ export default function DamagesPage() {
   const [mounted, setMounted] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [shipmentOptions, setShipmentOptions] = useState<DamageShipmentOption[]>([]);
+  const [logisticsOptions, setLogisticsOptions] = useState<
+    LogisticsProviderOption[]
+  >([]);
   const tableActionRef = useRef<ActionType>(undefined);
 
   const refreshShipmentOptions = useCallback(async () => {
@@ -35,13 +40,28 @@ export default function DamagesPage() {
     if (!mounted) return;
 
     let cancelled = false;
-    requestDamageShipmentOptions()
-      .then((options) => {
-        if (!cancelled) setShipmentOptions(options);
-      })
-      .catch(() => {
-        if (!cancelled) setShipmentOptions([]);
-      });
+
+    async function loadOptions() {
+      const [shipmentsResult, logisticsResult] = await Promise.allSettled([
+        requestDamageShipmentOptions(),
+        requestLogisticsProviderOptions(),
+      ]);
+
+      if (!cancelled) {
+        setShipmentOptions(
+          shipmentsResult.status === "fulfilled" ? shipmentsResult.value : [],
+        );
+        setLogisticsOptions(
+          logisticsResult.status === "fulfilled"
+            ? logisticsResult.value.filter((item) =>
+                item.provider_name?.trim(),
+              )
+            : [],
+        );
+      }
+    }
+
+    void loadOptions();
 
     return () => {
       cancelled = true;
@@ -59,6 +79,8 @@ export default function DamagesPage() {
             {mounted ? (
               <DamagesTable
                 actionRef={tableActionRef}
+                shipmentOptions={shipmentOptions}
+                logisticsOptions={logisticsOptions}
                 onCreate={() => setCreateOpen(true)}
               />
             ) : (

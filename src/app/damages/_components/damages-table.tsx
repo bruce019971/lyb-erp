@@ -8,15 +8,18 @@ import type { SortOrder, SorterResult } from "antd/es/table/interface";
 import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { DamageRecord } from "../_lib/damages";
+import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
+import type { DamageRecord, DamageShipmentOption } from "../_lib/damages";
 import {
   requestDamageRecords,
-  requestDamageTotalValue,
+  requestDamageValueSummary,
 } from "../_lib/damages-request";
 import { getDamageColumns } from "./damages-columns";
 
 type DamagesTableProps = {
   actionRef?: MutableRefObject<ActionType | undefined>;
+  shipmentOptions: DamageShipmentOption[];
+  logisticsOptions: LogisticsProviderOption[];
   onCreate: () => void;
 };
 
@@ -32,6 +35,11 @@ const DAMAGE_SUMMARY_COLUMN_KEYS = [
   "freight_value",
   "total_value",
 ] as const;
+const EMPTY_DAMAGE_VALUE_SUMMARY = {
+  productValue: 0,
+  freightValue: 0,
+  totalValue: 0,
+};
 
 function mergeDamageRecords(
   current: DamageRecord[],
@@ -69,9 +77,14 @@ function formatSummaryMoney(value: number) {
 
 export default function DamagesTable({
   actionRef,
+  shipmentOptions,
+  logisticsOptions,
   onCreate,
 }: DamagesTableProps) {
-  const columns = useMemo(() => getDamageColumns(), []);
+  const columns = useMemo(
+    () => getDamageColumns(shipmentOptions, logisticsOptions),
+    [logisticsOptions, shipmentOptions],
+  );
   const searchParamsRef = useRef<Record<string, unknown>>({});
   const sorterRef = useRef<Record<string, SortOrder>>({});
   const loadingRef = useRef(true);
@@ -80,7 +93,7 @@ export default function DamagesTable({
   const currentPageRef = useRef(1);
   const requestVersionRef = useRef(0);
   const [dataSource, setDataSource] = useState<DamageRecord[]>([]);
-  const [totalValue, setTotalValue] = useState(0);
+  const [valueSummary, setValueSummary] = useState(EMPTY_DAMAGE_VALUE_SUMMARY);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
 
@@ -103,12 +116,12 @@ export default function DamagesTable({
       }
 
       try {
-        const [result, nextTotalValue] = await Promise.all([
+        const [result, nextValueSummary] = await Promise.all([
           requestDamageRecords(
             { ...params, current: page, pageSize: PAGE_SIZE },
             sorter,
           ),
-          append ? Promise.resolve(null) : requestDamageTotalValue(params),
+          append ? Promise.resolve(null) : requestDamageValueSummary(params),
         ]);
 
         if (requestVersion !== requestVersionRef.current) return;
@@ -117,7 +130,7 @@ export default function DamagesTable({
         setDataSource((current) =>
           append ? mergeDamageRecords(current, nextData) : nextData,
         );
-        if (nextTotalValue !== null) setTotalValue(nextTotalValue);
+        if (nextValueSummary !== null) setValueSummary(nextValueSummary);
 
         currentPageRef.current = page;
         hasMoreRef.current = page * PAGE_SIZE < result.total;
@@ -126,7 +139,7 @@ export default function DamagesTable({
 
         if (!append) {
           setDataSource([]);
-          setTotalValue(0);
+          setValueSummary(EMPTY_DAMAGE_VALUE_SUMMARY);
           hasMoreRef.current = false;
         }
       } finally {
@@ -259,10 +272,20 @@ export default function DamagesTable({
                 content = "合计";
               }
 
-              if (key === "total_value") {
+              if (
+                key === "product_value" ||
+                key === "freight_value" ||
+                key === "total_value"
+              ) {
+                const value =
+                  key === "product_value"
+                    ? valueSummary.productValue
+                    : key === "freight_value"
+                      ? valueSummary.freightValue
+                      : valueSummary.totalValue;
                 content = (
-                  <Typography.Text strong>
-                    {formatSummaryMoney(totalValue)}
+                  <Typography.Text strong={key === "total_value"}>
+                    {formatSummaryMoney(value)}
                   </Typography.Text>
                 );
               }
@@ -271,7 +294,13 @@ export default function DamagesTable({
                 <Table.Summary.Cell
                   key={key}
                   index={index}
-                  align={key === "total_value" ? "right" : undefined}
+                  align={
+                    key === "product_value" ||
+                    key === "freight_value" ||
+                    key === "total_value"
+                      ? "right"
+                      : undefined
+                  }
                 >
                   {content}
                 </Table.Summary.Cell>

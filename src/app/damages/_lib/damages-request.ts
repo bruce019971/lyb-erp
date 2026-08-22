@@ -20,14 +20,66 @@ type ShipmentTrackingRow = {
   tracking_no: string | null;
 };
 
-function normalizeText(value: unknown) {
-  return typeof value === "string" ? value.trim() : "";
+type DamageFilterState = {
+  deliveryShipmentNos: string[];
+  productNames: string[];
+  deliveryStores: string[];
+  matchedShipmentIds: string[] | null;
+};
+
+function normalizeMultiSelectValues(value: unknown) {
+  const values = Array.isArray(value) ? value : [value];
+
+  return Array.from(
+    new Set(
+      values
+        .map((item) => (typeof item === "string" ? item.trim() : ""))
+        .filter(Boolean),
+    ),
+  );
+}
+
+async function resolveDamageFilterState(
+  params: DamageRequestParams,
+): Promise<DamageFilterState> {
+  const logisticsProviders = normalizeMultiSelectValues(
+    params.logistics_provider,
+  );
+  let matchedShipmentIds: string[] | null = null;
+
+  if (logisticsProviders.length > 0) {
+    const { data, error } = await supabase
+      .from("shipment_records")
+      .select("id")
+      .in("logistics_provider", logisticsProviders)
+      .range(0, 9999);
+
+    if (error) throw error;
+
+    matchedShipmentIds = (data ?? [])
+      .map((item) => item.id)
+      .filter((item): item is string => Boolean(item));
+  }
+
+  return {
+    deliveryShipmentNos: normalizeMultiSelectValues(
+      params.delivery_shipment_no,
+    ),
+    productNames: normalizeMultiSelectValues(params.product_name),
+    deliveryStores: normalizeMultiSelectValues(params.delivery_store),
+    matchedShipmentIds,
+  };
 }
 
 export async function requestDamageRecords(
   params: DamageRequestParams,
   sorter: Record<string, SortOrder> = {},
 ) {
+  const filterState = await resolveDamageFilterState(params);
+  if (filterState.matchedShipmentIds?.length === 0) {
+    return { data: [], success: true, total: 0 };
+  }
+
   const current = params.current ?? 1;
   const pageSize = params.pageSize ?? 20;
   const from = (current - 1) * pageSize;
@@ -38,19 +90,23 @@ export async function requestDamageRecords(
     .select("*", { count: "exact" })
     .range(from, to);
 
-  const shipmentNo = normalizeText(params.delivery_shipment_no);
-  if (shipmentNo) {
-    query = query.ilike("delivery_shipment_no", `%${shipmentNo}%`);
+  if (filterState.deliveryShipmentNos.length > 0) {
+    query = query.in(
+      "delivery_shipment_no",
+      filterState.deliveryShipmentNos,
+    );
   }
 
-  const productName = normalizeText(params.product_name);
-  if (productName) {
-    query = query.ilike("product_name", `%${productName}%`);
+  if (filterState.productNames.length > 0) {
+    query = query.in("product_name", filterState.productNames);
   }
 
-  const deliveryStore = normalizeText(params.delivery_store);
-  if (deliveryStore) {
-    query = query.ilike("delivery_store", `%${deliveryStore}%`);
+  if (filterState.deliveryStores.length > 0) {
+    query = query.in("delivery_store", filterState.deliveryStores);
+  }
+
+  if (filterState.matchedShipmentIds) {
+    query = query.in("shipment_record_id", filterState.matchedShipmentIds);
   }
 
   const deliveryDate = params.delivery_date;
@@ -118,30 +174,41 @@ export async function requestDamageRecords(
   };
 }
 
-export async function requestDamageTotalValue(params: DamageRequestParams) {
+export async function requestDamageValueSummary(params: DamageRequestParams) {
+  const filterState = await resolveDamageFilterState(params);
+  if (filterState.matchedShipmentIds?.length === 0) {
+    return { productValue: 0, freightValue: 0, totalValue: 0 };
+  }
+
   let from = 0;
   let totalCount: number | null = null;
+  let productValue = 0;
+  let freightValue = 0;
   let totalValue = 0;
 
   while (totalCount === null || from < totalCount) {
     let query = supabase
       .from("damage_records")
-      .select("total_value", { count: "exact" })
+      .select("product_value, freight_value, total_value", { count: "exact" })
       .range(from, from + DAMAGE_SUMMARY_PAGE_SIZE - 1);
 
-    const shipmentNo = normalizeText(params.delivery_shipment_no);
-    if (shipmentNo) {
-      query = query.ilike("delivery_shipment_no", `%${shipmentNo}%`);
+    if (filterState.deliveryShipmentNos.length > 0) {
+      query = query.in(
+        "delivery_shipment_no",
+        filterState.deliveryShipmentNos,
+      );
     }
 
-    const productName = normalizeText(params.product_name);
-    if (productName) {
-      query = query.ilike("product_name", `%${productName}%`);
+    if (filterState.productNames.length > 0) {
+      query = query.in("product_name", filterState.productNames);
     }
 
-    const deliveryStore = normalizeText(params.delivery_store);
-    if (deliveryStore) {
-      query = query.ilike("delivery_store", `%${deliveryStore}%`);
+    if (filterState.deliveryStores.length > 0) {
+      query = query.in("delivery_store", filterState.deliveryStores);
+    }
+
+    if (filterState.matchedShipmentIds) {
+      query = query.in("shipment_record_id", filterState.matchedShipmentIds);
     }
 
     const deliveryDate = params.delivery_date;
@@ -163,18 +230,24 @@ export async function requestDamageTotalValue(params: DamageRequestParams) {
     const rows = data ?? [];
     totalCount = count ?? rows.length;
     rows.forEach((item) => {
-      const value =
-        typeof item.total_value === "number"
-          ? item.total_value
-          : Number(item.total_value);
-      if (Number.isFinite(value)) totalValue += value;
+      const nextProductValue = Number(item.product_value);
+      const nextFreightValue = Number(item.freight_value);
+      const nextTotalValue = Number(item.total_value);
+
+      if (Number.isFinite(nextProductValue)) productValue += nextProductValue;
+      if (Number.isFinite(nextFreightValue)) freightValue += nextFreightValue;
+      if (Number.isFinite(nextTotalValue)) totalValue += nextTotalValue;
     });
 
     if (rows.length === 0) break;
     from += rows.length;
   }
 
-  return Number(totalValue.toFixed(2));
+  return {
+    productValue: Number(productValue.toFixed(2)),
+    freightValue: Number(freightValue.toFixed(2)),
+    totalValue: Number(totalValue.toFixed(2)),
+  };
 }
 
 export async function requestDamageShipmentOptions() {

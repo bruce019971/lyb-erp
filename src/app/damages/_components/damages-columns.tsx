@@ -1,7 +1,12 @@
 import type { ProColumns } from "@ant-design/pro-components";
 import { Typography } from "antd";
 
-import { formatDamageDate, type DamageRecord } from "../_lib/damages";
+import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
+import {
+  formatDamageDate,
+  type DamageRecord,
+  type DamageShipmentOption,
+} from "../_lib/damages";
 
 function formatMoney(value?: number | null) {
   const amount = typeof value === "number" && Number.isFinite(value) ? value : 0;
@@ -11,13 +16,50 @@ function formatMoney(value?: number | null) {
   })}`;
 }
 
-export function getDamageColumns(): ProColumns<DamageRecord>[] {
+function buildSelectOptions(values: Array<string | null | undefined>) {
+  return Array.from(
+    new Set(
+      values
+        .map((item) => item?.trim())
+        .filter((item): item is string => Boolean(item)),
+    ),
+  )
+    .sort((left, right) => left.localeCompare(right, "zh-CN"))
+    .map((item) => ({ label: item, value: item }));
+}
+
+export function getDamageColumns(
+  shipmentOptions: DamageShipmentOption[],
+  logisticsOptions: LogisticsProviderOption[],
+): ProColumns<DamageRecord>[] {
+  const shipmentSelectOptions = buildSelectOptions(
+    shipmentOptions.map((item) => item.delivery_shipment_no),
+  );
+  const productSelectOptions = buildSelectOptions(
+    shipmentOptions.map((item) => item.product_name),
+  );
+  const storeSelectOptions = buildSelectOptions(
+    shipmentOptions.map((item) => item.delivery_store),
+  );
+  const logisticsSelectOptions = buildSelectOptions(
+    logisticsOptions.map((item) => item.provider_name),
+  );
+
   return [
     {
       title: "送仓货件",
       dataIndex: "delivery_shipment_no",
       key: "delivery_shipment_no_search",
       hideInTable: true,
+      valueType: "select",
+      fieldProps: {
+        mode: "multiple",
+        showSearch: true,
+        optionFilterProp: "label",
+        maxTagCount: "responsive",
+        placeholder: "请选择送仓货件",
+        options: shipmentSelectOptions,
+      },
     },
     {
       title: "送仓货件/运单编号",
@@ -45,12 +87,30 @@ export function getDamageColumns(): ProColumns<DamageRecord>[] {
       dataIndex: "product_name",
       width: 105,
       ellipsis: true,
+      valueType: "select",
+      fieldProps: {
+        mode: "multiple",
+        showSearch: true,
+        optionFilterProp: "label",
+        maxTagCount: "responsive",
+        placeholder: "请选择产品名称",
+        options: productSelectOptions,
+      },
     },
     {
       title: "送仓店铺",
       dataIndex: "delivery_store",
       width: 115,
       ellipsis: true,
+      valueType: "select",
+      fieldProps: {
+        mode: "multiple",
+        showSearch: true,
+        optionFilterProp: "label",
+        maxTagCount: "responsive",
+        placeholder: "请选择送仓店铺",
+        options: storeSelectOptions,
+      },
     },
     {
       title: "送仓日期",
@@ -58,6 +118,20 @@ export function getDamageColumns(): ProColumns<DamageRecord>[] {
       width: 100,
       valueType: "dateRange",
       render: (_, record) => formatDamageDate(record.delivery_date),
+    },
+    {
+      title: "物流商",
+      dataIndex: "logistics_provider",
+      hideInTable: true,
+      valueType: "select",
+      fieldProps: {
+        mode: "multiple",
+        showSearch: true,
+        optionFilterProp: "label",
+        maxTagCount: "responsive",
+        placeholder: "请选择物流商",
+        options: logisticsSelectOptions,
+      },
     },
     {
       title: "产品数量",
