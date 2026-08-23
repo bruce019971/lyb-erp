@@ -1,5 +1,6 @@
+import { DeleteOutlined } from "@ant-design/icons";
 import type { ProColumns } from "@ant-design/pro-components";
-import { Typography } from "antd";
+import { Button, Tooltip, Typography } from "antd";
 
 import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
 import {
@@ -31,6 +32,8 @@ function buildSelectOptions(values: Array<string | null | undefined>) {
 export function getDamageColumns(
   shipmentOptions: DamageShipmentOption[],
   logisticsOptions: LogisticsProviderOption[],
+  onDelete: (record: DamageRecord) => void,
+  isDeleting: (record: DamageRecord) => boolean,
 ): ProColumns<DamageRecord>[] {
   const shipmentSelectOptions = buildSelectOptions(
     shipmentOptions.map((item) => item.delivery_shipment_no),
@@ -176,6 +179,27 @@ export function getDamageColumns(
       render: (_, record) => (
         <Typography.Text strong>{formatMoney(record.total_value)}</Typography.Text>
       ),
+    },
+    {
+      title: "操作",
+      key: "actions",
+      valueType: "option",
+      width: 56,
+      fixed: "right",
+      search: false,
+      render: (_, record) => [
+        <Tooltip key="delete" title="删除">
+          <Button
+            type="text"
+            size="small"
+            danger
+            aria-label="删除货损记录"
+            icon={<DeleteOutlined />}
+            loading={isDeleting(record)}
+            onClick={() => onDelete(record)}
+          />
+        </Tooltip>,
+      ],
     },
   ];
 }

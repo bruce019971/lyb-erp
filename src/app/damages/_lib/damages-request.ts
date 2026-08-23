@@ -278,12 +278,32 @@ export async function createDamageRecord(values: DamageCreateValues) {
     product_unit_price: values.product_unit_price,
   };
 
-  const { data, error } = await supabase
-    .from("damage_records")
-    .insert(payload)
-    .select("*")
-    .single();
+  const response = await fetch("/api/damages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const result = (await response.json().catch(() => null)) as
+    | { data?: DamageRecord; error?: string }
+    | null;
 
-  if (error) throw error;
-  return data as DamageRecord;
+  if (!response.ok) {
+    throw new Error(result?.error || "货损记录新增失败");
+  }
+
+  if (!result?.data) throw new Error("货损记录新增结果为空");
+  return result.data;
+}
+
+export async function deleteDamageRecord(id: string) {
+  const response = await fetch(`/api/damages/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+  const result = (await response.json().catch(() => null)) as
+    | { error?: string }
+    | null;
+
+  if (!response.ok) {
+    throw new Error(result?.error || "货损记录删除失败");
+  }
 }

@@ -21,6 +21,8 @@ type DamagesTableProps = {
   shipmentOptions: DamageShipmentOption[];
   logisticsOptions: LogisticsProviderOption[];
   onCreate: () => void;
+  onDelete: (record: DamageRecord) => void;
+  isDeleting: (record: DamageRecord) => boolean;
 };
 
 const PAGE_SIZE = 40;
@@ -34,6 +36,7 @@ const DAMAGE_SUMMARY_COLUMN_KEYS = [
   "product_value",
   "freight_value",
   "total_value",
+  "actions",
 ] as const;
 const EMPTY_DAMAGE_VALUE_SUMMARY = {
   productValue: 0,
@@ -80,11 +83,9 @@ export default function DamagesTable({
   shipmentOptions,
   logisticsOptions,
   onCreate,
+  onDelete,
+  isDeleting,
 }: DamagesTableProps) {
-  const columns = useMemo(
-    () => getDamageColumns(shipmentOptions, logisticsOptions),
-    [logisticsOptions, shipmentOptions],
-  );
   const searchParamsRef = useRef<Record<string, unknown>>({});
   const sorterRef = useRef<Record<string, SortOrder>>({});
   const loadingRef = useRef(true);
@@ -177,6 +178,17 @@ export default function DamagesTable({
     );
   }, [loadPage]);
 
+  const columns = useMemo(
+    () =>
+      getDamageColumns(
+        shipmentOptions,
+        logisticsOptions,
+        onDelete,
+        isDeleting,
+      ),
+    [isDeleting, logisticsOptions, onDelete, shipmentOptions],
+  );
+
   useEffect(() => {
     let cancelled = false;
 
@@ -236,7 +248,7 @@ export default function DamagesTable({
           />
         </Tooltip>,
       ]}
-      scroll={{ x: 970, y: "calc(100vh - 360px)" }}
+      scroll={{ x: 1026, y: "calc(100vh - 360px)" }}
       onScroll={(event) => {
         const target = event.currentTarget;
 

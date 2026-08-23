@@ -1,7 +1,8 @@
 "use client";
 
+import { ExclamationCircleFilled } from "@ant-design/icons";
 import type { ActionType } from "@ant-design/pro-components";
-import { App, ConfigProvider } from "antd";
+import { App, ConfigProvider, message, Modal } from "antd";
 import zhCN from "antd/locale/zh_CN";
 import dayjs from "dayjs";
 import "dayjs/locale/zh-cn";
@@ -10,8 +11,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
 import { requestLogisticsProviderOptions } from "../../logistics/_lib/logistics-request";
 import ShipmentsTableSkeleton from "../../shipments/_components/shipments-table-skeleton";
-import type { DamageShipmentOption } from "../_lib/damages";
-import { requestDamageShipmentOptions } from "../_lib/damages-request";
+import type { DamageRecord, DamageShipmentOption } from "../_lib/damages";
+import {
+  deleteDamageRecord,
+  requestDamageShipmentOptions,
+} from "../_lib/damages-request";
 import DamageCreateModal from "./damage-create-modal";
 import DamagesTable from "./damages-table";
 
@@ -25,6 +29,9 @@ export default function DamagesPage() {
     LogisticsProviderOption[]
   >([]);
   const tableActionRef = useRef<ActionType>(undefined);
+  const [deletingDamageId, setDeletingDamageId] = useState<string | null>(null);
+  const [messageApi, messageContextHolder] = message.useMessage();
+  const [modalApi, modalContextHolder] = Modal.useModal();
 
   const refreshShipmentOptions = useCallback(async () => {
     const options = await requestDamageShipmentOptions();
@@ -68,12 +75,41 @@ export default function DamagesPage() {
     };
   }, [mounted]);
 
+  function handleDelete(record: DamageRecord) {
+    modalApi.confirm({
+      title: "删除货损记录",
+      icon: <ExclamationCircleFilled className="!text-amber-500" />,
+      content: `确认删除送仓货件 ${record.delivery_shipment_no} 的货损记录？`,
+      okText: "确定删除",
+      cancelText: "取消",
+      okButtonProps: { danger: true },
+      centered: true,
+      onOk: async () => {
+        try {
+          setDeletingDamageId(record.id);
+          await deleteDamageRecord(record.id);
+          messageApi.success("货损记录删除成功");
+          tableActionRef.current?.reload();
+        } catch (error) {
+          const description =
+            error instanceof Error ? error.message : "请稍后重试";
+          messageApi.error(`货损记录删除失败：${description}`);
+          throw error;
+        } finally {
+          setDeletingDamageId(null);
+        }
+      },
+    });
+  }
+
   return (
     <ConfigProvider
       locale={zhCN}
       theme={{ token: { borderRadius: 6, colorPrimary: "#1677ff" } }}
     >
       <App>
+        {messageContextHolder}
+        {modalContextHolder}
         <main className="h-full overflow-auto bg-slate-100 px-6 py-6">
           <section className="mx-auto flex max-w-[1600px] flex-col gap-4">
             {mounted ? (
@@ -82,6 +118,8 @@ export default function DamagesPage() {
                 shipmentOptions={shipmentOptions}
                 logisticsOptions={logisticsOptions}
                 onCreate={() => setCreateOpen(true)}
+                onDelete={handleDelete}
+                isDeleting={(record) => deletingDamageId === record.id}
               />
             ) : (
               <ShipmentsTableSkeleton />
