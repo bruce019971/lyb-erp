@@ -21,6 +21,7 @@ import ShipmentsTableSkeleton from "../../shipments/_components/shipments-table-
 import RishenghuiAuthModal from "../../shipments/_components/rishenghui-auth-modal";
 import { calculateFreightTotalFee, type FreightRecord } from "../_lib/freights";
 import {
+  batchConfirmFreightRecords,
   fetchRishenghuiFreightBill,
   fetchRishenghuiFreightUnitPrice,
   fetchRishenghuiFreightVolume,
@@ -88,6 +89,7 @@ export default function FreightsPage() {
   const [updatingPaidStatusId, setUpdatingPaidStatusId] = useState<string | null>(
     null,
   );
+  const [batchConfirming, setBatchConfirming] = useState(false);
   const [volumeDetail, setVolumeDetail] = useState<{
     open: boolean;
     providerName: string;
@@ -692,6 +694,54 @@ export default function FreightsPage() {
     await savePaidStatus();
   }
 
+  async function confirmSelectedFreights(records: FreightRecord[]) {
+    try {
+      setBatchConfirming(true);
+      const result = await batchConfirmFreightRecords(
+        records.map((record) => record.id),
+      );
+
+      if (result.updatedCount === 0) {
+        messageApi.info("所选运费记录已全部确认");
+      } else {
+        messageApi.success(`已确认 ${result.updatedCount} 条运费记录`);
+      }
+      tableActionRef.current?.reload();
+    } catch (error) {
+      const description =
+        error instanceof Error ? error.message : "批量确认运费失败";
+      messageApi.error(`批量确认运费失败：${description}`);
+    } finally {
+      setBatchConfirming(false);
+    }
+  }
+
+  function handleBatchConfirm(records: FreightRecord[]) {
+    if (records.length === 0) {
+      messageApi.warning("请先选择需要确认的运费记录");
+      return;
+    }
+
+    if (
+      records.some(
+        (record) =>
+          !hasBillAmount(record) || record.freight_paid_status === "是",
+      )
+    ) {
+      messageApi.warning("只能选择已出账单且未确认的运费记录");
+      return;
+    }
+
+    modalApi.confirm({
+      title: "批量确认运费？",
+      content: `将选中的 ${records.length} 条运费记录标记为已支付，确认后不可撤销。`,
+      okText: "确认运费",
+      cancelText: "取消",
+      centered: true,
+      onOk: () => confirmSelectedFreights(records),
+    });
+  }
+
   async function fetchAndSaveVolume(
     record: FreightRecord,
     accessTokenOverride?: string,
@@ -913,6 +963,7 @@ export default function FreightsPage() {
                 actionRef={tableActionRef}
                 shipmentOptions={shipmentOptions}
                 logisticsOptions={logisticsOptions}
+                onBatchConfirm={handleBatchConfirm}
                 onEdit={(record) => {
                   if (hasBillAmount(record)) {
                     messageApi.warning("账单金额已存在，不能编辑");
@@ -954,6 +1005,7 @@ export default function FreightsPage() {
                 }
                 isPaidStatusEditing={isPaidStatusEditing}
                 isPaidStatusUpdating={isPaidStatusUpdating}
+                isBatchConfirming={batchConfirming}
               />
             ) : (
               <ShipmentsTableSkeleton />

@@ -166,6 +166,25 @@ export async function updateFreightRecord(
   };
 }
 
+export async function batchConfirmFreightRecords(ids: string[]) {
+  const response = await fetch("/api/freights/batch-confirm", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ ids }),
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | { updatedCount?: number; error?: string }
+    | null;
+
+  if (!response.ok || typeof payload?.updatedCount !== "number") {
+    throw new Error(payload?.error || "批量确认运费失败");
+  }
+
+  return { updatedCount: payload.updatedCount };
+}
+
 export async function fetchRishenghuiFreightVolume(values: {
   freightId: string;
   accessToken: string;

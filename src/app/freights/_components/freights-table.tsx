@@ -1,9 +1,10 @@
 "use client";
 
+import { CheckCircleOutlined } from "@ant-design/icons";
 import type { ActionType } from "@ant-design/pro-components";
 import { ProTable } from "@ant-design/pro-components";
-import { Table } from "antd";
-import type { MutableRefObject } from "react";
+import { Button, Table, Tooltip } from "antd";
+import type { Key, MutableRefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
@@ -16,6 +17,7 @@ type FreightsTableProps = {
   actionRef?: MutableRefObject<ActionType | undefined>;
   shipmentOptions: ShipmentOption[];
   logisticsOptions: LogisticsProviderOption[];
+  onBatchConfirm: (records: FreightRecord[]) => void;
   onEdit: (record: FreightRecord) => void;
   onFetchVolume: (record: FreightRecord) => void;
   onFetchBill: (record: FreightRecord) => void;
@@ -34,6 +36,7 @@ type FreightsTableProps = {
   isCalculatingFreight: (record: FreightRecord) => boolean;
   isPaidStatusEditing: (record: FreightRecord) => boolean;
   isPaidStatusUpdating: (record: FreightRecord) => boolean;
+  isBatchConfirming: boolean;
 };
 
 const FREIGHT_SUMMARY_COLUMN_KEYS = [
@@ -76,6 +79,7 @@ export default function FreightsTable({
   actionRef,
   shipmentOptions,
   logisticsOptions,
+  onBatchConfirm,
   onEdit,
   onFetchVolume,
   onFetchBill,
@@ -94,6 +98,7 @@ export default function FreightsTable({
   isCalculatingFreight,
   isPaidStatusEditing,
   isPaidStatusUpdating,
+  isBatchConfirming,
 }: FreightsTableProps) {
   const columns = useMemo(
     () =>
@@ -146,6 +151,11 @@ export default function FreightsTable({
   const [dataSource, setDataSource] = useState<FreightRecord[]>([]);
   const [summary, setSummary] = useState<FreightSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
+  const selectedRecords = useMemo(() => {
+    const selectedIds = new Set(selectedRowKeys.map((key) => String(key)));
+    return dataSource.filter((record) => selectedIds.has(record.id));
+  }, [dataSource, selectedRowKeys]);
 
   const loadRecords = useCallback(
     async (params: Record<string, unknown>) => {
@@ -157,6 +167,7 @@ export default function FreightsTable({
         const nextData = result.data ?? [];
         setDataSource(nextData);
         setSummary(result.summary ?? null);
+        setSelectedRowKeys([]);
       } finally {
         setLoading(false);
       }
@@ -198,6 +209,24 @@ export default function FreightsTable({
       columns={columns}
       dataSource={dataSource}
       loading={loading}
+      rowSelection={{
+        type: "checkbox",
+        selectedRowKeys,
+        onChange: setSelectedRowKeys,
+        getCheckboxProps: (record) => {
+          const billed = hasBillAmount(record.bill_amount);
+          const confirmed = record.freight_paid_status === "是";
+
+          return {
+            disabled: !billed || confirmed,
+            title: !billed
+              ? "账单未出，不能选择"
+              : confirmed
+                ? "运费已确认"
+                : "选择该运费记录",
+          };
+        },
+      }}
       rowClassName={(record) => {
         if (
           record.logistics_provider?.trim() === "赛易" &&
@@ -219,6 +248,28 @@ export default function FreightsTable({
         reload: false,
         setting: true,
       }}
+      tableAlertRender={false}
+      tableAlertOptionRender={false}
+      toolBarRender={() => [
+        <Tooltip
+          key="batch-confirm"
+          title={
+            selectedRecords.length > 0
+              ? `确认选中的 ${selectedRecords.length} 条运费记录`
+              : "请先选择已出账单且未确认的运费记录"
+          }
+        >
+          <Button
+            type="primary"
+            icon={<CheckCircleOutlined />}
+            disabled={selectedRecords.length === 0}
+            loading={isBatchConfirming}
+            onClick={() => onBatchConfirm(selectedRecords)}
+          >
+            批量确认运费
+          </Button>
+        </Tooltip>,
+      ]}
       scroll={{ x: 2000, y: "calc(100vh - 360px)" }}
       onSubmit={(values) => {
         searchParamsRef.current = values;
@@ -233,6 +284,7 @@ export default function FreightsTable({
       summary={() => (
         <Table.Summary fixed="bottom">
           <Table.Summary.Row className="freight-summary-row">
+            <Table.Summary.Cell index={0} />
             {FREIGHT_SUMMARY_COLUMN_KEYS.map((key, index) => {
               let content = null;
 
@@ -253,12 +305,12 @@ export default function FreightsTable({
               }
 
               return (
-                <Table.Summary.Cell key={key} index={index}>
+                <Table.Summary.Cell key={key} index={index + 1}>
                   {content}
                 </Table.Summary.Cell>
               );
             })}
-            <Table.Summary.Cell index={FREIGHT_SUMMARY_COLUMN_KEYS.length} />
+            <Table.Summary.Cell index={FREIGHT_SUMMARY_COLUMN_KEYS.length + 1} />
           </Table.Summary.Row>
         </Table.Summary>
       )}
