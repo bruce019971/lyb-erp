@@ -215,6 +215,26 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
     return submittingLogisticsOrderId === record.id;
   }
 
+  async function handleRefreshProductOptions(storeName: string) {
+    const normalizedStoreName = storeName.trim();
+    if (!normalizedStoreName) {
+      throw new Error("请先选择下单店铺");
+    }
+
+    const latestProducts = (await requestProductShipmentOptions(
+      normalizedStoreName,
+    )).filter((item) => item.product_name?.trim());
+
+    setProductOptions((currentOptions) => [
+      ...currentOptions.filter(
+        (item) => item.store_name?.trim() !== normalizedStoreName,
+      ),
+      ...latestProducts,
+    ]);
+
+    return latestProducts.length;
+  }
+
   function showRishenghuiTokenRequiredModal(
     content?: string,
     pendingAction?: PendingRishenghuiAction,
@@ -892,6 +912,7 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
             storeOptions={storeOptions}
             productOptions={productOptions}
             logisticsOptions={logisticsOptions}
+            onRefreshProductOptions={handleRefreshProductOptions}
           />
         ) : null}
         {mounted ? (

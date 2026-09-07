@@ -1,5 +1,6 @@
 "use client";
 
+import { ReloadOutlined } from "@ant-design/icons";
 import {
   App,
   Button,
@@ -10,6 +11,7 @@ import {
   InputNumber,
   Select,
   Space,
+  Tooltip,
 } from "antd";
 import type { FormProps } from "antd";
 import { useEffect, useState } from "react";
@@ -28,6 +30,7 @@ type ShipmentCreateDrawerProps = {
   storeOptions: StoreOption[];
   productOptions: ProductShipmentOption[];
   logisticsOptions: LogisticsProviderOption[];
+  onRefreshProductOptions: (storeName: string) => Promise<number>;
 };
 
 type ShipmentDateFieldName =
@@ -143,9 +146,11 @@ export default function ShipmentCreateDrawer({
   onCreated,
   storeOptions,
   productOptions,
+  onRefreshProductOptions,
 }: ShipmentCreateDrawerProps) {
   const [form] = Form.useForm<ShipmentCreateFormValues>();
   const [submitting, setSubmitting] = useState(false);
+  const [refreshingProducts, setRefreshingProducts] = useState(false);
   const { message } = App.useApp();
   const selectedStoreName = Form.useWatch("order_store", form);
   const warehouseArrivedAt = Form.useWatch("overseas_warehouse_arrived_at", form);
@@ -244,6 +249,20 @@ export default function ShipmentCreateDrawer({
       total_qty: undefined,
       goods_value: undefined,
     });
+  }
+
+  async function handleRefreshProducts() {
+    if (!normalizedStoreName) return;
+
+    try {
+      setRefreshingProducts(true);
+      const productCount = await onRefreshProductOptions(normalizedStoreName);
+      message.success(`产品已更新，共 ${productCount} 个`);
+    } catch (error) {
+      message.error(`产品更新失败：${getErrorMessage(error)}`);
+    } finally {
+      setRefreshingProducts(false);
+    }
   }
 
   function handleValuesChange(
@@ -408,20 +427,33 @@ export default function ShipmentCreateDrawer({
             placeholder={selectedStoreName ? "请输入货件号" : "请先选择下单店铺"}
             required
           />
-          <Form.Item
-            label="产品名称"
-            name="product_name"
-            rules={[{ required: true, message: "请选择产品" }]}
-          >
-            <Select
-              showSearch
-              allowClear
-              disabled={!selectedStoreName}
-              placeholder="请选择产品"
-              options={productSelectOptions}
-              optionFilterProp="label"
-              onChange={applyProductSelection}
-            />
+          <Form.Item label="产品名称" required>
+            <div className="flex items-start gap-2">
+              <Form.Item
+                name="product_name"
+                className="!mb-0 min-w-0 flex-1"
+                rules={[{ required: true, message: "请选择产品" }]}
+              >
+                <Select
+                  showSearch
+                  allowClear
+                  disabled={!selectedStoreName}
+                  placeholder="请选择产品"
+                  options={productSelectOptions}
+                  optionFilterProp="label"
+                  onChange={applyProductSelection}
+                />
+              </Form.Item>
+              <Tooltip title="更新当前店铺产品">
+                <Button
+                  aria-label="更新当前店铺产品"
+                  icon={<ReloadOutlined />}
+                  loading={refreshingProducts}
+                  disabled={!normalizedStoreName}
+                  onClick={() => void handleRefreshProducts()}
+                />
+              </Tooltip>
+            </div>
           </Form.Item>
           <NumberField label="箱数" name="box_count" precision={0} required />
           <DateField

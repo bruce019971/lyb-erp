@@ -231,14 +231,22 @@ export async function requestProductFilterOptions() {
   };
 }
 
-export async function requestProductShipmentOptions() {
-  const { data, error } = await supabase
+export async function requestProductShipmentOptions(storeName?: string) {
+  const normalizedStoreName = storeName?.trim();
+  let query = supabase
     .from("products")
     .select(
       "id, product_name, ml_code, store_name, product_label_url, pcs_per_carton, product_unit_price",
     )
-    .eq("status", "有效")
-    .order("product_name", { ascending: true });
+    .eq("status", "有效");
+
+  if (normalizedStoreName) {
+    query = query.eq("store_name", normalizedStoreName);
+  }
+
+  const { data, error } = await query.order("product_name", {
+    ascending: true,
+  });
 
   if (error) {
     throw error;
