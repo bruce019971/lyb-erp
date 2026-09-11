@@ -392,6 +392,19 @@ export function getShipmentColumns(
       },
     },
     {
+      title: "未约仓",
+      dataIndex: "unappointed",
+      hideInTable: true,
+      valueType: "select",
+      fieldProps: {
+        placeholder: "请选择是否未约仓",
+        options: [
+          { label: "是", value: "是" },
+          { label: "否", value: "否" },
+        ],
+      },
+    },
+    {
       title: "到仓时间",
       dataIndex: "overseas_warehouse_arrived_at",
       valueType: "dateRange",

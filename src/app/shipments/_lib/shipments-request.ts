@@ -18,6 +18,8 @@ type ShipmentRequestParams = {
   pageSize?: number;
   keyword?: string;
   long_term_inventory?: boolean;
+  expiring_shipments?: boolean;
+  expiring_local_store_names?: string[];
 } & Record<string, unknown>;
 
 type DateLikeValue = {
@@ -96,6 +98,13 @@ function getLongTermInventoryCutoffDate() {
   return `${year}-${month}-${day}`;
 }
 
+function getExpiringShipmentCutoffDateTime() {
+  const date = new Date();
+  date.setDate(date.getDate() - 54);
+
+  return date.toISOString();
+}
+
 function applyShipmentSearchParams<TQuery extends ShipmentSearchQuery>(
   query: TQuery,
   params: ShipmentRequestParams,
@@ -148,6 +157,14 @@ function applyShipmentSearchParams<TQuery extends ShipmentSearchQuery>(
     nextQuery = nextQuery.is("overseas_warehouse_arrived_at", null);
   }
 
+  const unappointed =
+    typeof params.unappointed === "string" ? params.unappointed.trim() : "";
+  if (unappointed === "是") {
+    nextQuery = nextQuery.is("appointment_time", null);
+  } else if (unappointed === "否") {
+    nextQuery = nextQuery.not("appointment_time", "is", null);
+  }
+
   const deliveryStatus =
     typeof params.delivery_status === "string"
       ? params.delivery_status.trim()
@@ -180,6 +197,18 @@ function applyShipmentSearchParams<TQuery extends ShipmentSearchQuery>(
       .not("overseas_warehouse_arrived_at", "is", null)
       .lte("overseas_warehouse_arrived_at", getLongTermInventoryCutoffDate())
       .or("delivery_status.is.null,delivery_status.neq.是");
+  }
+
+  if (params.expiring_shipments === true) {
+    const localStoreNames = normalizeMultiSelectValues(
+      params.expiring_local_store_names,
+    );
+
+    nextQuery =
+      localStoreNames.length > 0
+        ? nextQuery.in("order_store", localStoreNames)
+        : nextQuery.is("id", null);
+    nextQuery = nextQuery.lte("created_at", getExpiringShipmentCutoffDateTime());
   }
 
   return nextQuery as TQuery;

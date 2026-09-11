@@ -153,10 +153,16 @@ function normalizeCreatedShipmentRecord(record: ShipmentRecord): ShipmentRecord 
 function buildRequestParams(
   params: Record<string, unknown>,
   longTermInventoryOnly: boolean,
+  expiringShipmentsOnly: boolean,
+  localStoreNames: string[],
 ) {
   return {
     ...params,
     long_term_inventory: longTermInventoryOnly || undefined,
+    expiring_shipments: expiringShipmentsOnly || undefined,
+    expiring_local_store_names: expiringShipmentsOnly
+      ? localStoreNames
+      : undefined,
   };
 }
 
@@ -275,8 +281,21 @@ export default function ShipmentsTable({
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [searchCollapsed, setSearchCollapsed] = useState(true);
   const [longTermInventoryOnly, setLongTermInventoryOnly] = useState(false);
+  const [expiringShipmentsOnly, setExpiringShipmentsOnly] = useState(false);
   const [columnsStateMap, setColumnsStateMap] = useState<ShipmentColumnsState>(
     () => readShipmentColumnsState(),
+  );
+  const localStoreNames = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          storeOptions
+            .filter((item) => item.seller_type?.trim() === "本土")
+            .map((item) => item.seller_name.trim())
+            .filter(Boolean),
+        ),
+      ),
+    [storeOptions],
   );
   const selectedRecords = useMemo(() => {
     const selectedIdSet = new Set(selectedRowKeys.map((item) => String(item)));
@@ -307,6 +326,8 @@ export default function ShipmentsTable({
         const requestParams = buildRequestParams(
           params,
           longTermInventoryOnly,
+          expiringShipmentsOnly,
+          localStoreNames,
         );
 
         const [result, summaryResult] = await Promise.all([
@@ -325,7 +346,7 @@ export default function ShipmentsTable({
         setSummaryLoading(false);
       }
     },
-    [longTermInventoryOnly],
+    [expiringShipmentsOnly, localStoreNames, longTermInventoryOnly],
   );
 
   const reloadFirstPage = useCallback(async () => {
@@ -337,7 +358,9 @@ export default function ShipmentsTable({
       hasActiveSearchValue,
     );
 
-    if (hasActiveSearch || longTermInventoryOnly) return false;
+    if (hasActiveSearch || longTermInventoryOnly || expiringShipmentsOnly) {
+      return false;
+    }
 
     const normalizedRecord = normalizeCreatedShipmentRecord(record);
 
@@ -373,7 +396,7 @@ export default function ShipmentsTable({
     setSelectedRowKeys([]);
 
     return true;
-  }, [longTermInventoryOnly]);
+  }, [expiringShipmentsOnly, longTermInventoryOnly]);
 
   const handleGenerateCartonLabel = useCallback(
     async (record: ShipmentRecord) => {
@@ -513,16 +536,29 @@ export default function ShipmentsTable({
       rowKey="id"
       size="small"
       headerTitle={
-        <Space size={8}>
-          <Typography.Text>长期库存</Typography.Text>
-          <Tooltip title="到仓25天及以上没有送仓的货件">
-            <QuestionCircleOutlined className="text-slate-400" />
-          </Tooltip>
-          <Switch
-            size="small"
-            checked={longTermInventoryOnly}
-            onChange={setLongTermInventoryOnly}
-          />
+        <Space size={16} wrap>
+          <Space size={8}>
+            <Typography.Text>长期库存</Typography.Text>
+            <Tooltip title="到仓25天及以上没有送仓的货件">
+              <QuestionCircleOutlined className="text-slate-400" />
+            </Tooltip>
+            <Switch
+              size="small"
+              checked={longTermInventoryOnly}
+              onChange={setLongTermInventoryOnly}
+            />
+          </Space>
+          <Space size={8}>
+            <Typography.Text>临期货件</Typography.Text>
+            <Tooltip title="本土店铺中创建时间超过54天的货件">
+              <QuestionCircleOutlined className="text-slate-400" />
+            </Tooltip>
+            <Switch
+              size="small"
+              checked={expiringShipmentsOnly}
+              onChange={setExpiringShipmentsOnly}
+            />
+          </Space>
         </Space>
       }
       columns={columns}
