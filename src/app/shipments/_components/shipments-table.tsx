@@ -550,7 +550,7 @@ export default function ShipmentsTable({
           </Space>
           <Space size={8}>
             <Typography.Text>临期货件</Typography.Text>
-            <Tooltip title="本土店铺中创建时间超过54天的货件">
+            <Tooltip title="本土店铺中创建时间超过54天且未约仓的货件">
               <QuestionCircleOutlined className="text-slate-400" />
             </Tooltip>
             <Switch

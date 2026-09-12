@@ -208,7 +208,9 @@ function applyShipmentSearchParams<TQuery extends ShipmentSearchQuery>(
       localStoreNames.length > 0
         ? nextQuery.in("order_store", localStoreNames)
         : nextQuery.is("id", null);
-    nextQuery = nextQuery.lte("created_at", getExpiringShipmentCutoffDateTime());
+    nextQuery = nextQuery
+      .lte("created_at", getExpiringShipmentCutoffDateTime())
+      .is("appointment_time", null);
   }
 
   return nextQuery as TQuery;
