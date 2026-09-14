@@ -162,11 +162,12 @@ export async function requestRelabelRecords(
   );
   const productNameByShipmentNo = new Map<string, string | null>();
   const originalStoreByShipmentNo = new Map<string, string | null>();
+  const trackingNoByShipmentNo = new Map<string, string | null>();
 
   if (relabelOriginalShipmentNos.length > 0) {
     const { data: shipmentRows } = await supabase
       .from("shipment_records")
-      .select("shipment_no, product_name, order_store")
+      .select("shipment_no, product_name, order_store, tracking_no")
       .eq("status", "有效")
       .in("shipment_no", relabelOriginalShipmentNos);
 
@@ -183,20 +184,61 @@ export async function requestRelabelRecords(
         shipmentNo,
         typeof item.order_store === "string" ? item.order_store : null,
       );
+      trackingNoByShipmentNo.set(
+        shipmentNo,
+        typeof item.tracking_no === "string" ? item.tracking_no : null,
+      );
+    });
+  }
+
+  const productNames = Array.from(
+    new Set(
+      Array.from(productNameByShipmentNo.values())
+        .map((name) => name?.trim())
+        .filter((name): name is string => Boolean(name)),
+    ),
+  );
+  const originalMlCodeByProduct = new Map<string, string | null>();
+
+  if (productNames.length > 0) {
+    const { data: productRows } = await supabase
+      .from("products")
+      .select("product_name, store_name, ml_code")
+      .in("product_name", productNames)
+      .eq("status", "有效");
+
+    (productRows ?? []).forEach((product) => {
+      const productName = product.product_name?.trim();
+      if (!productName) return;
+
+      const storeName = product.store_name?.trim() ?? "";
+      originalMlCodeByProduct.set(
+        `${productName}\u0000${storeName}`,
+        product.ml_code,
+      );
     });
   }
 
   return {
     data: relabelRecords.map((item) => {
       const shipmentNo = item.original_shipment_no?.trim();
+      const productName = shipmentNo
+        ? (productNameByShipmentNo.get(shipmentNo) ?? null)
+        : null;
+      const originalStore = shipmentNo
+        ? (originalStoreByShipmentNo.get(shipmentNo) ?? null)
+        : null;
 
       return {
         ...item,
-        product_name: shipmentNo
-          ? (productNameByShipmentNo.get(shipmentNo) ?? null)
-          : null,
-        original_store: shipmentNo
-          ? (originalStoreByShipmentNo.get(shipmentNo) ?? null)
+        product_name: productName,
+        original_store: originalStore,
+        original_ml_code:
+          originalMlCodeByProduct.get(
+            `${productName?.trim() ?? ""}\u0000${originalStore?.trim() ?? ""}`,
+          ) ?? null,
+        tracking_no: shipmentNo
+          ? (trackingNoByShipmentNo.get(shipmentNo) ?? null)
           : null,
       };
     }),

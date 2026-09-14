@@ -112,6 +112,25 @@ export function getRelabelColumns(
       },
     },
     {
+      title: "运单编号",
+      dataIndex: "tracking_no",
+      width: 170,
+      search: false,
+      render: (_, record) => {
+        const trackingNo = record.tracking_no?.trim();
+
+        return (
+          <Typography.Text
+            className="whitespace-nowrap"
+            copyable={trackingNo ? { text: trackingNo } : false}
+            type={trackingNo ? undefined : "secondary"}
+          >
+            {trackingNo || "-"}
+          </Typography.Text>
+        );
+      },
+    },
+    {
       title: "原店铺/送仓店铺",
       dataIndex: "original_store",
       width: 180,
@@ -129,12 +148,32 @@ export function getRelabelColumns(
       },
     },
     {
-      title: "产品名称",
+      title: "产品名称/原ML Code",
       dataIndex: "product_name",
-      width: 120,
+      width: 170,
       ellipsis: true,
       search: false,
-      render: (_, record) => record.product_name ?? "",
+      render: (_, record) => {
+        const productName = record.product_name?.trim();
+        const originalMlCode = record.original_ml_code?.trim();
+
+        return (
+          <div className="flex min-w-[150px] flex-col gap-1">
+            <div className="truncate">
+              <Typography.Text type={productName ? undefined : "secondary"}>
+                {productName || "-"}
+              </Typography.Text>
+            </div>
+            <Typography.Text
+              className="whitespace-nowrap"
+              copyable={originalMlCode ? { text: originalMlCode } : false}
+              type={originalMlCode ? undefined : "secondary"}
+            >
+              {originalMlCode || "-"}
+            </Typography.Text>
+          </div>
+        );
+      },
     },
     {
       title: "外箱数",
