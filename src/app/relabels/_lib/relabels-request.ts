@@ -135,7 +135,7 @@ export async function requestRelabelRecords(
     });
   } else {
     query = query
-      .order("created_at", {
+      .order("delivery_time", {
         ascending: false,
         nullsFirst: false,
       })
