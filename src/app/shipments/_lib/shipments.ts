@@ -60,6 +60,7 @@ export type ShipmentOption = {
   order_store: string | null;
   box_count: number | null;
   pcs_per_box?: number | null;
+  total_qty?: number | null;
   logistics_provider?: string | null;
   warehouse_arrived_status?: string | null;
 };

@@ -10,6 +10,8 @@ import {
   type RelabelRecord,
 } from "../_lib/relabels";
 
+import RelabelInstructionDownload from "./relabel-instruction-download";
+
 const TOKEN_SEPARATORS = [" ", "\n", "\r", "\t", ",", "，"];
 
 function RelabelTypeTag({ value }: { value?: string | null }) {
@@ -293,7 +295,7 @@ export function getRelabelColumns(
     {
       title: "操作",
       valueType: "option",
-      width: 84,
+      width: 120,
       fixed: "right",
       search: false,
       render: (_, record) => {
@@ -307,6 +309,7 @@ export function getRelabelColumns(
               onClick={() => onEdit(record)}
             />
           </Tooltip>,
+          <RelabelInstructionDownload key="download" record={record} />,
         ];
 
         if (!hasDeliveryTime) {

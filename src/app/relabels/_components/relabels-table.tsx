@@ -242,7 +242,7 @@ export default function RelabelsTable({
           />
         </Tooltip>,
       ]}
-      scroll={{ x: 1604, y: "calc(100vh - 360px)" }}
+      scroll={{ x: 1640, y: "calc(100vh - 360px)" }}
       onScroll={(event) => {
         const target = event.currentTarget;
 

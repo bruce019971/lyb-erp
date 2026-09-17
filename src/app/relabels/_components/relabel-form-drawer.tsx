@@ -23,7 +23,7 @@ import type {
   RelabelRecord,
   RelabelUpdateValues,
 } from "../_lib/relabels";
-import { relabelTypeOptions } from "../_lib/relabels";
+import { relabelTypeOptions, requiresProductRelabel } from "../_lib/relabels";
 import {
   createRelabelRecord,
   updateRelabelRecord,
@@ -124,7 +124,7 @@ export default function RelabelFormDrawer({
   const selectedBoxCount = Form.useWatch("box_count", form);
   const selectedProductCount = Form.useWatch("product_count", form);
   const shouldShowProductCount =
-    Boolean(selectedRelabelType) && selectedRelabelType !== "外箱标";
+    requiresProductRelabel(selectedRelabelType);
 
   const originalShipmentOptions = useMemo(
     () => {
@@ -209,7 +209,6 @@ export default function RelabelFormDrawer({
       ? logisticsOptionByProviderName.get(providerName)
       : undefined;
   }, [logisticsOptionByProviderName, selectedShipmentOption]);
-  const selectedPcsPerBox = selectedShipmentOption?.pcs_per_box;
   const selectedCartonLabelUnitPrice =
     selectedLogisticsOption?.carton_label_unit_price;
   const selectedProductLabelUnitPrice =
@@ -256,67 +255,24 @@ export default function RelabelFormDrawer({
   useEffect(() => {
     if (!open) return;
 
-    const boxCount = normalizeNumberValue(selectedBoxCount);
-    const pcsPerBox = normalizeNumberValue(selectedPcsPerBox);
-    const nextProductCount =
-      selectedRelabelType === "外箱标及产品标" &&
-      boxCount !== null &&
-      pcsPerBox !== null
-        ? boxCount * pcsPerBox
-        : undefined;
-    const currentProductCount = form.getFieldValue("product_count");
-    const nextFields: Array<{
-      name: keyof RelabelFormValues;
-      value: number | undefined;
-    }> = [];
-
-    if (
-      selectedRelabelType === "外箱标及产品标" &&
-      nextProductCount !== undefined &&
-      currentProductCount !== nextProductCount
-    ) {
-      nextFields.push({ name: "product_count", value: nextProductCount });
-    }
-
-    if (
-      selectedRelabelType === "外箱标及产品标" &&
-      nextProductCount === undefined &&
-      currentProductCount !== undefined
-    ) {
-      nextFields.push({ name: "product_count", value: undefined });
-    }
-
-    if (selectedRelabelType === "外箱标" && currentProductCount !== undefined) {
-      nextFields.push({ name: "product_count", value: undefined });
-    }
-
-    const effectiveProductCount =
-      nextFields.find((item) => item.name === "product_count")?.value ??
-      selectedProductCount;
-
     const nextRelabelFee = calculateRelabelFee({
       boxCount: selectedBoxCount,
       cartonLabelUnitPrice: selectedCartonLabelUnitPrice,
       productCount:
-        selectedRelabelType === "外箱标" ? null : effectiveProductCount,
+        selectedRelabelType === "外箱标" ? null : selectedProductCount,
       productLabelUnitPrice: selectedProductLabelUnitPrice,
       relabelType: selectedRelabelType,
     });
     const currentRelabelFee = form.getFieldValue("relabel_fee");
 
     if (currentRelabelFee !== nextRelabelFee) {
-      nextFields.push({ name: "relabel_fee", value: nextRelabelFee });
-    }
-
-    if (nextFields.length > 0) {
-      form.setFields(nextFields);
+      form.setFields([{ name: "relabel_fee", value: nextRelabelFee }]);
     }
   }, [
     form,
     open,
     selectedBoxCount,
     selectedCartonLabelUnitPrice,
-    selectedPcsPerBox,
     selectedProductCount,
     selectedProductLabelUnitPrice,
     selectedRelabelType,
@@ -334,6 +290,7 @@ export default function RelabelFormDrawer({
         delivery_shipment_no: record.delivery_shipment_no ?? undefined,
         box_count: record.box_count ?? undefined,
         product_count: record.product_count ?? undefined,
+        new_ml_code: record.new_ml_code ?? undefined,
         relabel_fee: record.relabel_fee ?? undefined,
         relabel_type: record.relabel_type ?? undefined,
         delivery_time: toDateInputValue(record.delivery_time),
@@ -350,8 +307,32 @@ export default function RelabelFormDrawer({
       delivery_store: undefined,
       box_count: undefined,
       product_count: undefined,
+      new_ml_code: undefined,
     });
   }, [applyDefaultBoxCount, form, mode, open, record]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const relabelType = form.getFieldValue("relabel_type");
+    const shipmentNo = form.getFieldValue("original_shipment_no")?.trim();
+    const shipment = shipmentNo
+      ? shipmentOptionByShipmentNo.get(shipmentNo)
+      : undefined;
+    const productCount = requiresProductRelabel(relabelType)
+      ? normalizeNumberValue(shipment?.total_qty) ?? undefined
+      : undefined;
+
+    form.setFields([{ name: "product_count", value: productCount }]);
+  }, [
+    form,
+    mode,
+    open,
+    record,
+    selectedOriginalShipmentNo,
+    selectedRelabelType,
+    shipmentOptionByShipmentNo,
+  ]);
 
   const handleFinish: FormProps<RelabelFormValues>["onFinish"] = async (
     values,
@@ -363,6 +344,9 @@ export default function RelabelFormDrawer({
       box_count: values.box_count,
       product_count:
         values.relabel_type === "外箱标" ? null : values.product_count,
+      new_ml_code: requiresProductRelabel(values.relabel_type)
+        ? normalizeRequiredText(values.new_ml_code)
+        : null,
       relabel_fee: values.relabel_fee,
       relabel_type: normalizeRequiredText(values.relabel_type),
       delivery_time: serializeDate(values.delivery_time),
@@ -545,6 +529,19 @@ export default function RelabelFormDrawer({
                 precision={0}
                 placeholder="请输入产品数"
               />
+            </Form.Item>
+          ) : null}
+
+          {shouldShowProductCount ? (
+            <Form.Item
+              label="新ML Code"
+              name="new_ml_code"
+              preserve={false}
+              rules={[
+                { required: true, whitespace: true, message: "请输入新ML Code" },
+              ]}
+            >
+              <Input placeholder="请输入新ML Code" />
             </Form.Item>
           ) : null}
 

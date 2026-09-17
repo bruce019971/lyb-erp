@@ -7,6 +7,7 @@ import type {
   RelabelRecord,
   RelabelUpdateValues,
 } from "./relabels";
+import { normalizeNewMlCode } from "./relabels";
 
 type RelabelRequestParams = {
   current?: number;
@@ -319,6 +320,7 @@ async function markOriginalShipmentAsRelabel(record: RelabelRecord) {
 export async function createRelabelRecord(values: RelabelCreateValues) {
   const payload = {
     original_shipment_no: values.original_shipment_no.trim(),
+    new_ml_code: normalizeNewMlCode(values),
     delivery_store: normalizeTextValue(values.delivery_store),
     delivery_shipment_no: normalizeTextValue(values.delivery_shipment_no),
     box_count: normalizeNumberValue(values.box_count),
@@ -354,6 +356,7 @@ export async function updateRelabelRecord(
 ) {
   const payload = compactPayload({
     original_shipment_no: values.original_shipment_no.trim(),
+    new_ml_code: normalizeNewMlCode(values),
     delivery_store: normalizeTextValue(values.delivery_store),
     delivery_shipment_no: normalizeTextValue(values.delivery_shipment_no),
     box_count: normalizeNumberValue(values.box_count),

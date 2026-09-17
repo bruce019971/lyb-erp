@@ -5,6 +5,7 @@ export type RelabelRecord = {
   original_shipment_no: string | null;
   product_name?: string | null;
   original_ml_code?: string | null;
+  new_ml_code?: string | null;
   tracking_no?: string | null;
   original_store?: string | null;
   delivery_store: string | null;
@@ -23,6 +24,7 @@ export type RelabelRecord = {
 
 export type RelabelCreateValues = {
   original_shipment_no: string;
+  new_ml_code?: string | null;
   delivery_store?: string | null;
   delivery_shipment_no?: string | null;
   box_count?: number | null;
@@ -42,6 +44,18 @@ export const relabelTypeOptions = [
   "产品标",
   "外箱标及产品标",
 ] as const;
+
+export function requiresProductRelabel(relabelType?: string | null) {
+  return relabelType === "产品标" || relabelType === "外箱标及产品标";
+}
+
+export function normalizeNewMlCode(values: RelabelCreateValues) {
+  if (!requiresProductRelabel(values.relabel_type)) return null;
+
+  const newMlCode = values.new_ml_code?.trim();
+  if (!newMlCode) throw new Error("请输入新ML Code");
+  return newMlCode;
+}
 
 export function formatRelabelDate(value?: string | null) {
   if (!value) return "";
