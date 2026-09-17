@@ -9,6 +9,9 @@ type RelabelInstructionRecord = Pick<
   | "original_shipment_no"
   | "delivery_shipment_no"
   | "box_count"
+  | "original_ml_code"
+  | "new_ml_code"
+  | "product_count"
 >;
 
 function requireText(value: string | null | undefined, label: string) {
@@ -25,8 +28,9 @@ export async function createRelabelInstruction(
   record: RelabelInstructionRecord,
   template: ArrayBuffer,
 ) {
-  if (record.relabel_type !== "外箱标") {
-    throw new Error("目前仅支持外箱标类型的换标指令下载");
+  const includesProductLabel = record.relabel_type === "外箱标及产品标";
+  if (record.relabel_type !== "外箱标" && !includesProductLabel) {
+    throw new Error("目前仅支持外箱标、外箱标及产品标类型的换标指令下载");
   }
 
   const trackingNo = requireText(record.tracking_no, "原货件的运单编号");
@@ -35,6 +39,20 @@ export async function createRelabelInstruction(
   const boxCount = record.box_count;
   if (boxCount === null || !Number.isInteger(boxCount) || boxCount <= 0) {
     throw new Error("请填写大于0的整数箱数后下载换标指令");
+  }
+
+  const originalMlCode = includesProductLabel
+    ? requireText(record.original_ml_code, "原货件产品ML Code")
+    : null;
+  const newMlCode = includesProductLabel
+    ? requireText(record.new_ml_code, "新ML Code")
+    : null;
+  const productCount = record.product_count;
+  if (
+    includesProductLabel &&
+    (productCount === null || !Number.isInteger(productCount) || productCount <= 0)
+  ) {
+    throw new Error("请填写大于0的整数产品数后下载换标指令");
   }
 
   const workbook = new ExcelJS.Workbook();
@@ -46,6 +64,12 @@ export async function createRelabelInstruction(
   worksheet.getCell("C3").value = originalShipmentNo;
   worksheet.getCell("D3").value = deliveryShipmentNo;
   worksheet.getCell("G3").value = boxCount;
+
+  if (includesProductLabel) {
+    worksheet.getCell("E3").value = originalMlCode;
+    worksheet.getCell("F3").value = newMlCode;
+    worksheet.getCell("H3").value = productCount;
+  }
 
   return {
     buffer: await workbook.xlsx.writeBuffer(),

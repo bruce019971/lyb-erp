@@ -14,7 +14,8 @@ export default function RelabelInstructionDownload({
   const { message } = App.useApp();
   const downloadingRef = useRef(false);
   const [downloading, setDownloading] = useState(false);
-  const supported = record.relabel_type === "外箱标";
+  const supported =
+    record.relabel_type === "外箱标" || record.relabel_type === "外箱标及产品标";
 
   async function handleDownload() {
     if (downloadingRef.current || !supported) return;
@@ -50,7 +51,9 @@ export default function RelabelInstructionDownload({
   }
 
   return (
-    <Tooltip title={supported ? "下载换标指令" : "目前仅支持外箱标类型下载"}>
+    <Tooltip
+      title={supported ? "下载换标指令" : "目前仅支持外箱标、外箱标及产品标类型下载"}
+    >
       <span>
         <Button
           type="text"

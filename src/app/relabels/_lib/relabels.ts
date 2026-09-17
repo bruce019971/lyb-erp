@@ -41,7 +41,6 @@ export type RelabelUpdateValues = RelabelCreateValues;
 
 export const relabelTypeOptions = [
   "外箱标",
-  "产品标",
   "外箱标及产品标",
 ] as const;
 
