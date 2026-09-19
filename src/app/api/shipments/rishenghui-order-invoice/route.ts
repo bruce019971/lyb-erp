@@ -5,6 +5,10 @@ import sharp from "sharp";
 
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { verifyLogisticsOperator } from "../../logistics/rishenghui/_lib";
+import {
+  getOrderInvoiceTotalAmount,
+  getOrderInvoiceUnitPrice,
+} from "../_order-invoice-pricing";
 
 export const runtime = "nodejs";
 
@@ -334,15 +338,16 @@ function getDetailValue(label: string, context: InvoiceContext) {
     case "箱数":
       return toNumber(shipment.box_count);
     case "单个产品申报单价":
-      // 产品单价
-      return toNumber(product?.product_unit_price);
+      return toNumber(getOrderInvoiceUnitPrice(product?.product_unit_price));
     case "单个产品净重":
       // 单个毛重
       return toNumber(product?.single_gross_weight);
     case "总产品数量":
       return toNumber(shipment.total_qty);
     case "总申报金额":
-      return toNumber(shipment.goods_value);
+      return toNumber(
+        getOrderInvoiceTotalAmount(shipment.total_qty, product?.product_unit_price),
+      );
     case "SKU NO":
       // 产品SKU
       return toDisplayText(product?.sku);
@@ -585,7 +590,9 @@ function setFixedInvoiceCells(
   const worksheet = workbook.worksheets[0];
   if (!worksheet) return;
 
-  worksheet.getCell("L18").value = toNumber(context.product?.product_unit_price);
+  worksheet.getCell("L18").value = toNumber(
+    getOrderInvoiceUnitPrice(context.product?.product_unit_price),
+  );
   worksheet.getCell("M18").value = toNumber(context.product?.single_gross_weight);
 }
 

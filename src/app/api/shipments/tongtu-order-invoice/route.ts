@@ -4,6 +4,10 @@ import sharp from "sharp";
 
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { verifyLogisticsOperator } from "../../logistics/rishenghui/_lib";
+import {
+  getOrderInvoiceTotalAmount,
+  getOrderInvoiceUnitPrice,
+} from "../_order-invoice-pricing";
 
 export const runtime = "nodejs";
 
@@ -116,19 +120,6 @@ function toDisplayText(value?: string | number | null) {
 
 function toNumber(value?: number | null) {
   return typeof value === "number" && Number.isFinite(value) ? value : "";
-}
-
-function multiplyMoney(quantity?: number | null, unitPrice?: number | null) {
-  if (
-    typeof quantity !== "number" ||
-    !Number.isFinite(quantity) ||
-    typeof unitPrice !== "number" ||
-    !Number.isFinite(unitPrice)
-  ) {
-    return "";
-  }
-
-  return Math.round(quantity * unitPrice * 100) / 100;
 }
 
 function getSafeFileNamePart(value?: string | null) {
@@ -945,7 +936,9 @@ async function getTemplateZip(templateUrl: string) {
 function getTongtuCellValues(context: InvoiceContext) {
   const shipmentNo = toDisplayText(context.shipment.shipment_no);
   const totalQty = toNumber(context.shipment.total_qty);
-  const unitPrice = toNumber(context.product?.product_unit_price);
+  const unitPrice = toNumber(
+    getOrderInvoiceUnitPrice(context.product?.product_unit_price),
+  );
   const productAttribute = String(
     toDisplayText(context.product?.product_attribute),
   );
@@ -964,9 +957,11 @@ function getTongtuCellValues(context: InvoiceContext) {
     K17: toDisplayText(context.product?.customs_code),
     N17: totalQty,
     O17: unitPrice,
-    P17: multiplyMoney(
-      context.shipment.total_qty,
-      context.product?.product_unit_price,
+    P17: toNumber(
+      getOrderInvoiceTotalAmount(
+        context.shipment.total_qty,
+        context.product?.product_unit_price,
+      ),
     ),
   } satisfies Record<string, CellValue>;
 
