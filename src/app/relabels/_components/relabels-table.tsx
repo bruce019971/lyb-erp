@@ -13,6 +13,7 @@ import {
   requestRelabelRecords,
 } from "../_lib/relabels-request";
 import {
+  hasRelabelDeliveryDateArrived,
   isRelabelDeliveryOverdue,
   type RelabelRecord,
 } from "../_lib/relabels";
@@ -128,6 +129,10 @@ export default function RelabelsTable({
   const [dataSource, setDataSource] = useState<RelabelRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const selectedDeliverableRecords = dataSource.filter(
+    (record) =>
+      selectedRowKeys.includes(record.id) && hasRelabelDeliveryDateArrived(record),
+  );
 
   const loadPage = useCallback(
     async (
@@ -199,7 +204,9 @@ export default function RelabelsTable({
 
     const selectedIds = new Set(selectedRowKeys.map(String));
     const ids = dataSource
-      .filter((record) => selectedIds.has(record.id))
+      .filter(
+        (record) => selectedIds.has(record.id) && hasRelabelDeliveryDateArrived(record),
+      )
       .map((record) => record.id);
     if (ids.length === 0) return;
 
@@ -278,7 +285,15 @@ export default function RelabelsTable({
         selectedRowKeys,
         preserveSelectedRowKeys: true,
         onChange: setSelectedRowKeys,
-        getCheckboxProps: () => ({ disabled: batchDelivering || loading }),
+        getCheckboxProps: (record) => ({
+          disabled:
+            batchDelivering || loading || !hasRelabelDeliveryDateArrived(record),
+          title: !record.delivery_time
+            ? "请先设置送仓时间"
+            : !hasRelabelDeliveryDateArrived(record)
+              ? "未到送仓日期，不能设置已送仓"
+              : "选择该换标记录",
+        }),
       }}
       tableAlertOptionRender={false}
       rowClassName={(record) => {
@@ -300,7 +315,7 @@ export default function RelabelsTable({
           key="batch-delivered"
           type="primary"
           icon={<CheckCircleOutlined />}
-          disabled={selectedRowKeys.length === 0 || loading || loadingMore}
+          disabled={selectedDeliverableRecords.length === 0 || loading || loadingMore}
           loading={batchDelivering}
           onClick={() => void handleBatchDelivered()}
         >

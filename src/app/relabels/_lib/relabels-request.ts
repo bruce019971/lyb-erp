@@ -1,4 +1,5 @@
 import type { SortOrder } from "antd/es/table/interface";
+import dayjs from "dayjs";
 
 import { supabase } from "@/lib/supabase";
 
@@ -399,14 +400,21 @@ export async function markRelabelStatusAsYes(
   id: string,
   field: "instruction_submitted" | "delivery_status",
 ) {
-  const { data, error } = await supabase
+  let query = supabase
     .from("relabel_records")
     .update({ [field]: "是" })
-    .eq("id", id)
-    .select("*")
-    .single();
+    .eq("id", id);
+
+  if (field === "delivery_status") {
+    query = query.lte("delivery_time", dayjs().format("YYYY-MM-DD"));
+  }
+
+  const { data, error } = await query.select("*").single();
 
   if (error) {
+    if (field === "delivery_status" && error.code === "PGRST116") {
+      throw new Error("记录不存在或尚未到达送仓日期，请刷新列表并检查送仓时间");
+    }
     throw error;
   }
 

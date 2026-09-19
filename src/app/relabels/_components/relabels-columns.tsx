@@ -217,7 +217,7 @@ export function getRelabelColumns(
             : undefined,
         onDoubleClick: () => {
           if (
-            record.delivery_status !== "是" &&
+            canEditRelabelDeliveryStatus(record) &&
             !isStatusUpdating(record, "delivery_status")
           ) {
             onStartDeliveryStatusEdit(record);
@@ -225,7 +225,7 @@ export function getRelabelColumns(
         },
       }),
       render: (_, record) => {
-        if (isDeliveryStatusEditing(record)) {
+        if (isDeliveryStatusEditing(record) && canEditRelabelDeliveryStatus(record)) {
           return (
             <Select
               autoFocus
@@ -247,9 +247,9 @@ export function getRelabelColumns(
         return (
           <span
             className={
-              record.delivery_status === "是"
-                ? "inline-flex"
-                : "inline-flex cursor-pointer"
+              canEditRelabelDeliveryStatus(record)
+                ? "inline-flex cursor-pointer"
+                : "inline-flex"
             }
           >
             <Typography.Text>{record.delivery_status ?? "否"}</Typography.Text>

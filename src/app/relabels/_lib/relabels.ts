@@ -72,14 +72,17 @@ export function isRelabelAlert(record: RelabelRecord) {
   return diffDays >= 0 && diffDays <= 3;
 }
 
-export function canEditRelabelDeliveryStatus(record: RelabelRecord) {
-  if (record.delivery_status === "是") return false;
+export function hasRelabelDeliveryDateArrived(record: RelabelRecord) {
   if (!record.delivery_time) return false;
 
   const today = dayjs().startOf("day");
   const deliveryDate = dayjs(record.delivery_time).startOf("day");
 
-  return deliveryDate.diff(today, "day") <= 0;
+  return deliveryDate.isValid() && deliveryDate.diff(today, "day") <= 0;
+}
+
+export function canEditRelabelDeliveryStatus(record: RelabelRecord) {
+  return record.delivery_status !== "是" && hasRelabelDeliveryDateArrived(record);
 }
 
 export function isRelabelDeliveryOverdue(record: RelabelRecord) {

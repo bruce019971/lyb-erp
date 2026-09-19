@@ -17,6 +17,7 @@ import type { ShipmentOption } from "../../shipments/_lib/shipments";
 import { requestShipmentOptions } from "../../shipments/_lib/shipments-request";
 import ShipmentsTableSkeleton from "../../shipments/_components/shipments-table-skeleton";
 import type { RelabelRecord } from "../_lib/relabels";
+import { canEditRelabelDeliveryStatus } from "../_lib/relabels";
 import {
   deleteRelabelRecord,
   markRelabelStatusAsYes,
@@ -115,6 +116,12 @@ export default function RelabelsPage() {
     value: string,
   ) {
     if (value !== "是" || record[field] === "是") {
+      setEditingDeliveryStatusId(null);
+      return;
+    }
+
+    if (!canEditRelabelDeliveryStatus(record)) {
+      messageApi.warning("只有到达送仓日期后才能设置已送仓，请检查送仓时间");
       setEditingDeliveryStatusId(null);
       return;
     }
