@@ -1,14 +1,17 @@
 "use client";
 
-import { PlusOutlined, ReloadOutlined } from "@ant-design/icons";
+import { CheckCircleOutlined, PlusOutlined, ReloadOutlined } from "@ant-design/icons";
 import type { ActionType } from "@ant-design/pro-components";
 import { ProTable } from "@ant-design/pro-components";
-import { Button, Spin, Tooltip } from "antd";
-import type { MutableRefObject } from "react";
+import { App, Button, Spin, Tooltip } from "antd";
+import type { Key, MutableRefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
-import { requestRelabelRecords } from "../_lib/relabels-request";
+import {
+  batchMarkRelabelsDelivered,
+  requestRelabelRecords,
+} from "../_lib/relabels-request";
 import {
   isRelabelDeliveryOverdue,
   type RelabelRecord,
@@ -80,6 +83,10 @@ export default function RelabelsTable({
   isDeleting,
   logisticsOptions,
 }: RelabelsTableProps) {
+  const { message } = App.useApp();
+  const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
+  const [batchDelivering, setBatchDelivering] = useState(false);
+  const batchDeliveringRef = useRef(false);
   const columns = useMemo(
     () =>
       getRelabelColumns(
@@ -89,11 +96,12 @@ export default function RelabelsTable({
         onCancelDeliveryStatusEdit,
         onChangeDeliveryStatus,
         isDeliveryStatusEditing,
-        isStatusUpdating,
+        (record, field) => batchDelivering || isStatusUpdating(record, field),
         isDeleting,
         logisticsOptions,
       ),
     [
+      batchDelivering,
       isDeleting,
       isDeliveryStatusEditing,
       isStatusUpdating,
@@ -135,6 +143,7 @@ export default function RelabelsTable({
       } else {
         loadingRef.current = true;
         setLoading(true);
+        setSelectedRowKeys([]);
       }
 
       try {
@@ -167,7 +176,12 @@ export default function RelabelsTable({
   }, [loadPage]);
 
   const loadNextPage = useCallback(async () => {
-    if (loadingRef.current || loadingMoreRef.current || !hasMoreRef.current) {
+    if (
+      loadingRef.current ||
+      loadingMoreRef.current ||
+      batchDeliveringRef.current ||
+      !hasMoreRef.current
+    ) {
       return;
     }
 
@@ -175,6 +189,49 @@ export default function RelabelsTable({
       append: true,
     });
   }, [loadPage]);
+
+  async function handleBatchDelivered() {
+    if (
+      batchDeliveringRef.current ||
+      loadingRef.current ||
+      loadingMoreRef.current
+    ) return;
+
+    const selectedIds = new Set(selectedRowKeys.map(String));
+    const ids = dataSource
+      .filter((record) => selectedIds.has(record.id))
+      .map((record) => record.id);
+    if (ids.length === 0) return;
+
+    batchDeliveringRef.current = true;
+    setBatchDelivering(true);
+    onCancelDeliveryStatusEdit();
+
+    try {
+      const { succeededIds, failures } = await batchMarkRelabelsDelivered(ids);
+      const succeeded = new Set(succeededIds);
+      setDataSource((current) =>
+        current.map((record) =>
+          succeeded.has(record.id) ? { ...record, delivery_status: "是" } : record,
+        ),
+      );
+      setSelectedRowKeys(failures.map((item) => item.id));
+
+      if (failures.length > 0) {
+        message.error(
+          `已完成 ${succeededIds.length} 条，失败 ${failures.length} 条：${failures[0].message}。失败记录仍保留勾选，可重试。`,
+          8,
+        );
+      } else {
+        message.success(`已将 ${succeededIds.length} 条换标记录设置为已送仓，并同步原货件状态`);
+      }
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "批量设置已送仓失败，请重试");
+    } finally {
+      batchDeliveringRef.current = false;
+      setBatchDelivering(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -215,7 +272,15 @@ export default function RelabelsTable({
       size="small"
       columns={columns}
       dataSource={dataSource}
-      loading={loading}
+      loading={loading || batchDelivering}
+      rowSelection={{
+        type: "checkbox",
+        selectedRowKeys,
+        preserveSelectedRowKeys: true,
+        onChange: setSelectedRowKeys,
+        getCheckboxProps: () => ({ disabled: batchDelivering || loading }),
+      }}
+      tableAlertOptionRender={false}
       rowClassName={(record) => {
         if (record.delivery_status === "是") return "relabel-delivered-row";
         return isRelabelDeliveryOverdue(record) ? "relabel-alert-row" : "";
@@ -231,18 +296,29 @@ export default function RelabelsTable({
         setting: true,
       }}
       toolBarRender={() => [
+        <Button
+          key="batch-delivered"
+          type="primary"
+          icon={<CheckCircleOutlined />}
+          disabled={selectedRowKeys.length === 0 || loading || loadingMore}
+          loading={batchDelivering}
+          onClick={() => void handleBatchDelivered()}
+        >
+          批量设置已送仓
+        </Button>,
         <Tooltip key="create" title="新增换标记录">
-          <Button type="text" icon={<PlusOutlined />} onClick={onCreate} />
+          <Button type="text" icon={<PlusOutlined />} disabled={batchDelivering} onClick={onCreate} />
         </Tooltip>,
         <Tooltip key="reload" title="刷新列表">
           <Button
             type="text"
             icon={<ReloadOutlined />}
+            disabled={batchDelivering}
             onClick={() => actionRef?.current?.reload()}
           />
         </Tooltip>,
       ]}
-      scroll={{ x: 1640, y: "calc(100vh - 360px)" }}
+      scroll={{ x: 1690, y: "calc(100vh - 360px)" }}
       onScroll={(event) => {
         const target = event.currentTarget;
 
@@ -265,6 +341,7 @@ export default function RelabelsTable({
       dateFormatter="string"
       form={{
         initialValues: initialSearchParams,
+        disabled: batchDelivering,
       }}
       tableRender={(_, dom) => (
         <div className="relative">

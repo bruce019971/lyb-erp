@@ -431,3 +431,34 @@ export async function deleteRelabelRecord(id: string) {
     throw new Error(payload?.error || "删除失败");
   }
 }
+
+export async function batchMarkRelabelsDelivered(ids: string[]) {
+  const uniqueIds = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean)));
+  const succeededIds: string[] = [];
+  const failures: Array<{ id: string; message: string }> = [];
+
+  for (let index = 0; index < uniqueIds.length; index += 5) {
+    const batchIds = uniqueIds.slice(index, index + 5);
+    const results = await Promise.allSettled(
+      batchIds.map((id) => markRelabelStatusAsYes(id, "delivery_status")),
+    );
+
+    results.forEach((result, resultIndex) => {
+      const id = batchIds[resultIndex];
+      if (result.status === "fulfilled") {
+        succeededIds.push(id);
+      } else {
+        const error = result.reason;
+        failures.push({
+          id,
+          message:
+            typeof error?.message === "string"
+              ? error.message
+              : "更新记录或同步原货件状态失败",
+        });
+      }
+    });
+  }
+
+  return { succeededIds, failures };
+}
