@@ -9,16 +9,22 @@ import type {
   RelabelUpdateValues,
 } from "./relabels";
 import { normalizeNewMlCode } from "./relabels";
+import {
+  completeRelabelDownload,
+  getPendingRelabelDownloadIds,
+  trackNewRelabelDownload,
+} from "./relabel-download-state";
 
 type RelabelRequestParams = {
   current?: number;
   pageSize?: number;
+  pendingRecordIds?: string[];
 } & Record<string, unknown>;
 
 export async function requestRelabelRecords(
   params: RelabelRequestParams,
   sorter: Record<string, SortOrder> = {},
-) {
+): Promise<{ data: RelabelRecord[]; success: boolean; total: number }> {
   const current = params.current ?? 1;
   const pageSize = params.pageSize ?? 20;
   const from = (current - 1) * pageSize;
@@ -28,6 +34,10 @@ export async function requestRelabelRecords(
     .from("relabel_records")
     .select("*", { count: "exact" })
     .range(from, to);
+
+  if (params.pendingRecordIds) {
+    query = query.in("id", params.pendingRecordIds);
+  }
 
   function splitShipmentNos(value: unknown) {
     const rawValues = Array.isArray(value) ? value : [value];
@@ -221,29 +231,52 @@ export async function requestRelabelRecords(
     });
   }
 
-  return {
-    data: relabelRecords.map((item) => {
-      const shipmentNo = item.original_shipment_no?.trim();
-      const productName = shipmentNo
-        ? (productNameByShipmentNo.get(shipmentNo) ?? null)
-        : null;
-      const originalStore = shipmentNo
-        ? (originalStoreByShipmentNo.get(shipmentNo) ?? null)
-        : null;
+  const pendingIds = new Set(getPendingRelabelDownloadIds());
+  const records: RelabelRecord[] = relabelRecords.map((item) => {
+    const shipmentNo = item.original_shipment_no?.trim();
+    const productName = shipmentNo
+      ? (productNameByShipmentNo.get(shipmentNo) ?? null)
+      : null;
+    const originalStore = shipmentNo
+      ? (originalStoreByShipmentNo.get(shipmentNo) ?? null)
+      : null;
 
-      return {
-        ...item,
-        product_name: productName,
-        original_store: originalStore,
-        original_ml_code:
-          originalMlCodeByProduct.get(
-            `${productName?.trim() ?? ""}\u0000${originalStore?.trim() ?? ""}`,
-          ) ?? null,
-        tracking_no: shipmentNo
-          ? (trackingNoByShipmentNo.get(shipmentNo) ?? null)
-          : null,
-      };
-    }),
+    return {
+      ...item,
+      pending_instruction_download: pendingIds.has(item.id),
+      product_name: productName,
+      original_store: originalStore,
+      original_ml_code:
+        originalMlCodeByProduct.get(
+          `${productName?.trim() ?? ""}\u0000${originalStore?.trim() ?? ""}`,
+        ) ?? null,
+      tracking_no: shipmentNo
+        ? (trackingNoByShipmentNo.get(shipmentNo) ?? null)
+        : null,
+    };
+  });
+
+  if (current === 1 && !params.pendingRecordIds && pendingIds.size > 0) {
+    const pendingResult = await requestRelabelRecords(
+      {
+        ...params,
+        current: 1,
+        pageSize: pendingIds.size,
+        pendingRecordIds: [...pendingIds],
+      },
+      sorter,
+    );
+    const recordsById = new Map(records.map((record) => [record.id, record]));
+    pendingResult.data.forEach((record) => recordsById.set(record.id, record));
+    return {
+      data: [...recordsById.values()],
+      success: pendingResult.success,
+      total: count ?? 0,
+    };
+  }
+
+  return {
+    data: records,
     success: true,
     total: count ?? 0,
   };
@@ -345,6 +378,7 @@ export async function createRelabelRecord(values: RelabelCreateValues) {
   }
 
   const relabelRecord = data as RelabelRecord;
+  trackNewRelabelDownload(relabelRecord.id);
   await markOriginalShipmentAsRelabel(relabelRecord);
   await syncOriginalShipmentAppointmentTime(relabelRecord);
 
@@ -438,6 +472,7 @@ export async function deleteRelabelRecord(id: string) {
   if (!response.ok) {
     throw new Error(payload?.error || "删除失败");
   }
+  completeRelabelDownload(id);
 }
 
 export async function batchMarkRelabelsDelivered(ids: string[]) {

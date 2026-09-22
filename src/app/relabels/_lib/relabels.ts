@@ -2,6 +2,7 @@ import dayjs from "dayjs";
 
 export type RelabelRecord = {
   id: string;
+  pending_instruction_download?: boolean;
   original_shipment_no: string | null;
   product_name?: string | null;
   original_ml_code?: string | null;

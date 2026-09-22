@@ -5,6 +5,7 @@ import { App, Button, Tooltip } from "antd";
 import { useRef, useState } from "react";
 
 import type { RelabelRecord } from "../_lib/relabels";
+import { completeRelabelDownload } from "../_lib/relabel-download-state";
 
 export default function RelabelInstructionDownload({
   record,
@@ -42,6 +43,7 @@ export default function RelabelInstructionDownload({
       link.click();
       link.remove();
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+      completeRelabelDownload(record.id);
     } catch (error) {
       message.error(error instanceof Error ? error.message : "换标指令下载失败，请稍后重试");
     } finally {

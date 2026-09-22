@@ -19,6 +19,11 @@ import {
 } from "../_lib/relabels";
 
 import { getRelabelColumns } from "./relabels-columns";
+import {
+  getPendingRelabelDownloadIds,
+  isRelabelDownloadStorageKey,
+  RELABEL_DOWNLOAD_CHANGED,
+} from "../_lib/relabel-download-state";
 
 type RelabelsTableProps = {
   actionRef?: MutableRefObject<ActionType | undefined>;
@@ -59,6 +64,14 @@ function mergeRelabelsById(
 
 function sortRelabelRows(records: RelabelRecord[]) {
   return [...records].sort((left, right) => {
+    const pendingOrder = Number(Boolean(right.pending_instruction_download)) -
+      Number(Boolean(left.pending_instruction_download));
+    if (pendingOrder) return pendingOrder;
+    if (left.pending_instruction_download && right.pending_instruction_download) {
+      const leftCreated = left.created_at ? new Date(left.created_at).getTime() : 0;
+      const rightCreated = right.created_at ? new Date(right.created_at).getTime() : 0;
+      return rightCreated - leftCreated || right.id.localeCompare(left.id);
+    }
     const leftTime = left.delivery_time
       ? new Date(left.delivery_time).getTime()
       : Number.NEGATIVE_INFINITY;
@@ -157,7 +170,11 @@ export default function RelabelsTable({
           current: page,
           pageSize: PAGE_SIZE,
         });
-        const nextData = result.data ?? [];
+        const pendingIds = new Set(getPendingRelabelDownloadIds());
+        const nextData = (result.data ?? []).map((record) => ({
+          ...record,
+          pending_instruction_download: pendingIds.has(record.id),
+        }));
 
         setDataSource((current) =>
           sortRelabelRows(
@@ -165,7 +182,7 @@ export default function RelabelsTable({
           ),
         );
         currentPageRef.current = page;
-        hasMoreRef.current = nextData.length >= PAGE_SIZE;
+        hasMoreRef.current = page * PAGE_SIZE < result.total;
       } finally {
         loadingRef.current = false;
         loadingMoreRef.current = false;
@@ -179,6 +196,26 @@ export default function RelabelsTable({
   const reloadFirstPage = useCallback(async () => {
     await loadPage(1, searchParamsRef.current, { append: false });
   }, [loadPage]);
+
+  useEffect(() => {
+    const reload = () => {
+      const pendingIds = new Set(getPendingRelabelDownloadIds());
+      setDataSource((current) => sortRelabelRows(current.map((record) => ({
+        ...record,
+        pending_instruction_download: pendingIds.has(record.id),
+      }))));
+      void reloadFirstPage();
+    };
+    const onStorage = (event: StorageEvent) => {
+      if (isRelabelDownloadStorageKey(event.key)) reload();
+    };
+    window.addEventListener(RELABEL_DOWNLOAD_CHANGED, reload);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener(RELABEL_DOWNLOAD_CHANGED, reload);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [reloadFirstPage]);
 
   const loadNextPage = useCallback(async () => {
     if (
@@ -297,6 +334,7 @@ export default function RelabelsTable({
       }}
       tableAlertOptionRender={false}
       rowClassName={(record) => {
+        if (record.pending_instruction_download) return "relabel-pending-download-row";
         if (record.delivery_status === "是") return "relabel-delivered-row";
         return isRelabelDeliveryOverdue(record) ? "relabel-alert-row" : "";
       }}

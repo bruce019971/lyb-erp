@@ -109,6 +109,9 @@ export function getRelabelColumns(
             >
               {deliveryShipmentNo || "-"}
             </Typography.Text>
+            {record.pending_instruction_download ? (
+              <Tag color="gold" className="!mr-0 self-start">新建 · 待下载</Tag>
+            ) : null}
           </div>
         );
       },
