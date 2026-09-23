@@ -7,6 +7,7 @@ import {
   shipmentDateFields,
   shipmentKeywordFields,
   canEditShipmentDeliveryStatus,
+  canEditShipmentInstructionStatus,
   type ShipmentCreateValues,
   type ShipmentOption,
   type ShipmentRecord,
@@ -666,6 +667,56 @@ export async function updateShipmentDeliveryStatus(
   }
 
   return data as ShipmentRecord;
+}
+
+export async function updateShipmentInstructionStatus(
+  record: ShipmentRecord,
+  value: string,
+) {
+  if (value !== "是" && value !== "否") {
+    throw new Error("是否提交指令只能设置为是或否");
+  }
+  if (!canEditShipmentInstructionStatus(record)) {
+    throw new Error("请先设置送仓时间，再修改是否提交指令");
+  }
+
+  const { data, error } = await supabase
+    .from("shipment_records")
+    .update({ instruction_submitted: value, updated_at: new Date().toISOString() })
+    .eq("id", record.id)
+    .eq("status", "有效")
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return data as ShipmentRecord;
+}
+
+export async function batchMarkShipmentInstructionsSubmitted(records: ShipmentRecord[]) {
+  const uniqueRecords = Array.from(new Map(records.map((record) => [record.id, record])).values());
+  const succeeded: ShipmentRecord[] = [];
+  const failures: Array<{ id: string; message: string }> = [];
+
+  for (let index = 0; index < uniqueRecords.length; index += 5) {
+    const batch = uniqueRecords.slice(index, index + 5);
+    const results = await Promise.allSettled(
+      batch.map((record) => updateShipmentInstructionStatus(record, "是")),
+    );
+    results.forEach((result, resultIndex) => {
+      if (result.status === "fulfilled") {
+        succeeded.push(result.value);
+      } else {
+        failures.push({
+          id: batch[resultIndex].id,
+          message: typeof result.reason?.message === "string"
+            ? result.reason.message
+            : "更新是否提交指令失败",
+        });
+      }
+    });
+  }
+
+  return { succeeded, failures };
 }
 
 export async function updateShipmentRelabelStatus(

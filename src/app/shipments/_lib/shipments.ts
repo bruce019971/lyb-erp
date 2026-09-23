@@ -19,6 +19,7 @@ export type ShipmentRecord = {
   warehouse_arrived_status: string | null;
   overseas_warehouse_arrived_at: string | null;
   appointment_time: string | null;
+  instruction_submitted?: string | null;
   delivery_status: string | null;
   is_relabel: string | null;
   relabel_delivery_times?: string[];
@@ -82,6 +83,15 @@ export const shipmentDateFields = [
 export function formatShipmentDate(value?: string | null) {
   if (!value) return "";
   return value.slice(0, 10);
+}
+
+export function canEditShipmentInstructionStatus(record: ShipmentRecord) {
+  const deliveryTimes =
+    record.is_relabel === "是" && record.relabel_delivery_times?.length
+      ? record.relabel_delivery_times
+      : [record.appointment_time];
+
+  return deliveryTimes.some((value) => Boolean(value?.trim()) && dayjs(value).isValid());
 }
 
 export function canEditShipmentDeliveryStatus(record: ShipmentRecord) {

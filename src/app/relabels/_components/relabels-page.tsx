@@ -17,14 +17,10 @@ import type { ShipmentOption } from "../../shipments/_lib/shipments";
 import { requestShipmentOptions } from "../../shipments/_lib/shipments-request";
 import ShipmentsTableSkeleton from "../../shipments/_components/shipments-table-skeleton";
 import type { RelabelRecord } from "../_lib/relabels";
-import {
-  canEditRelabelDeliveryStatus,
-  canEditRelabelInstructionStatus,
-  type RelabelStatusField,
-} from "../_lib/relabels";
+import { canEditRelabelDeliveryStatus } from "../_lib/relabels";
 import {
   deleteRelabelRecord,
-  updateRelabelStatus,
+  markRelabelStatusAsYes,
 } from "../_lib/relabels-request";
 import RelabelFormDrawer from "./relabel-form-drawer";
 import RelabelsTable from "./relabels-table";
@@ -45,7 +41,7 @@ export default function RelabelsPage() {
   const [logisticsOptions, setLogisticsOptions] = useState<
     LogisticsProviderOption[]
   >([]);
-  const [editingStatusKey, setEditingStatusKey] = useState<
+  const [editingDeliveryStatusId, setEditingDeliveryStatusId] = useState<
     string | null
   >(null);
   const [updatingStatusKey, setUpdatingStatusKey] = useState<string | null>(
@@ -102,12 +98,12 @@ export default function RelabelsPage() {
     };
   }, [mounted]);
 
-  function isStatusUpdating(record: RelabelRecord, field: RelabelStatusField) {
+  function isStatusUpdating(record: RelabelRecord, field: "delivery_status") {
     return updatingStatusKey === `${record.id}:${field}`;
   }
 
-  function isStatusEditing(record: RelabelRecord, field: RelabelStatusField) {
-    return editingStatusKey === `${record.id}:${field}`;
+  function isDeliveryStatusEditing(record: RelabelRecord) {
+    return editingDeliveryStatusId === record.id;
   }
 
   function isDeleting(record: RelabelRecord) {
@@ -116,30 +112,25 @@ export default function RelabelsPage() {
 
   async function handleChangeStatus(
     record: RelabelRecord,
-    field: RelabelStatusField,
+    field: "delivery_status",
     value: string,
   ) {
-    if ((value !== "是" && value !== "否") || (record[field] ?? "否") === value) {
-      setEditingStatusKey(null);
+    if (value !== "是" || record[field] === "是") {
+      setEditingDeliveryStatusId(null);
       return;
     }
 
-    const canEdit = field === "instruction_submitted"
-      ? canEditRelabelInstructionStatus(record)
-      : canEditRelabelDeliveryStatus(record);
-    if (!canEdit) {
-      messageApi.warning(field === "instruction_submitted"
-        ? "请先设置送仓时间，再修改是否提交指令"
-        : "只有到达送仓日期后才能设置已送仓，请检查送仓时间");
-      setEditingStatusKey(null);
+    if (!canEditRelabelDeliveryStatus(record)) {
+      messageApi.warning("只有到达送仓日期后才能设置已送仓，请检查送仓时间");
+      setEditingDeliveryStatusId(null);
       return;
     }
 
     try {
       setUpdatingStatusKey(`${record.id}:${field}`);
-      await updateRelabelStatus(record.id, field, value);
-      messageApi.success(`状态已更新为“${value}”`);
-      setEditingStatusKey(null);
+      await markRelabelStatusAsYes(record.id, field);
+      messageApi.success("状态已更新为“是”");
+      setEditingDeliveryStatusId(null);
       tableActionRef.current?.reload();
     } catch (error) {
       const description =
@@ -209,16 +200,16 @@ export default function RelabelsPage() {
                   setEditOpen(true);
                 }}
                 onDelete={(record) => void handleDelete(record)}
-                onStartStatusEdit={(record, field) =>
-                  setEditingStatusKey(`${record.id}:${field}`)
+                onStartDeliveryStatusEdit={(record) =>
+                  setEditingDeliveryStatusId(record.id)
                 }
-                onCancelStatusEdit={() =>
-                  setEditingStatusKey(null)
+                onCancelDeliveryStatusEdit={() =>
+                  setEditingDeliveryStatusId(null)
                 }
-                onChangeStatus={(record, field, value) =>
-                  void handleChangeStatus(record, field, value)
+                onChangeDeliveryStatus={(record, value) =>
+                  void handleChangeStatus(record, "delivery_status", value)
                 }
-                isStatusEditing={isStatusEditing}
+                isDeliveryStatusEditing={isDeliveryStatusEditing}
                 isStatusUpdating={isStatusUpdating}
                 isDeleting={isDeleting}
                 logisticsOptions={logisticsOptions}

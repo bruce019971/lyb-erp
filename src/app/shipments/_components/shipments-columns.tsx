@@ -10,6 +10,7 @@ import { Button, Select, Tooltip, Typography } from "antd";
 
 import {
   formatShipmentDate,
+  canEditShipmentInstructionStatus,
   isShipmentDeliveryOverdue,
   type ShipmentRecord,
 } from "../_lib/shipments";
@@ -98,6 +99,13 @@ export function getShipmentColumns(
   storeOptions: StoreOption[],
   productOptions: ProductShipmentOption[],
   logisticsOptions: LogisticsProviderOption[],
+  instructionStatus: {
+    editingId: string | null;
+    updating: boolean;
+    onStart: (record: ShipmentRecord) => void;
+    onCancel: () => void;
+    onChange: (record: ShipmentRecord, value: string) => void;
+  },
 ): ProColumns<ShipmentRecord>[] {
   function DeliveryStatusTag({
     value,
@@ -491,6 +499,47 @@ export function getShipmentColumns(
       valueEnum: {
         是: { text: "是" },
         否: { text: "否" },
+      },
+    },
+    {
+      title: "是否提交指令",
+      dataIndex: "instruction_submitted",
+      width: 110,
+      hideInSearch: true,
+      onCell: (record) => ({
+        onDoubleClick: () => {
+          if (canEditShipmentInstructionStatus(record) && !instructionStatus.updating) {
+            instructionStatus.onStart(record);
+          }
+        },
+      }),
+      render: (_, record) => {
+        const canEdit = canEditShipmentInstructionStatus(record);
+        if (canEdit && instructionStatus.editingId === record.id) {
+          return (
+            <Select
+              autoFocus
+              size="small"
+              value={record.instruction_submitted ?? "否"}
+              className="w-[88px]"
+              loading={instructionStatus.updating}
+              disabled={instructionStatus.updating}
+              options={[
+                { label: "否", value: "否" },
+                { label: "是", value: "是" },
+              ]}
+              onChange={(value) => instructionStatus.onChange(record, value)}
+              onBlur={instructionStatus.onCancel}
+            />
+          );
+        }
+        return (
+          <Tooltip title={canEdit ? "双击修改是否提交指令" : "请先设置送仓时间"}>
+            <span className={canEdit ? "inline-flex cursor-pointer" : "inline-flex"}>
+              {record.instruction_submitted ?? "否"}
+            </span>
+          </Tooltip>
+        );
       },
     },
     {

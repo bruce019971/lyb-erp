@@ -6,7 +6,6 @@ import { supabase } from "@/lib/supabase";
 import type {
   RelabelCreateValues,
   RelabelRecord,
-  RelabelStatusField,
   RelabelUpdateValues,
 } from "./relabels";
 import { normalizeNewMlCode } from "./relabels";
@@ -433,37 +432,20 @@ export async function updateRelabelRecord(
 
 export async function markRelabelStatusAsYes(
   id: string,
-  field: RelabelStatusField,
+  field: "instruction_submitted" | "delivery_status",
 ) {
-  return updateRelabelStatus(id, field, "是");
-}
-
-export async function updateRelabelStatus(
-  id: string,
-  field: RelabelStatusField,
-  value: "是" | "否",
-) {
-  if (field === "delivery_status" && value !== "是") {
-    throw new Error("已送仓状态不支持撤销");
-  }
-
   let query = supabase
     .from("relabel_records")
-    .update({ [field]: value })
+    .update({ [field]: "是" })
     .eq("id", id);
 
   if (field === "delivery_status") {
     query = query.lte("delivery_time", dayjs().format("YYYY-MM-DD"));
-  } else {
-    query = query.not("delivery_time", "is", null);
   }
 
   const { data, error } = await query.select("*").single();
 
   if (error) {
-    if (field === "instruction_submitted" && error.code === "PGRST116") {
-      throw new Error("记录不存在或未设置送仓时间，请刷新列表并检查送仓时间");
-    }
     if (field === "delivery_status" && error.code === "PGRST116") {
       throw new Error("记录不存在或尚未到达送仓日期，请刷新列表并检查送仓时间");
     }
@@ -494,14 +476,6 @@ export async function deleteRelabelRecord(id: string) {
 }
 
 export async function batchMarkRelabelsDelivered(ids: string[]) {
-  return batchMarkRelabelStatusAsYes(ids, "delivery_status");
-}
-
-export async function batchMarkRelabelsInstructionsSubmitted(ids: string[]) {
-  return batchMarkRelabelStatusAsYes(ids, "instruction_submitted");
-}
-
-async function batchMarkRelabelStatusAsYes(ids: string[], field: RelabelStatusField) {
   const uniqueIds = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean)));
   const succeededIds: string[] = [];
   const failures: Array<{ id: string; message: string }> = [];
@@ -509,7 +483,7 @@ async function batchMarkRelabelStatusAsYes(ids: string[], field: RelabelStatusFi
   for (let index = 0; index < uniqueIds.length; index += 5) {
     const batchIds = uniqueIds.slice(index, index + 5);
     const results = await Promise.allSettled(
-      batchIds.map((id) => markRelabelStatusAsYes(id, field)),
+      batchIds.map((id) => markRelabelStatusAsYes(id, "delivery_status")),
     );
 
     results.forEach((result, resultIndex) => {

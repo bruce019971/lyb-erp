@@ -20,6 +20,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   batchGenerateShipmentCartonLabels,
+  batchMarkShipmentInstructionsSubmitted,
+  updateShipmentInstructionStatus,
   requestShipmentRecords,
   requestShipmentSummary,
   type ShipmentSummary,
@@ -27,6 +29,7 @@ import {
 import { getShipmentColumns } from "./shipments-columns";
 import {
   isShipmentDeliveryOverdue,
+  canEditShipmentInstructionStatus,
   type ShipmentRecord,
 } from "../_lib/shipments";
 import type { ProductShipmentOption } from "../../products/_lib/products";
@@ -176,6 +179,7 @@ type ShipmentSummaryColumnKey =
   | "overseas_warehouse_arrived_at"
   | "appointment_time"
   | "is_relabel"
+  | "instruction_submitted"
   | "delivery_status"
   | "goods_value"
   | "remark"
@@ -193,6 +197,7 @@ const SHIPMENT_SUMMARY_COLUMN_KEYS: ShipmentSummaryColumnKey[] = [
   "overseas_warehouse_arrived_at",
   "appointment_time",
   "is_relabel",
+  "instruction_submitted",
   "delivery_status",
   "goods_value",
   "remark",
@@ -276,6 +281,9 @@ export default function ShipmentsTable({
   const [dataSource, setDataSource] = useState<ShipmentRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
+  const [editingInstructionId, setEditingInstructionId] = useState<string | null>(null);
+  const [instructionUpdating, setInstructionUpdating] = useState(false);
+  const [batchInstructionUpdating, setBatchInstructionUpdating] = useState(false);
   const [reloadRequest, setReloadRequest] = useState(0);
   const [summary, setSummary] = useState<ShipmentSummary | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
@@ -301,6 +309,57 @@ export default function ShipmentsTable({
     const selectedIdSet = new Set(selectedRowKeys.map((item) => String(item)));
     return dataSource.filter((item) => selectedIdSet.has(item.id));
   }, [dataSource, selectedRowKeys]);
+
+  const selectedInstructionRecords = selectedRecords.filter(canEditShipmentInstructionStatus);
+
+  const handleChangeInstructionStatus = useCallback(async (record: ShipmentRecord, value: string) => {
+    if (instructionUpdating) return;
+    if ((record.instruction_submitted ?? "否") === value) {
+      setEditingInstructionId(null);
+      return;
+    }
+    setInstructionUpdating(true);
+    try {
+      const updated = await updateShipmentInstructionStatus(record, value);
+      setDataSource((current) => current.map((item) => item.id === updated.id
+        ? { ...item, ...updated }
+        : item));
+      setEditingInstructionId(null);
+      message.success("是否提交指令已更新");
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "是否提交指令更新失败");
+    } finally {
+      setInstructionUpdating(false);
+    }
+  }, [instructionUpdating, message]);
+
+  async function handleBatchInstructionStatus() {
+    if (instructionUpdating || loading || !selectedInstructionRecords.length) return;
+    setInstructionUpdating(true);
+    setBatchInstructionUpdating(true);
+    setEditingInstructionId(null);
+    try {
+      const { succeeded, failures } = await batchMarkShipmentInstructionsSubmitted(selectedInstructionRecords);
+      const updatedById = new Map(succeeded.map((record) => [record.id, record]));
+      setDataSource((current) => current.map((item) => {
+        const updated = updatedById.get(item.id);
+        return updated ? { ...item, ...updated } : item;
+      }));
+      setSelectedRowKeys((current) => current.filter((id) => !updatedById.has(String(id))));
+      const skipped = selectedRecords.length - selectedInstructionRecords.length;
+      const summary = `已将 ${succeeded.length} 条货件的是否提交指令设置为“是”`;
+      if (failures.length) {
+        message.error(`${summary}，失败 ${failures.length} 条：${failures[0].message}。未完成的记录仍保留勾选。`, 8);
+      } else {
+        message.success(skipped ? `${summary}；跳过 ${skipped} 条未设置送仓时间的货件` : summary);
+      }
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "批量设置已提交指令失败");
+    } finally {
+      setInstructionUpdating(false);
+      setBatchInstructionUpdating(false);
+    }
+  }
 
   function isColumnVisible(key: string) {
     return columnsStateMap[key]?.show !== false;
@@ -471,8 +530,18 @@ export default function ShipmentsTable({
         storeOptions,
         productOptions,
         logisticsOptions,
+        {
+          editingId: editingInstructionId,
+          updating: instructionUpdating,
+          onStart: (record) => setEditingInstructionId(record.id),
+          onCancel: () => setEditingInstructionId(null),
+          onChange: (record, value) => void handleChangeInstructionStatus(record, value),
+        },
       ),
     [
+      editingInstructionId,
+      instructionUpdating,
+      handleChangeInstructionStatus,
       isDeleting,
       isDeliveryStatusEditing,
       isDeliveryStatusUpdating,
@@ -563,17 +632,23 @@ export default function ShipmentsTable({
       }
       columns={columns}
       dataSource={dataSource}
-      loading={loading}
+      loading={loading || batchInstructionUpdating}
       rowSelection={{
         type: "checkbox",
         selectedRowKeys,
         preserveSelectedRowKeys: true,
+        getCheckboxProps: () => ({ disabled: instructionUpdating }),
         onChange: (keys) => {
           setSelectedRowKeys(keys);
         },
       }}
       rowClassName={(record) => {
-        if (record.is_delivery_completed) return "shipment-delivered-row";
+        if (record.is_delivery_completed || record.delivery_status === "是") return "shipment-delivered-row";
+        if (record.instruction_submitted === "是") {
+          return isWarehouseArrivedUndelivered(record)
+            ? "shipment-warehouse-pending-delivery-row shipment-instruction-submitted-row"
+            : "shipment-instruction-submitted-row";
+        }
         if (isShipmentDeliveryOverdue(record)) {
           return isWarehouseArrivedUndelivered(record)
             ? "shipment-warehouse-pending-delivery-row shipment-delivery-overdue-row"
@@ -641,7 +716,7 @@ export default function ShipmentsTable({
           setColumnsStateMap(value as ShipmentColumnsState),
       }}
       scroll={{
-        x: 1800,
+        x: 1910,
         y: searchCollapsed
           ? SHIPMENTS_TABLE_SCROLL_Y_COLLAPSED
           : SHIPMENTS_TABLE_SCROLL_Y_EXPANDED,
@@ -677,6 +752,14 @@ export default function ShipmentsTable({
           .filter(Boolean);
         const hasSelectedRows = selectedIds.length > 0;
         const actions = [
+          <Button
+            key="batch-instruction-submitted"
+            disabled={loading || instructionUpdating || !selectedInstructionRecords.length}
+            loading={batchInstructionUpdating}
+            onClick={() => void handleBatchInstructionStatus()}
+          >
+            批量设置已提交指令
+          </Button>,
           <Tooltip key="create" title="新增货件">
             <Button type="text" icon={<PlusOutlined />} onClick={onCreate} />
           </Tooltip>,
