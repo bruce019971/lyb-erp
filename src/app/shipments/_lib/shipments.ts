@@ -95,8 +95,6 @@ export function canEditShipmentInstructionStatus(record: ShipmentRecord) {
 }
 
 export function canEditShipmentDeliveryStatus(record: ShipmentRecord) {
-  if (record.delivery_status === "是") return true;
-
   const deliveryTimes =
     record.is_relabel === "是" && record.relabel_delivery_times?.length
       ? record.relabel_delivery_times
@@ -109,8 +107,9 @@ export function canEditShipmentDeliveryStatus(record: ShipmentRecord) {
   const today = dayjs().startOf("day");
 
   return deliveryTimes.some((value) => {
+    if (!value?.trim()) return false;
     const deliveryDate = dayjs(value).startOf("day");
-    return deliveryDate.diff(today, "day") <= 0;
+    return deliveryDate.isValid() && deliveryDate.diff(today, "day") <= 0;
   });
 }
 

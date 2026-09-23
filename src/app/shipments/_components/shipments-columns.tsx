@@ -11,6 +11,7 @@ import { Button, Select, Tooltip, Typography } from "antd";
 import {
   formatShipmentDate,
   canEditShipmentInstructionStatus,
+  canEditShipmentDeliveryStatus,
   isShipmentDeliveryOverdue,
   type ShipmentRecord,
 } from "../_lib/shipments";
@@ -505,7 +506,12 @@ export function getShipmentColumns(
       title: "是否提交指令",
       dataIndex: "instruction_submitted",
       width: 110,
-      hideInSearch: true,
+      valueType: "select",
+      valueEnum: {
+        是: { text: "是" },
+        否: { text: "否" },
+      },
+      fieldProps: { allowClear: true },
       onCell: (record) => ({
         onDoubleClick: () => {
           if (canEditShipmentInstructionStatus(record) && !instructionStatus.updating) {
@@ -552,13 +558,14 @@ export function getShipmentColumns(
               ? "shipment-delivery-overdue-cell"
               : undefined,
         onDoubleClick: () => {
-          if (!isDeliveryStatusUpdating(record)) {
+          if (canEditShipmentDeliveryStatus(record) && !isDeliveryStatusUpdating(record)) {
             onStartDeliveryStatusEdit(record);
           }
         },
       }),
       render: (_, record) => {
-        if (isDeliveryStatusEditing(record)) {
+        const canEdit = canEditShipmentDeliveryStatus(record);
+        if (canEdit && isDeliveryStatusEditing(record)) {
           return (
             <Select
               autoFocus
@@ -578,17 +585,17 @@ export function getShipmentColumns(
         }
 
         return (
-          <span
-            className={
-              isDeliveryStatusUpdating(record)
-                ? "inline-flex"
-                : "inline-flex cursor-pointer"
-            }
-          >
-            <DeliveryStatusTag
-              value={record.delivery_status ?? "否"}
-            />
-          </span>
+          <Tooltip title={canEdit
+            ? "双击修改是否送仓"
+            : "必须设置送仓时间且已到达送仓日期，才能修改是否送仓"}>
+            <span
+              className={canEdit && !isDeliveryStatusUpdating(record)
+                ? "inline-flex cursor-pointer"
+                : "inline-flex"}
+            >
+              <DeliveryStatusTag value={record.delivery_status ?? "否"} />
+            </span>
+          </Tooltip>
         );
       },
       valueEnum: {

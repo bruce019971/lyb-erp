@@ -174,6 +174,14 @@ function applyShipmentSearchParams<TQuery extends ShipmentSearchQuery>(
     nextQuery = nextQuery.eq("delivery_status", deliveryStatus);
   }
 
+  const instructionSubmitted =
+    typeof params.instruction_submitted === "string"
+      ? params.instruction_submitted.trim()
+      : "";
+  if (instructionSubmitted === "是" || instructionSubmitted === "否") {
+    nextQuery = nextQuery.eq("instruction_submitted", instructionSubmitted);
+  }
+
   const isRelabel =
     typeof params.is_relabel === "string" ? params.is_relabel.trim() : "";
   if (isRelabel === "是") {
@@ -642,11 +650,14 @@ export async function updateShipmentDeliveryStatus(
   record: ShipmentRecord,
   value: string,
 ) {
-  if (value === "是" && !canEditShipmentDeliveryStatus(record)) {
-    throw new Error("只有过了送仓时间后才能标记为已送仓");
+  if (!canEditShipmentDeliveryStatus(record)) {
+    throw new Error("必须设置送仓时间且已到达送仓日期，才能修改是否送仓");
   }
 
-  const normalizedValue = normalizeTextValue(value) ?? "否";
+  if (value !== "是" && value !== "否") {
+    throw new Error("是否送仓只能设置为是或否");
+  }
+  const normalizedValue = value;
 
   if ((record.delivery_status ?? "否") === normalizedValue) {
     return record;
