@@ -5,9 +5,11 @@ import { Button, Select, Tag, Tooltip, Typography } from "antd";
 import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
 import {
   canEditRelabelDeliveryStatus,
+  canEditRelabelInstructionStatus,
   formatRelabelDate,
   relabelTypeOptions,
   type RelabelRecord,
+  type RelabelStatusField,
 } from "../_lib/relabels";
 
 import RelabelInstructionDownload from "./relabel-instruction-download";
@@ -47,13 +49,13 @@ function renderShipmentNoSearchInput() {
 export function getRelabelColumns(
   onEdit: (record: RelabelRecord) => void,
   onDelete: (record: RelabelRecord) => void,
-  onStartDeliveryStatusEdit: (record: RelabelRecord) => void,
-  onCancelDeliveryStatusEdit: () => void,
-  onChangeDeliveryStatus: (record: RelabelRecord, value: string) => void,
-  isDeliveryStatusEditing: (record: RelabelRecord) => boolean,
+  onStartStatusEdit: (record: RelabelRecord, field: RelabelStatusField) => void,
+  onCancelStatusEdit: () => void,
+  onChangeStatus: (record: RelabelRecord, field: RelabelStatusField, value: string) => void,
+  isStatusEditing: (record: RelabelRecord, field: RelabelStatusField) => boolean,
   isStatusUpdating: (
     record: RelabelRecord,
-    field: "delivery_status",
+    field: RelabelStatusField,
   ) => boolean,
   isDeleting: (record: RelabelRecord) => boolean,
   logisticsOptions: LogisticsProviderOption[],
@@ -209,6 +211,51 @@ export function getRelabelColumns(
       render: (_, record) => formatRelabelDate(record.delivery_time),
     },
     {
+      title: "是否提交指令",
+      dataIndex: "instruction_submitted",
+      width: 120,
+      search: false,
+      onCell: (record) => ({
+        onDoubleClick: () => {
+          if (
+            canEditRelabelInstructionStatus(record) &&
+            !isStatusUpdating(record, "instruction_submitted")
+          ) {
+            onStartStatusEdit(record, "instruction_submitted");
+          }
+        },
+      }),
+      render: (_, record) => {
+        const canEdit = canEditRelabelInstructionStatus(record);
+        if (canEdit && isStatusEditing(record, "instruction_submitted")) {
+          return (
+            <Select
+              autoFocus
+              size="small"
+              value={record.instruction_submitted ?? "否"}
+              className="w-[88px]"
+              loading={isStatusUpdating(record, "instruction_submitted")}
+              disabled={isStatusUpdating(record, "instruction_submitted")}
+              options={[
+                { label: "否", value: "否" },
+                { label: "是", value: "是" },
+              ]}
+              onChange={(value) => onChangeStatus(record, "instruction_submitted", value)}
+              onBlur={onCancelStatusEdit}
+            />
+          );
+        }
+
+        return (
+          <Tooltip title={canEdit ? "双击修改是否提交指令" : "请先设置送仓时间"}>
+            <span className={canEdit ? "inline-flex cursor-pointer" : "inline-flex"}>
+              {record.instruction_submitted ?? "否"}
+            </span>
+          </Tooltip>
+        );
+      },
+    },
+    {
       title: "是否送仓",
       dataIndex: "delivery_status",
       width: 96,
@@ -223,12 +270,12 @@ export function getRelabelColumns(
             canEditRelabelDeliveryStatus(record) &&
             !isStatusUpdating(record, "delivery_status")
           ) {
-            onStartDeliveryStatusEdit(record);
+            onStartStatusEdit(record, "delivery_status");
           }
         },
       }),
       render: (_, record) => {
-        if (isDeliveryStatusEditing(record) && canEditRelabelDeliveryStatus(record)) {
+        if (isStatusEditing(record, "delivery_status") && canEditRelabelDeliveryStatus(record)) {
           return (
             <Select
               autoFocus
@@ -241,8 +288,8 @@ export function getRelabelColumns(
                 { label: "否", value: "否" },
                 { label: "是", value: "是" },
               ]}
-              onChange={(value) => onChangeDeliveryStatus(record, value)}
-              onBlur={onCancelDeliveryStatusEdit}
+              onChange={(value) => onChangeStatus(record, "delivery_status", value)}
+              onBlur={onCancelStatusEdit}
             />
           );
         }

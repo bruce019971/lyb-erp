@@ -40,6 +40,12 @@ export type RelabelCreateValues = {
 
 export type RelabelUpdateValues = RelabelCreateValues;
 
+export type RelabelStatusField = "instruction_submitted" | "delivery_status";
+
+export function canEditRelabelInstructionStatus(record: RelabelRecord) {
+  return Boolean(record.delivery_time?.trim()) && dayjs(record.delivery_time).isValid();
+}
+
 export const relabelTypeOptions = [
   "外箱标",
   "外箱标及产品标",

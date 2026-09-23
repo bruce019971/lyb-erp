@@ -120,6 +120,18 @@ td.relabel-delivery-done-cell:hover,
   background: #eaffd0 !important;
 }
 
+.relabel-instruction-submitted-row > td,
+.relabel-instruction-submitted-row:hover > td,
+.relabel-instruction-submitted-row .ant-typography,
+.relabel-instruction-submitted-row .ant-typography-copy,
+.relabel-instruction-submitted-row .ant-btn,
+.relabel-instruction-submitted-row .ant-btn-link,
+.relabel-instruction-submitted-row .ant-select-selection-item,
+.relabel-instruction-submitted-row .ant-tag,
+.relabel-instruction-submitted-row a {
+  color: #237804 !important;
+}
+
 .shipment-delivered-row > td {
   background: #f8fafc !important;
   color: #94a3b8 !important;

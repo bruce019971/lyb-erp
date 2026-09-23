@@ -10,12 +10,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
 import {
   batchMarkRelabelsDelivered,
+  batchMarkRelabelsInstructionsSubmitted,
   requestRelabelRecords,
 } from "../_lib/relabels-request";
 import {
+  canEditRelabelInstructionStatus,
   hasRelabelDeliveryDateArrived,
   isRelabelDeliveryOverdue,
   type RelabelRecord,
+  type RelabelStatusField,
 } from "../_lib/relabels";
 
 import { getRelabelColumns } from "./relabels-columns";
@@ -31,13 +34,13 @@ type RelabelsTableProps = {
   onCreate: () => void;
   onEdit: (record: RelabelRecord) => void;
   onDelete: (record: RelabelRecord) => void;
-  onStartDeliveryStatusEdit: (record: RelabelRecord) => void;
-  onCancelDeliveryStatusEdit: () => void;
-  onChangeDeliveryStatus: (record: RelabelRecord, value: string) => void;
-  isDeliveryStatusEditing: (record: RelabelRecord) => boolean;
+  onStartStatusEdit: (record: RelabelRecord, field: RelabelStatusField) => void;
+  onCancelStatusEdit: () => void;
+  onChangeStatus: (record: RelabelRecord, field: RelabelStatusField, value: string) => void;
+  isStatusEditing: (record: RelabelRecord, field: RelabelStatusField) => boolean;
   isStatusUpdating: (
     record: RelabelRecord,
-    field: "delivery_status",
+    field: RelabelStatusField,
   ) => boolean;
   isDeleting: (record: RelabelRecord) => boolean;
   logisticsOptions: LogisticsProviderOption[];
@@ -89,42 +92,43 @@ export default function RelabelsTable({
   onCreate,
   onEdit,
   onDelete,
-  onStartDeliveryStatusEdit,
-  onCancelDeliveryStatusEdit,
-  onChangeDeliveryStatus,
-  isDeliveryStatusEditing,
+  onStartStatusEdit,
+  onCancelStatusEdit,
+  onChangeStatus,
+  isStatusEditing,
   isStatusUpdating,
   isDeleting,
   logisticsOptions,
 }: RelabelsTableProps) {
   const { message } = App.useApp();
   const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
-  const [batchDelivering, setBatchDelivering] = useState(false);
-  const batchDeliveringRef = useRef(false);
+  const [batchUpdatingField, setBatchUpdatingField] = useState<RelabelStatusField | null>(null);
+  const batchUpdating = batchUpdatingField !== null;
+  const batchUpdatingRef = useRef(false);
   const columns = useMemo(
     () =>
       getRelabelColumns(
         onEdit,
         onDelete,
-        onStartDeliveryStatusEdit,
-        onCancelDeliveryStatusEdit,
-        onChangeDeliveryStatus,
-        isDeliveryStatusEditing,
-        (record, field) => batchDelivering || isStatusUpdating(record, field),
+        onStartStatusEdit,
+        onCancelStatusEdit,
+        onChangeStatus,
+        isStatusEditing,
+        (record, field) => batchUpdating || isStatusUpdating(record, field),
         isDeleting,
         logisticsOptions,
       ),
     [
-      batchDelivering,
+      batchUpdating,
       isDeleting,
-      isDeliveryStatusEditing,
+      isStatusEditing,
       isStatusUpdating,
       logisticsOptions,
-      onCancelDeliveryStatusEdit,
-      onChangeDeliveryStatus,
+      onCancelStatusEdit,
+      onChangeStatus,
       onDelete,
       onEdit,
-      onStartDeliveryStatusEdit,
+      onStartStatusEdit,
     ],
   );
   const initialSearchParams = useMemo(
@@ -142,6 +146,9 @@ export default function RelabelsTable({
   const [dataSource, setDataSource] = useState<RelabelRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const selectedInstructionRecords = dataSource.filter(
+    (record) => selectedRowKeys.includes(record.id) && canEditRelabelInstructionStatus(record),
+  );
   const selectedDeliverableRecords = dataSource.filter(
     (record) =>
       selectedRowKeys.includes(record.id) && hasRelabelDeliveryDateArrived(record),
@@ -221,7 +228,7 @@ export default function RelabelsTable({
     if (
       loadingRef.current ||
       loadingMoreRef.current ||
-      batchDeliveringRef.current ||
+      batchUpdatingRef.current ||
       !hasMoreRef.current
     ) {
       return;
@@ -232,34 +239,40 @@ export default function RelabelsTable({
     });
   }, [loadPage]);
 
-  async function handleBatchDelivered() {
+  async function handleBatchStatus(field: RelabelStatusField) {
     if (
-      batchDeliveringRef.current ||
+      batchUpdatingRef.current ||
       loadingRef.current ||
       loadingMoreRef.current
     ) return;
 
     const selectedIds = new Set(selectedRowKeys.map(String));
+    const isInstruction = field === "instruction_submitted";
+    const canUpdate = isInstruction
+      ? canEditRelabelInstructionStatus
+      : hasRelabelDeliveryDateArrived;
     const ids = dataSource
-      .filter(
-        (record) => selectedIds.has(record.id) && hasRelabelDeliveryDateArrived(record),
-      )
+      .filter((record) => selectedIds.has(record.id) && canUpdate(record))
       .map((record) => record.id);
     if (ids.length === 0) return;
 
-    batchDeliveringRef.current = true;
-    setBatchDelivering(true);
-    onCancelDeliveryStatusEdit();
+    batchUpdatingRef.current = true;
+    setBatchUpdatingField(field);
+    onCancelStatusEdit();
 
     try {
-      const { succeededIds, failures } = await batchMarkRelabelsDelivered(ids);
+      const { succeededIds, failures } = await (isInstruction
+        ? batchMarkRelabelsInstructionsSubmitted(ids)
+        : batchMarkRelabelsDelivered(ids));
       const succeeded = new Set(succeededIds);
       setDataSource((current) =>
         current.map((record) =>
-          succeeded.has(record.id) ? { ...record, delivery_status: "是" } : record,
+          succeeded.has(record.id) ? { ...record, [field]: "是" } : record,
         ),
       );
-      setSelectedRowKeys(failures.map((item) => item.id));
+      const attemptedIds = new Set(ids);
+      const skippedIds = [...selectedIds].filter((id) => !attemptedIds.has(id));
+      setSelectedRowKeys([...skippedIds, ...failures.map((item) => item.id)]);
 
       if (failures.length > 0) {
         message.error(
@@ -267,13 +280,18 @@ export default function RelabelsTable({
           8,
         );
       } else {
-        message.success(`已将 ${succeededIds.length} 条换标记录设置为已送仓，并同步原货件状态`);
+        const resultText = isInstruction
+          ? `已将 ${succeededIds.length} 条换标记录的是否提交指令设置为“是”`
+          : `已将 ${succeededIds.length} 条换标记录设置为已送仓，并同步原货件状态`;
+        message.success(skippedIds.length
+          ? `${resultText}；${skippedIds.length} 条不符合条件的记录仍保留勾选`
+          : resultText);
       }
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "批量设置已送仓失败，请重试");
+      message.error(error instanceof Error ? error.message : "批量设置状态失败，请重试");
     } finally {
-      batchDeliveringRef.current = false;
-      setBatchDelivering(false);
+      batchUpdatingRef.current = false;
+      setBatchUpdatingField(null);
     }
   }
 
@@ -316,7 +334,7 @@ export default function RelabelsTable({
       size="small"
       columns={columns}
       dataSource={dataSource}
-      loading={loading || batchDelivering}
+      loading={loading || batchUpdating}
       rowSelection={{
         type: "checkbox",
         selectedRowKeys,
@@ -324,16 +342,19 @@ export default function RelabelsTable({
         onChange: setSelectedRowKeys,
         getCheckboxProps: (record) => ({
           disabled:
-            batchDelivering || loading || !hasRelabelDeliveryDateArrived(record),
-          title: !record.delivery_time
+            batchUpdating || loading || !canEditRelabelInstructionStatus(record),
+          title: !canEditRelabelInstructionStatus(record)
             ? "请先设置送仓时间"
-            : !hasRelabelDeliveryDateArrived(record)
-              ? "未到送仓日期，不能设置已送仓"
-              : "选择该换标记录",
+            : "选择该换标记录",
         }),
       }}
       tableAlertOptionRender={false}
       rowClassName={(record) => {
+        if (record.instruction_submitted === "是" && record.delivery_status !== "是") {
+          return record.pending_instruction_download
+            ? "relabel-pending-download-row relabel-instruction-submitted-row"
+            : "relabel-instruction-submitted-row";
+        }
         if (record.pending_instruction_download) return "relabel-pending-download-row";
         if (record.delivery_status === "是") return "relabel-delivered-row";
         return isRelabelDeliveryOverdue(record) ? "relabel-alert-row" : "";
@@ -350,28 +371,36 @@ export default function RelabelsTable({
       }}
       toolBarRender={() => [
         <Button
+          key="batch-instruction-submitted"
+          disabled={selectedInstructionRecords.length === 0 || loading || loadingMore || batchUpdating}
+          loading={batchUpdatingField === "instruction_submitted"}
+          onClick={() => void handleBatchStatus("instruction_submitted")}
+        >
+          批量设置已提交指令
+        </Button>,
+        <Button
           key="batch-delivered"
           type="primary"
           icon={<CheckCircleOutlined />}
-          disabled={selectedDeliverableRecords.length === 0 || loading || loadingMore}
-          loading={batchDelivering}
-          onClick={() => void handleBatchDelivered()}
+          disabled={selectedDeliverableRecords.length === 0 || loading || loadingMore || batchUpdating}
+          loading={batchUpdatingField === "delivery_status"}
+          onClick={() => void handleBatchStatus("delivery_status")}
         >
           批量设置已送仓
         </Button>,
         <Tooltip key="create" title="新增换标记录">
-          <Button type="text" icon={<PlusOutlined />} disabled={batchDelivering} onClick={onCreate} />
+          <Button type="text" icon={<PlusOutlined />} disabled={batchUpdating} onClick={onCreate} />
         </Tooltip>,
         <Tooltip key="reload" title="刷新列表">
           <Button
             type="text"
             icon={<ReloadOutlined />}
-            disabled={batchDelivering}
+            disabled={batchUpdating}
             onClick={() => actionRef?.current?.reload()}
           />
         </Tooltip>,
       ]}
-      scroll={{ x: 1690, y: "calc(100vh - 360px)" }}
+      scroll={{ x: 1810, y: "calc(100vh - 360px)" }}
       onScroll={(event) => {
         const target = event.currentTarget;
 
@@ -394,7 +423,7 @@ export default function RelabelsTable({
       dateFormatter="string"
       form={{
         initialValues: initialSearchParams,
-        disabled: batchDelivering,
+        disabled: batchUpdating,
       }}
       tableRender={(_, dom) => (
         <div className="relative">
