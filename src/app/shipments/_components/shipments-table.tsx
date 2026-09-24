@@ -58,13 +58,8 @@ type ShipmentsTableProps = {
   onStartDeliveryStatusEdit: (record: ShipmentRecord) => void;
   onCancelDeliveryStatusEdit: () => void;
   onChangeDeliveryStatus: (record: ShipmentRecord, value: string) => void;
-  onStartRelabelEdit: (record: ShipmentRecord) => void;
-  onCancelRelabelEdit: () => void;
-  onChangeRelabel: (record: ShipmentRecord, value: string) => void;
   isDeliveryStatusEditing: (record: ShipmentRecord) => boolean;
   isDeliveryStatusUpdating: (record: ShipmentRecord) => boolean;
-  isRelabelEditing: (record: ShipmentRecord) => boolean;
-  isRelabelUpdating: (record: ShipmentRecord) => boolean;
   isDeleting: (record: ShipmentRecord) => boolean;
   isBatchDeleting: boolean;
   isBatchSubmittingLogisticsOrder: boolean;
@@ -148,7 +143,9 @@ function normalizeCreatedShipmentRecord(record: ShipmentRecord): ShipmentRecord 
   return {
     ...record,
     delivery_status: record.delivery_status ?? "否",
-    relabel_delivery_times: [],
+    relabel_delivery_times: record.relabel_delivery_times ?? [],
+    relabel_records: record.relabel_records ?? [],
+    is_relabel: record.relabel_records?.length ? "是" : "否",
     is_delivery_completed: record.delivery_status === "是",
   };
 }
@@ -233,13 +230,8 @@ export default function ShipmentsTable({
   onStartDeliveryStatusEdit,
   onCancelDeliveryStatusEdit,
   onChangeDeliveryStatus,
-  onStartRelabelEdit,
-  onCancelRelabelEdit,
-  onChangeRelabel,
   isDeliveryStatusEditing,
   isDeliveryStatusUpdating,
-  isRelabelEditing,
-  isRelabelUpdating,
   isDeleting,
   isBatchDeleting,
   isBatchSubmittingLogisticsOrder,
@@ -322,7 +314,7 @@ export default function ShipmentsTable({
     try {
       const updated = await updateShipmentInstructionStatus(record, value);
       setDataSource((current) => current.map((item) => item.id === updated.id
-        ? { ...item, ...updated }
+        ? { ...item, ...updated, is_relabel: item.is_relabel }
         : item));
       setEditingInstructionId(null);
       message.success("是否提交指令已更新");
@@ -343,7 +335,7 @@ export default function ShipmentsTable({
       const updatedById = new Map(succeeded.map((record) => [record.id, record]));
       setDataSource((current) => current.map((item) => {
         const updated = updatedById.get(item.id);
-        return updated ? { ...item, ...updated } : item;
+        return updated ? { ...item, ...updated, is_relabel: item.is_relabel } : item;
       }));
       setSelectedRowKeys((current) => current.filter((id) => !updatedById.has(String(id))));
       const skipped = selectedRecords.length - selectedInstructionRecords.length;
@@ -413,6 +405,9 @@ export default function ShipmentsTable({
   }, [loadRecords]);
 
   const prependCreatedRecord = useCallback((record: ShipmentRecord) => {
+    // 新建接口未返回关联信息时，重新读取列表以获取实际换标记录。
+    if (record.relabel_records === undefined) return false;
+
     const hasActiveSearch = Object.values(searchParamsRef.current).some(
       hasActiveSearchValue,
     );
@@ -516,13 +511,8 @@ export default function ShipmentsTable({
         onStartDeliveryStatusEdit,
         onCancelDeliveryStatusEdit,
         onChangeDeliveryStatus,
-        onStartRelabelEdit,
-        onCancelRelabelEdit,
-        onChangeRelabel,
         isDeliveryStatusEditing,
         isDeliveryStatusUpdating,
-        isRelabelEditing,
-        isRelabelUpdating,
         isDeleting,
         isGeneratingCartonLabel,
         isGeneratingLogisticsBoxMark,
@@ -545,8 +535,6 @@ export default function ShipmentsTable({
       isDeleting,
       isDeliveryStatusEditing,
       isDeliveryStatusUpdating,
-      isRelabelEditing,
-      isRelabelUpdating,
       logisticsOptions,
       handleDownloadCartonLabel,
       handleDownloadLogisticsBoxMark,
@@ -555,15 +543,12 @@ export default function ShipmentsTable({
       isGeneratingLogisticsBoxMark,
       isSubmittingLogisticsOrder,
       onCancelDeliveryStatusEdit,
-      onCancelRelabelEdit,
       onChangeDeliveryStatus,
-      onChangeRelabel,
       onDelete,
       onEdit,
       onGenerateLogisticsBoxMark,
       onLogisticsOrder,
       onStartDeliveryStatusEdit,
-      onStartRelabelEdit,
       productOptions,
       storeOptions,
     ],
@@ -716,7 +701,7 @@ export default function ShipmentsTable({
           setColumnsStateMap(value as ShipmentColumnsState),
       }}
       scroll={{
-        x: 1910,
+        x: 2042,
         y: searchCollapsed
           ? SHIPMENTS_TABLE_SCROLL_Y_COLLAPSED
           : SHIPMENTS_TABLE_SCROLL_Y_EXPANDED,

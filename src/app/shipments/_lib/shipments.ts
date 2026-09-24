@@ -1,5 +1,13 @@
 import dayjs from "dayjs";
 
+export type ShipmentRelabelRecord = {
+  id: string;
+  original_shipment_no: string;
+  delivery_store: string | null;
+  delivery_shipment_no: string | null;
+  delivery_time: string | null;
+};
+
 export type ShipmentRecord = {
   id: string;
   order_store: string | null;
@@ -23,6 +31,7 @@ export type ShipmentRecord = {
   delivery_status: string | null;
   is_relabel: string | null;
   relabel_delivery_times?: string[];
+  relabel_records?: ShipmentRelabelRecord[];
   goods_value: number | null;
   remark: string | null;
   is_delivery_completed?: boolean;

@@ -11,6 +11,7 @@ import {
   type ShipmentCreateValues,
   type ShipmentOption,
   type ShipmentRecord,
+  type ShipmentRelabelRecord,
   type ShipmentUpdateValues,
 } from "./shipments";
 
@@ -109,6 +110,7 @@ function getExpiringShipmentCutoffDateTime() {
 function applyShipmentSearchParams<TQuery extends ShipmentSearchQuery>(
   query: TQuery,
   params: ShipmentRequestParams,
+  relabelShipmentNos: string[] = [],
 ) {
   let nextQuery = query;
 
@@ -185,9 +187,14 @@ function applyShipmentSearchParams<TQuery extends ShipmentSearchQuery>(
   const isRelabel =
     typeof params.is_relabel === "string" ? params.is_relabel.trim() : "";
   if (isRelabel === "是") {
-    nextQuery = nextQuery.eq("is_relabel", isRelabel);
+    nextQuery = relabelShipmentNos.length
+      ? nextQuery.in("shipment_no", relabelShipmentNos)
+      : nextQuery.is("id", null);
   } else if (isRelabel === "否") {
-    nextQuery = nextQuery.or("is_relabel.is.null,is_relabel.eq.否");
+    for (let index = 0; index < relabelShipmentNos.length; index += 100) {
+      const values = relabelShipmentNos.slice(index, index + 100).map((value) => JSON.stringify(value)).join(",");
+      nextQuery = nextQuery.or(`shipment_no.is.null,shipment_no.not.in.(${values})`);
+    }
   }
 
   shipmentDateFields.forEach((field) => {
@@ -328,17 +335,51 @@ async function attachProductMlCodes(records: ShipmentRecord[]) {
   });
 }
 
+async function requestShipmentRelabelMap() {
+  const result = new Map<string, ShipmentRelabelRecord[]>();
+  const pageSize = 1000;
+
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase
+      .from("relabel_records")
+      .select("id, original_shipment_no, delivery_store, delivery_shipment_no, delivery_time")
+      .order("delivery_time", { ascending: true, nullsFirst: false })
+      .order("id", { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+
+    const rows = (data ?? []) as ShipmentRelabelRecord[];
+    rows.forEach((row) => {
+      const shipmentNo = row.original_shipment_no?.trim();
+      if (!shipmentNo) return;
+      const records = result.get(shipmentNo) ?? [];
+      records.push(row);
+      result.set(shipmentNo, records);
+    });
+    if (rows.length < pageSize) return result;
+  }
+}
+
 export async function requestShipmentRecords(
   params: ShipmentRequestParams,
   sorter: Record<string, SortOrder>,
   filters: Record<string, FilterValue | null> = {},
 ) {
+  let relabelMap: Map<string, ShipmentRelabelRecord[]>;
+  try {
+    relabelMap = await requestShipmentRelabelMap();
+  } catch (error) {
+    message.error(error && typeof error === "object" && "message" in error
+      ? String(error.message)
+      : "读取换标记录失败");
+    return { data: [], success: false, total: 0 };
+  }
   let query = supabase
     .from("shipment_records")
     .select("*", { count: "exact" })
     .eq("status", "有效");
 
-  query = applyShipmentSearchParams(query, params);
+  query = applyShipmentSearchParams(query, params, [...relabelMap.keys()]);
 
   function splitFilterText(value?: string) {
     return (value ?? "")
@@ -434,54 +475,20 @@ export async function requestShipmentRecords(
   const shipmentRecords = await attachProductMlCodes(
     (data ?? []) as ShipmentRecord[],
   );
-  const relabelShipmentNos = Array.from(
-    new Set(
-      shipmentRecords
-        .filter((item) => item.is_relabel === "是")
-        .map((item) => item.shipment_no?.trim())
-        .filter((item): item is string => Boolean(item)),
-    ),
-  );
-  const relabelDeliveryTimeMap = new Map<string, string[]>();
-
-  if (relabelShipmentNos.length > 0) {
-    const { data: relabelRecords, error: relabelError } = await supabase
-      .from("relabel_records")
-      .select("original_shipment_no, delivery_time")
-      .in("original_shipment_no", relabelShipmentNos)
-      .not("delivery_time", "is", null)
-      .order("delivery_time", { ascending: true, nullsFirst: false });
-
-    if (relabelError) {
-      message.error(relabelError.message);
-    } else {
-      (relabelRecords ?? []).forEach((item) => {
-        const shipmentNo =
-          typeof item.original_shipment_no === "string"
-            ? item.original_shipment_no.trim()
-            : "";
-        const deliveryTime =
-          typeof item.delivery_time === "string" ? item.delivery_time : "";
-        if (!shipmentNo || !deliveryTime) return;
-
-        const current = relabelDeliveryTimeMap.get(shipmentNo) ?? [];
-        if (!current.includes(deliveryTime)) {
-          relabelDeliveryTimeMap.set(shipmentNo, [...current, deliveryTime]);
-        }
-      });
-    }
-  }
-
   return {
-    data: shipmentRecords.map((item) => ({
-      ...item,
-      delivery_status: item.delivery_status ?? "否",
-      relabel_delivery_times:
-        item.is_relabel === "是" && item.shipment_no?.trim()
-          ? (relabelDeliveryTimeMap.get(item.shipment_no.trim()) ?? [])
-          : [],
-      is_delivery_completed: item.delivery_status === "是",
-    })),
+    data: shipmentRecords.map((item) => {
+      const relabels = relabelMap.get(item.shipment_no?.trim() ?? "") ?? [];
+      return {
+        ...item,
+        delivery_status: item.delivery_status ?? "否",
+        is_relabel: relabels.length ? "是" : "否",
+        relabel_records: relabels,
+        relabel_delivery_times: Array.from(new Set(
+          relabels.map((record) => record.delivery_time).filter((value): value is string => Boolean(value)),
+        )),
+        is_delivery_completed: item.delivery_status === "是",
+      };
+    }),
     success: true,
     total: count ?? 0,
   };
@@ -490,6 +497,10 @@ export async function requestShipmentRecords(
 export async function requestShipmentSummary(
   params: ShipmentRequestParams,
 ): Promise<ShipmentSummary> {
+  const isRelabel = typeof params.is_relabel === "string" ? params.is_relabel.trim() : "";
+  const relabelShipmentNos = isRelabel === "是" || isRelabel === "否"
+    ? [...(await requestShipmentRelabelMap()).keys()]
+    : [];
   const pageSize = 1000;
   let page = 0;
   let summary: ShipmentSummary = {
@@ -508,7 +519,7 @@ export async function requestShipmentSummary(
       .eq("status", "有效")
       .range(from, to);
 
-    query = applyShipmentSearchParams(query, params);
+    query = applyShipmentSearchParams(query, params, relabelShipmentNos);
 
     const { data, error } = await query;
 
@@ -582,7 +593,6 @@ function buildShipmentPayload(values: ShipmentUpdateValues) {
       values.appointment_time === undefined
         ? undefined
         : normalizeTextValue(values.appointment_time),
-    is_relabel: normalizeTextValue(values.is_relabel),
     goods_value: normalizeNumberValue(values.goods_value),
     remark: normalizeTextValue(values.remark),
   });
@@ -728,33 +738,6 @@ export async function batchMarkShipmentInstructionsSubmitted(records: ShipmentRe
   }
 
   return { succeeded, failures };
-}
-
-export async function updateShipmentRelabelStatus(
-  record: ShipmentRecord,
-  value?: string | null,
-) {
-  const normalizedValue = normalizeTextValue(value);
-
-  if ((record.is_relabel ?? null) === normalizedValue) {
-    return record;
-  }
-
-  const { data, error } = await supabase
-    .from("shipment_records")
-    .update({
-      is_relabel: normalizedValue,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", record.id)
-    .select("*")
-    .single();
-
-  if (error) {
-    throw error;
-  }
-
-  return data as ShipmentRecord;
 }
 
 export async function deleteShipmentRecord(id: string) {

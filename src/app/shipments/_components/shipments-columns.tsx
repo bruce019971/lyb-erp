@@ -86,13 +86,8 @@ export function getShipmentColumns(
   onStartDeliveryStatusEdit: (record: ShipmentRecord) => void,
   onCancelDeliveryStatusEdit: () => void,
   onChangeDeliveryStatus: (record: ShipmentRecord, value: string) => void,
-  onStartRelabelEdit: (record: ShipmentRecord) => void,
-  onCancelRelabelEdit: () => void,
-  onChangeRelabel: (record: ShipmentRecord, value: string) => void,
   isDeliveryStatusEditing: (record: ShipmentRecord) => boolean,
   isDeliveryStatusUpdating: (record: ShipmentRecord) => boolean,
-  isRelabelEditing: (record: ShipmentRecord) => boolean,
-  isRelabelUpdating: (record: ShipmentRecord) => boolean,
   isDeleting: (record: ShipmentRecord) => boolean,
   isGeneratingCartonLabel: (record: ShipmentRecord) => boolean,
   isGeneratingLogisticsBoxMark: (record: ShipmentRecord) => boolean,
@@ -456,45 +451,19 @@ export function getShipmentColumns(
     {
       title: "是否换标",
       dataIndex: "is_relabel",
-      width: 78,
-      onCell: (record) => ({
-        onDoubleClick: () => {
-          if (!isRelabelUpdating(record)) {
-            onStartRelabelEdit(record);
-          }
-        },
-      }),
+      width: 210,
       render: (_, record) => {
-        if (isRelabelEditing(record)) {
-          return (
-            <Select
-              autoFocus
-              size="small"
-              value={record.is_relabel ?? ""}
-              className="w-[70px]"
-              loading={isRelabelUpdating(record)}
-              disabled={isRelabelUpdating(record)}
-              options={[
-                { label: "空", value: "" },
-                { label: "否", value: "否" },
-                { label: "是", value: "是" },
-              ]}
-              onChange={(value) => onChangeRelabel(record, value)}
-              onBlur={onCancelRelabelEdit}
-            />
-          );
-        }
+        const relabels = record.relabel_records ?? [];
+        if (!relabels.length) return <Typography.Text type="secondary">-</Typography.Text>;
 
         return (
-          <span
-            className={
-              record.is_relabel === "是"
-                ? "inline-flex"
-                : "inline-flex cursor-pointer"
-            }
-          >
-            <Typography.Text>{record.is_relabel ?? ""}</Typography.Text>
-          </span>
+          <div className="flex flex-col gap-1">
+            {relabels.map((relabel) => (
+              <Typography.Text key={relabel.id} className="whitespace-nowrap">
+                {relabel.delivery_store?.trim() || "-"}/{relabel.delivery_shipment_no?.trim() || "-"}
+              </Typography.Text>
+            ))}
+          </div>
         );
       },
       valueEnum: {
