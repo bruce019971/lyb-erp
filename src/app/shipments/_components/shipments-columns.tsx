@@ -396,12 +396,12 @@ export function getShipmentColumns(
       },
     },
     {
-      title: "未约仓",
-      dataIndex: "unappointed",
+      title: "是否约仓",
+      dataIndex: "appointed",
       hideInTable: true,
       valueType: "select",
       fieldProps: {
-        placeholder: "请选择是否未约仓",
+        placeholder: "请选择是否约仓",
         options: [
           { label: "是", value: "是" },
           { label: "否", value: "否" },

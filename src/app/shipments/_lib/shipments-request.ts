@@ -160,12 +160,12 @@ function applyShipmentSearchParams<TQuery extends ShipmentSearchQuery>(
     nextQuery = nextQuery.is("overseas_warehouse_arrived_at", null);
   }
 
-  const unappointed =
-    typeof params.unappointed === "string" ? params.unappointed.trim() : "";
-  if (unappointed === "是") {
-    nextQuery = nextQuery.is("appointment_time", null);
-  } else if (unappointed === "否") {
+  const appointed =
+    typeof params.appointed === "string" ? params.appointed.trim() : "";
+  if (appointed === "是") {
     nextQuery = nextQuery.not("appointment_time", "is", null);
+  } else if (appointed === "否") {
+    nextQuery = nextQuery.is("appointment_time", null);
   }
 
   const deliveryStatus =
