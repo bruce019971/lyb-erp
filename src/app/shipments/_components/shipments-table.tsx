@@ -786,6 +786,9 @@ export default function ShipmentsTable({
           .filter(Boolean);
         const hasSelectedRows = selectedIds.length > 0;
         const actions = [
+          <Tooltip key="create" title="新增货件">
+            <Button type="text" icon={<PlusOutlined />} disabled={batchDelivering} onClick={onCreate} />
+          </Tooltip>,
           <Tooltip key="batch-delivered" title="仅处理已到送仓日期且尚未送仓的货件">
             <Button
               icon={<CheckCircleOutlined />}
@@ -804,9 +807,6 @@ export default function ShipmentsTable({
           >
             批量设置已提交指令
           </Button>,
-          <Tooltip key="create" title="新增货件">
-            <Button type="text" icon={<PlusOutlined />} disabled={batchDelivering} onClick={onCreate} />
-          </Tooltip>,
           <Tooltip
             key="batch-logistics-order"
             title={
