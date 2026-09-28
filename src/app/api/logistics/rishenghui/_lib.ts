@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { APP_SESSION_COOKIE, verifySessionToken } from "@/lib/app-session";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
-const RISHENGHUI_API_BASE = "http://120.77.87.18:8005";
+const RISHENGHUI_API_BASE = "http://120.24.76.170:8000";
 export const RISHENGHUI_AUTH_CODE_URL = `${RISHENGHUI_API_BASE}/cms/user/auth-code`;
 export const RISHENGHUI_VALID_CODE_URL = `${RISHENGHUI_API_BASE}/cms/user/valid-code`;
 export const RISHENGHUI_LOGIN_URL = `${RISHENGHUI_API_BASE}/cms/user/login`;
