@@ -714,6 +714,20 @@ export async function updateShipmentInstructionStatus(
 }
 
 export async function batchMarkShipmentInstructionsSubmitted(records: ShipmentRecord[]) {
+  return batchUpdateShipmentRecords(records, (record) => updateShipmentInstructionStatus(record, "是"));
+}
+
+export async function batchMarkShipmentsDelivered(records: ShipmentRecord[]) {
+  return batchUpdateShipmentRecords(
+    records.filter((record) => record.delivery_status !== "是" && !record.is_delivery_completed),
+    (record) => updateShipmentDeliveryStatus(record, "是"),
+  );
+}
+
+async function batchUpdateShipmentRecords(
+  records: ShipmentRecord[],
+  updateRecord: (record: ShipmentRecord) => Promise<ShipmentRecord>,
+) {
   const uniqueRecords = Array.from(new Map(records.map((record) => [record.id, record])).values());
   const succeeded: ShipmentRecord[] = [];
   const failures: Array<{ id: string; message: string }> = [];
@@ -721,7 +735,7 @@ export async function batchMarkShipmentInstructionsSubmitted(records: ShipmentRe
   for (let index = 0; index < uniqueRecords.length; index += 5) {
     const batch = uniqueRecords.slice(index, index + 5);
     const results = await Promise.allSettled(
-      batch.map((record) => updateShipmentInstructionStatus(record, "是")),
+      batch.map(updateRecord),
     );
     results.forEach((result, resultIndex) => {
       if (result.status === "fulfilled") {
@@ -731,7 +745,7 @@ export async function batchMarkShipmentInstructionsSubmitted(records: ShipmentRe
           id: batch[resultIndex].id,
           message: typeof result.reason?.message === "string"
             ? result.reason.message
-            : "更新是否提交指令失败",
+            : "更新货件状态失败",
         });
       }
     });

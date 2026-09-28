@@ -3,6 +3,7 @@
 import {
   BarcodeOutlined,
   CalculatorOutlined,
+  CheckCircleOutlined,
   DeleteOutlined,
   FilePdfOutlined,
   KeyOutlined,
@@ -21,6 +22,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   batchGenerateShipmentCartonLabels,
   batchMarkShipmentInstructionsSubmitted,
+  batchMarkShipmentsDelivered,
   updateShipmentInstructionStatus,
   requestShipmentRecords,
   requestShipmentSummary,
@@ -30,6 +32,7 @@ import { getShipmentColumns } from "./shipments-columns";
 import {
   isShipmentDeliveryOverdue,
   canEditShipmentInstructionStatus,
+  canEditShipmentDeliveryStatus,
   type ShipmentRecord,
 } from "../_lib/shipments";
 import type { ProductShipmentOption } from "../../products/_lib/products";
@@ -276,6 +279,7 @@ export default function ShipmentsTable({
   const [editingInstructionId, setEditingInstructionId] = useState<string | null>(null);
   const [instructionUpdating, setInstructionUpdating] = useState(false);
   const [batchInstructionUpdating, setBatchInstructionUpdating] = useState(false);
+  const [batchDelivering, setBatchDelivering] = useState(false);
   const [reloadRequest, setReloadRequest] = useState(0);
   const [summary, setSummary] = useState<ShipmentSummary | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
@@ -303,9 +307,14 @@ export default function ShipmentsTable({
   }, [dataSource, selectedRowKeys]);
 
   const selectedInstructionRecords = selectedRecords.filter(canEditShipmentInstructionStatus);
+  const selectedDeliverableRecords = selectedRecords.filter((record) =>
+    record.delivery_status !== "是" && !record.is_delivery_completed && canEditShipmentDeliveryStatus(record),
+  );
+  const deliveryStatusUpdating = dataSource.some(isDeliveryStatusUpdating);
+  const statusUpdating = instructionUpdating || batchDelivering || deliveryStatusUpdating;
 
   const handleChangeInstructionStatus = useCallback(async (record: ShipmentRecord, value: string) => {
-    if (instructionUpdating) return;
+    if (statusUpdating) return;
     if ((record.instruction_submitted ?? "否") === value) {
       setEditingInstructionId(null);
       return;
@@ -323,10 +332,10 @@ export default function ShipmentsTable({
     } finally {
       setInstructionUpdating(false);
     }
-  }, [instructionUpdating, message]);
+  }, [statusUpdating, message]);
 
   async function handleBatchInstructionStatus() {
-    if (instructionUpdating || loading || !selectedInstructionRecords.length) return;
+    if (statusUpdating || loading || !selectedInstructionRecords.length) return;
     setInstructionUpdating(true);
     setBatchInstructionUpdating(true);
     setEditingInstructionId(null);
@@ -350,6 +359,43 @@ export default function ShipmentsTable({
     } finally {
       setInstructionUpdating(false);
       setBatchInstructionUpdating(false);
+    }
+  }
+
+  async function handleBatchDelivered() {
+    if (statusUpdating || loading || isBatchDeleting || isBatchSubmittingLogisticsOrder || !selectedDeliverableRecords.length) return;
+    setBatchDelivering(true);
+    setEditingInstructionId(null);
+    onCancelDeliveryStatusEdit();
+    try {
+      const { succeeded, failures } = await batchMarkShipmentsDelivered(selectedDeliverableRecords);
+      const updatedById = new Map(succeeded.map((record) => [record.id, record]));
+      const remainingSelection = selectedRowKeys.filter((id) => !updatedById.has(String(id)));
+      setDataSource((current) => current.map((item) => {
+        const updated = updatedById.get(item.id);
+        return updated
+          ? { ...item, ...updated, is_relabel: item.is_relabel, is_delivery_completed: updated.delivery_status === "是" }
+          : item;
+      }));
+      const skipped = selectedRecords.length - selectedDeliverableRecords.length;
+      const resultText = `已将 ${succeeded.length} 条货件设置为已送仓`;
+      if (failures.length) {
+        message.error(`${resultText}，失败 ${failures.length} 条：${failures[0].message}。未完成的记录仍保留勾选。`, 8);
+      } else {
+        message.success(skipped ? `${resultText}；跳过 ${skipped} 条未到送仓日期、未设置送仓时间或已送仓的货件` : resultText);
+      }
+      if (succeeded.length) {
+        try {
+          await reloadFirstPage();
+        } catch {
+          message.warning("状态已更新，但列表刷新失败，请手动刷新");
+        }
+      }
+      setSelectedRowKeys(remainingSelection);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "批量设置已送仓失败");
+    } finally {
+      setBatchDelivering(false);
     }
   }
 
@@ -512,7 +558,7 @@ export default function ShipmentsTable({
         onCancelDeliveryStatusEdit,
         onChangeDeliveryStatus,
         isDeliveryStatusEditing,
-        isDeliveryStatusUpdating,
+        (record) => statusUpdating || isDeliveryStatusUpdating(record),
         isDeleting,
         isGeneratingCartonLabel,
         isGeneratingLogisticsBoxMark,
@@ -522,7 +568,7 @@ export default function ShipmentsTable({
         logisticsOptions,
         {
           editingId: editingInstructionId,
-          updating: instructionUpdating,
+          updating: statusUpdating,
           onStart: (record) => setEditingInstructionId(record.id),
           onCancel: () => setEditingInstructionId(null),
           onChange: (record, value) => void handleChangeInstructionStatus(record, value),
@@ -530,7 +576,7 @@ export default function ShipmentsTable({
       ),
     [
       editingInstructionId,
-      instructionUpdating,
+      statusUpdating,
       handleChangeInstructionStatus,
       isDeleting,
       isDeliveryStatusEditing,
@@ -598,6 +644,7 @@ export default function ShipmentsTable({
             </Tooltip>
             <Switch
               size="small"
+              disabled={batchDelivering}
               checked={longTermInventoryOnly}
               onChange={setLongTermInventoryOnly}
             />
@@ -609,6 +656,7 @@ export default function ShipmentsTable({
             </Tooltip>
             <Switch
               size="small"
+              disabled={batchDelivering}
               checked={expiringShipmentsOnly}
               onChange={setExpiringShipmentsOnly}
             />
@@ -617,27 +665,27 @@ export default function ShipmentsTable({
       }
       columns={columns}
       dataSource={dataSource}
-      loading={loading || batchInstructionUpdating}
+      loading={loading || batchInstructionUpdating || batchDelivering}
       rowSelection={{
         type: "checkbox",
         selectedRowKeys,
         preserveSelectedRowKeys: true,
-        getCheckboxProps: () => ({ disabled: instructionUpdating }),
+        getCheckboxProps: () => ({ disabled: statusUpdating }),
         onChange: (keys) => {
           setSelectedRowKeys(keys);
         },
       }}
       rowClassName={(record) => {
         if (record.is_delivery_completed || record.delivery_status === "是") return "shipment-delivered-row";
-        if (record.instruction_submitted === "是") {
-          return isWarehouseArrivedUndelivered(record)
-            ? "shipment-warehouse-pending-delivery-row shipment-instruction-submitted-row"
-            : "shipment-instruction-submitted-row";
-        }
         if (isShipmentDeliveryOverdue(record)) {
           return isWarehouseArrivedUndelivered(record)
             ? "shipment-warehouse-pending-delivery-row shipment-delivery-overdue-row"
             : "shipment-delivery-overdue-row";
+        }
+        if (record.instruction_submitted === "是") {
+          return isWarehouseArrivedUndelivered(record)
+            ? "shipment-warehouse-pending-delivery-row shipment-instruction-submitted-row"
+            : "shipment-instruction-submitted-row";
         }
         if (isWarehouseArrivedUndelivered(record)) {
           return "shipment-warehouse-pending-delivery-row";
@@ -712,6 +760,7 @@ export default function ShipmentsTable({
         defaultColsNumber: 3,
         onCollapse: (collapsed) => setSearchCollapsed(collapsed),
       }}
+      form={{ disabled: batchDelivering }}
       onSubmit={(values) => {
         const nextValues = mergeSearchValues(
           values,
@@ -737,16 +786,26 @@ export default function ShipmentsTable({
           .filter(Boolean);
         const hasSelectedRows = selectedIds.length > 0;
         const actions = [
+          <Tooltip key="batch-delivered" title="仅处理已到送仓日期且尚未送仓的货件">
+            <Button
+              icon={<CheckCircleOutlined />}
+              disabled={loading || statusUpdating || isBatchDeleting || isBatchSubmittingLogisticsOrder || !selectedDeliverableRecords.length}
+              loading={batchDelivering}
+              onClick={() => void handleBatchDelivered()}
+            >
+              批量设置已送仓
+            </Button>
+          </Tooltip>,
           <Button
             key="batch-instruction-submitted"
-            disabled={loading || instructionUpdating || !selectedInstructionRecords.length}
+            disabled={loading || statusUpdating || !selectedInstructionRecords.length}
             loading={batchInstructionUpdating}
             onClick={() => void handleBatchInstructionStatus()}
           >
             批量设置已提交指令
           </Button>,
           <Tooltip key="create" title="新增货件">
-            <Button type="text" icon={<PlusOutlined />} onClick={onCreate} />
+            <Button type="text" icon={<PlusOutlined />} disabled={batchDelivering} onClick={onCreate} />
           </Tooltip>,
           <Tooltip
             key="batch-logistics-order"
@@ -756,7 +815,7 @@ export default function ShipmentsTable({
           >
             <Button
               type="primary"
-              disabled={!hasSelectedRows}
+              disabled={!hasSelectedRows || batchDelivering}
               loading={isBatchSubmittingLogisticsOrder}
               icon={<ShoppingCartOutlined />}
               onClick={() => onBatchLogisticsOrder(selectedRecords)}
@@ -772,7 +831,7 @@ export default function ShipmentsTable({
           >
             <Button
               type="text"
-              disabled={!hasSelectedRows}
+              disabled={!hasSelectedRows || batchDelivering}
               icon={<CalculatorOutlined />}
               onClick={() => onBatchCalculateGoodsValue(selectedIds)}
             />
@@ -784,7 +843,7 @@ export default function ShipmentsTable({
             <Button
               type="text"
               danger
-              disabled={!hasSelectedRows}
+              disabled={!hasSelectedRows || batchDelivering}
               loading={isBatchDeleting}
               icon={<DeleteOutlined />}
               onClick={() => onBatchDelete(selectedIds)}
@@ -799,7 +858,7 @@ export default function ShipmentsTable({
             <Button
               type="text"
               danger
-              disabled={!hasSelectedRows}
+              disabled={!hasSelectedRows || batchDelivering}
               icon={<FilePdfOutlined />}
               onClick={() => onClearCartonLabels(selectedIds)}
             />
@@ -813,7 +872,7 @@ export default function ShipmentsTable({
             <Button
               type="text"
               danger
-              disabled={!hasSelectedRows}
+              disabled={!hasSelectedRows || batchDelivering}
               icon={<BarcodeOutlined />}
               onClick={() => onClearLogisticsBoxMarks(selectedIds)}
             />
