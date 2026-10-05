@@ -355,7 +355,7 @@ export function getShipmentTrackColumns(
           providerName === "通途" ||
           providerName === "唐朝";
         const canUpdate = canUpdateTrack(record);
-        const updateDisabledTitle = record.warehouse_arrived_time
+        const updateDisabledTitle = record.latest_track?.trim() === "已到仓"
           ? "已到仓货件禁止更新轨迹"
           : "当前仅支持赛易/日升辉/通途/唐朝货件更新轨迹";
 

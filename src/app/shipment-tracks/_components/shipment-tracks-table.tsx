@@ -108,7 +108,7 @@ function canUpdateShipmentTrack(record: ShipmentTrackRecord) {
   return Boolean(
     providerName &&
       TRACK_UPDATE_PROVIDER_NAMES.includes(providerName) &&
-      !record.warehouse_arrived_time,
+      record.latest_track?.trim() !== "已到仓",
   );
 }
 
@@ -223,7 +223,7 @@ export default function ShipmentTracksTable({
   ) => {
     if (!canUpdateShipmentTrack(record)) {
       messageApi.warning(
-        record.warehouse_arrived_time
+        record.latest_track?.trim() === "已到仓"
           ? "已到仓货件禁止更新轨迹"
           : "当前物流商不支持更新轨迹",
       );
