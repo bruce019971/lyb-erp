@@ -126,6 +126,7 @@ export default function ShipmentTracksTable({
   const [columnsStateMap, setColumnsStateMap] =
     useState<ShipmentTrackColumnsState>(() => readShipmentTrackColumnsState());
   const [batchUpdating, setBatchUpdating] = useState(false);
+  const [showOverdueShipments, setShowOverdueShipments] = useState(false);
   const [showDeliveredShipments, setShowDeliveredShipments] = useState(false);
   const [selectedTrackIds, setSelectedTrackIds] = useState<Key[]>([]);
   const [updatingTrackIds, setUpdatingTrackIds] = useState<string[]>([]);
@@ -489,6 +490,7 @@ export default function ShipmentTracksTable({
         setSummaryLoading(true);
         const requestParams = {
           ...params,
+          show_overdue_shipments: showOverdueShipments,
           show_delivered_shipments: showDeliveredShipments,
         };
         const [result, summaryResult] = await Promise.all([
@@ -506,7 +508,7 @@ export default function ShipmentTracksTable({
         setSummaryLoading(false);
       }
     },
-    [showDeliveredShipments],
+    [showDeliveredShipments, showOverdueShipments],
   );
 
   const reloadFirstPage = useCallback(async () => {
@@ -585,6 +587,13 @@ export default function ShipmentTracksTable({
         }}
         toolBarRender={() => [
           <Space key="batch-track-actions">
+            <Typography.Text type="secondary">超时货件</Typography.Text>
+            <Switch
+              aria-label="超时货件"
+              size="small"
+              checked={showOverdueShipments}
+              onChange={setShowOverdueShipments}
+            />
             <Typography.Text type="secondary">显示已送仓</Typography.Text>
             <Switch
               size="small"

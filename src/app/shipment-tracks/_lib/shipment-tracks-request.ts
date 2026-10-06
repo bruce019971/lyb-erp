@@ -21,11 +21,13 @@ export type ShipmentTrackSummary = {
 
 type ShipmentTrackFilterState = {
   matchedShipmentIds: string[] | null;
+  showOverdueShipments: boolean;
   showDeliveredShipments: boolean;
   warehouseArrived: string;
 };
 
 interface ShipmentTrackSearchQuery {
+  gt(field: string, value: number): this;
   in(field: string, values: string[]): this;
   not(field: string, operator: string, value: unknown): this;
   is(field: string, value: unknown): this;
@@ -178,6 +180,7 @@ async function resolveShipmentTrackFilterState(
     ? params.warehouse_arrived.trim()
     : "";
   const showDeliveredShipments = params.show_delivered_shipments === true;
+  const showOverdueShipments = params.show_overdue_shipments === true;
   const shouldFilterShipments =
     shipmentNoValues.length > 0 ||
     trackingNoValues.length > 0 ||
@@ -231,6 +234,7 @@ async function resolveShipmentTrackFilterState(
     success: true,
     state: {
       matchedShipmentIds,
+      showOverdueShipments,
       showDeliveredShipments,
       warehouseArrived,
     },
@@ -242,6 +246,10 @@ function applyShipmentTrackFilterState<TQuery extends ShipmentTrackSearchQuery>(
   state: ShipmentTrackFilterState,
 ) {
   let nextQuery = query;
+
+  if (state.showOverdueShipments) {
+    nextQuery = nextQuery.gt("duration_days", 50);
+  }
 
   if (!state.showDeliveredShipments) {
     nextQuery = nextQuery.or("delivery_status.is.null,delivery_status.neq.是", {
