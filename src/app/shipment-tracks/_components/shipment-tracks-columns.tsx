@@ -120,7 +120,6 @@ export function getShipmentTrackColumns(
     field: ShipmentTrackDateField,
   ) => boolean,
   isUpdatingTrack: (record: ShipmentTrackRecord) => boolean,
-  canUpdateTrack: (record: ShipmentTrackRecord) => boolean,
   isTrackDateUpdating: (
     record: ShipmentTrackRecord,
     field: ShipmentTrackDateField,
@@ -239,7 +238,15 @@ export function getShipmentTrackColumns(
       dataIndex: "latest_track",
       width: 300,
       ellipsis: true,
-      search: false,
+      valueType: "select",
+      fieldProps: {
+        placeholder: "请选择最新轨迹",
+        allowClear: true,
+        options: [
+          { label: "清关中", value: "清关中" },
+          { label: "已到仓", value: "已到仓" },
+        ],
+      },
       render: (_, record) =>
         record.latest_track ? (
           <Typography.Link onClick={() => onOpenTrackDetails(record)}>
@@ -347,34 +354,17 @@ export function getShipmentTrackColumns(
       width: 90,
       fixed: "right",
       search: false,
-      render: (_, record) => {
-        const providerName = record.logistics_provider?.trim();
-        const hasSupportedProvider =
-          providerName === "赛易" ||
-          providerName === "日升辉" ||
-          providerName === "通途" ||
-          providerName === "唐朝";
-        const canUpdate = canUpdateTrack(record);
-        const updateDisabledTitle = record.latest_track?.trim() === "已到仓"
-          ? "已到仓货件禁止更新轨迹"
-          : "当前仅支持赛易/日升辉/通途/唐朝货件更新轨迹";
-
-        return [
-          <Tooltip
-            key="update-track"
-            title={hasSupportedProvider && canUpdate ? "更新轨迹" : updateDisabledTitle}
-          >
-            <Button
-              type="text"
-              size="small"
-              icon={<SyncOutlined />}
-              disabled={!canUpdate}
-              loading={isUpdatingTrack(record)}
-              onClick={() => onUpdateTrack(record)}
-            />
-          </Tooltip>,
-        ];
-      },
+      render: (_, record) => [
+        <Tooltip key="update-track" title="更新轨迹">
+          <Button
+            type="text"
+            size="small"
+            icon={<SyncOutlined />}
+            loading={isUpdatingTrack(record)}
+            onClick={() => onUpdateTrack(record)}
+          />
+        </Tooltip>,
+      ],
     },
   ];
 }

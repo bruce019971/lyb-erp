@@ -103,15 +103,6 @@ function readShipmentTrackColumnsState(): ShipmentTrackColumnsState {
   }
 }
 
-function canUpdateShipmentTrack(record: ShipmentTrackRecord) {
-  const providerName = record.logistics_provider?.trim();
-  return Boolean(
-    providerName &&
-      TRACK_UPDATE_PROVIDER_NAMES.includes(providerName) &&
-      record.latest_track?.trim() !== "已到仓",
-  );
-}
-
 export default function ShipmentTracksTable({
   actionRef,
   onRequireRishenghuiToken,
@@ -165,6 +156,10 @@ export default function ShipmentTracksTable({
     token: string,
   ) => {
     const providerName = record.logistics_provider?.trim();
+    if (!providerName || !TRACK_UPDATE_PROVIDER_NAMES.includes(providerName)) {
+      throw new Error("当前物流商不支持更新轨迹");
+    }
+
     const result =
       providerName === "日升辉"
         ? await updateRishenghuiShipmentTrack({
@@ -222,15 +217,6 @@ export default function ShipmentTracksTable({
     record: ShipmentTrackRecord,
     accessTokenOverride?: string,
   ) => {
-    if (!canUpdateShipmentTrack(record)) {
-      messageApi.warning(
-        record.latest_track?.trim() === "已到仓"
-          ? "已到仓货件禁止更新轨迹"
-          : "当前物流商不支持更新轨迹",
-      );
-      return;
-    }
-
     const providerName = record.logistics_provider?.trim();
     const token = accessTokenOverride?.trim() || rishenghuiAccessToken.trim();
 
@@ -243,7 +229,6 @@ export default function ShipmentTracksTable({
 
     await runUpdateTrack(record, token);
   }, [
-    messageApi,
     onRequireRishenghuiToken,
     rishenghuiAccessToken,
     runUpdateTrack,
@@ -258,18 +243,16 @@ export default function ShipmentTracksTable({
     records: ShipmentTrackRecord[],
     token: string,
   ) => {
-    const updatableRecords = records.filter(canUpdateShipmentTrack);
-
     setBatchUpdating(true);
     setUpdatingTrackIds((current) =>
-      Array.from(new Set([...current, ...updatableRecords.map((item) => item.id)])),
+      Array.from(new Set([...current, ...records.map((item) => item.id)])),
     );
 
     const failures: Array<{ shipmentNo: string; error: string }> = [];
     let successCount = 0;
 
     try {
-      for (const record of updatableRecords) {
+      for (const record of records) {
         try {
           const nextRecord = await requestTrackUpdate(record, token);
           successCount += 1;
@@ -288,7 +271,7 @@ export default function ShipmentTracksTable({
     } finally {
       setUpdatingTrackIds((current) =>
         current.filter(
-          (id) => !updatableRecords.some((record) => record.id === id),
+          (id) => !records.some((record) => record.id === id),
         ),
       );
       setBatchUpdating(false);
@@ -319,31 +302,24 @@ export default function ShipmentTracksTable({
   ]);
 
   const handleBatchUpdateTracksClick = useCallback(() => {
-    const updatableRecords = selectedTrackRecords.filter(canUpdateShipmentTrack);
-
     if (!selectedTrackRecords.length) {
       messageApi.warning("请先选择需要更新轨迹的货件");
       return;
     }
 
-    if (!updatableRecords.length) {
-      messageApi.warning("已选择货件均已到仓或物流商不支持更新轨迹");
-      return;
-    }
-
-    const hasRishenghui = updatableRecords.some(
+    const hasRishenghui = selectedTrackRecords.some(
       (item) => item.logistics_provider?.trim() === "日升辉",
     );
     const token = rishenghuiAccessToken.trim();
 
     if (hasRishenghui && !token) {
       onRequireRishenghuiToken(undefined, (accessToken) =>
-        handleBatchUpdateTracks(updatableRecords, accessToken),
+        handleBatchUpdateTracks(selectedTrackRecords, accessToken),
       );
       return;
     }
 
-    void handleBatchUpdateTracks(updatableRecords, token);
+    void handleBatchUpdateTracks(selectedTrackRecords, token);
   }, [
     handleBatchUpdateTracks,
     messageApi,
@@ -461,7 +437,6 @@ export default function ShipmentTracksTable({
         handleCancelTrackDateEdit,
         isTrackDateEditing,
         isUpdatingTrack,
-        canUpdateShipmentTrack,
         isTrackDateUpdating,
         orderStoreOptions,
         productSelectOptions,
@@ -551,10 +526,7 @@ export default function ShipmentTracksTable({
           preserveSelectedRowKeys: true,
           onChange: (keys) => setSelectedTrackIds(keys),
           getCheckboxProps: (record) => ({
-            disabled:
-              batchUpdating ||
-              isUpdatingTrack(record) ||
-              !canUpdateShipmentTrack(record),
+            disabled: batchUpdating || isUpdatingTrack(record),
           }),
         }}
         tableAlertRender={false}
