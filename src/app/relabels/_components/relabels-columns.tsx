@@ -192,8 +192,13 @@ export function getRelabelColumns(
       dataIndex: "product_count",
       width: 86,
       search: false,
-      render: (_, record) =>
-        record.relabel_type === "外箱标" ? "-" : (record.product_count ?? ""),
+      render: (_, record) => (
+        <Typography.Text>
+          {record.relabel_type?.trim() === "外箱标"
+            ? "-"
+            : (record.product_count ?? "-")}
+        </Typography.Text>
+      ),
     },
     {
       title: "换标费用",
