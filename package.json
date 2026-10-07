@@ -2,10 +2,10 @@
   "name": "mercado-inbound-planning",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "npm@10.9.2",
+  "packageManager": "npm@11.17.0",
   "engines": {
-    "node": "20.x",
-    "npm": "10.x"
+    "node": "24.x",
+    "npm": "11.x"
   },
   "scripts": {
     "dev": "next dev",
