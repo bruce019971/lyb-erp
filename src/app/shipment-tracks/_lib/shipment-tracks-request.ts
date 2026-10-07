@@ -29,7 +29,6 @@ type ShipmentTrackFilterState = {
 
 interface ShipmentTrackSearchQuery {
   eq(field: string, value: string): this;
-  gt(field: string, value: number): this;
   in(field: string, values: string[]): this;
   not(field: string, operator: string, value: unknown): this;
   is(field: string, value: unknown): this;
@@ -43,7 +42,6 @@ type ShipmentTrackRow = {
   track_events?: unknown;
   sailing_time: string | null;
   warehouse_arrived_time: string | null;
-  duration_days?: number | null;
   track_updated_at: string | null;
   created_at: string | null;
   updated_at: string | null;
@@ -70,6 +68,8 @@ type ShipmentTrackRow = {
 };
 
 type ShipmentTrackSummaryRow = {
+  sailing_time: string | null;
+  warehouse_arrived_time: string | null;
   shipment:
     | {
         total_qty: number | null;
@@ -154,12 +154,10 @@ function normalizeTrackRow(row: ShipmentTrackRow): ShipmentTrackRecord {
     track_events: trackEvents,
     sailing_time: row.sailing_time,
     warehouse_arrived_time: row.warehouse_arrived_time,
-    duration_days:
-      row.duration_days ??
-      calculateShipmentTrackDurationDays(
-        row.sailing_time,
-        row.warehouse_arrived_time,
-      ),
+    duration_days: calculateShipmentTrackDurationDays(
+      row.sailing_time,
+      row.warehouse_arrived_time,
+    ),
     track_updated_at: row.track_updated_at,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -258,7 +256,9 @@ function applyShipmentTrackFilterState<TQuery extends ShipmentTrackSearchQuery>(
   }
 
   if (state.showOverdueShipments) {
-    nextQuery = nextQuery.gt("duration_days", 50);
+    nextQuery = nextQuery
+      .not("sailing_time", "is", null)
+      .not("warehouse_arrived_time", "is", null);
   }
 
   if (!state.showDeliveredShipments) {
@@ -278,6 +278,19 @@ function applyShipmentTrackFilterState<TQuery extends ShipmentTrackSearchQuery>(
   }
 
   return nextQuery as TQuery;
+}
+
+function matchesShipmentTrackDuration(
+  row: Pick<ShipmentTrackRow, "sailing_time" | "warehouse_arrived_time">,
+  showOverdueShipments: boolean,
+) {
+  if (!showOverdueShipments) return true;
+
+  const durationDays = calculateShipmentTrackDurationDays(
+    row.sailing_time,
+    row.warehouse_arrived_time,
+  );
+  return durationDays !== null && durationDays > 50;
 }
 
 function getEmptyShipmentTrackSummary(): ShipmentTrackSummary {
@@ -325,17 +338,36 @@ export async function requestShipmentTrackRecords(
     });
   }
 
-  const { data, error, count } = await query;
-
-  if (error) {
-    return { data: [], success: false, total: 0 };
+  if (orderField !== "id") {
+    query = query.order("id", { ascending: true });
   }
 
-  return {
-    data: ((data ?? []) as ShipmentTrackRow[]).map(normalizeTrackRow),
-    success: true,
-    total: count ?? 0,
-  };
+  const pageSize = 1000;
+  const records: ShipmentTrackRecord[] = [];
+  let from = 0;
+
+  while (true) {
+    const { data, error, count } = await query.range(from, from + pageSize - 1);
+
+    if (error) {
+      return { data: [], success: false, total: 0 };
+    }
+
+    const rows = (data ?? []) as ShipmentTrackRow[];
+    records.push(
+      ...rows
+        .filter((row) =>
+          matchesShipmentTrackDuration(row, filterResult.state.showOverdueShipments),
+        )
+        .map(normalizeTrackRow),
+    );
+
+    if (rows.length < pageSize || (count !== null && from + rows.length >= count)) {
+      return { data: records, success: true, total: records.length };
+    }
+
+    from += pageSize;
+  }
 }
 
 export async function requestShipmentTrackSummary(
@@ -359,7 +391,9 @@ export async function requestShipmentTrackSummary(
     const to = from + pageSize - 1;
     let query = supabase
       .from("shipment_tracks")
-      .select("shipment:shipment_records!inner(total_qty)")
+      .select(
+        "sailing_time, warehouse_arrived_time, shipment:shipment_records!inner(total_qty)",
+      )
       .eq("shipment.status", "有效")
       .order("id", { ascending: true })
       .range(from, to);
@@ -374,6 +408,10 @@ export async function requestShipmentTrackSummary(
 
     const rows = (data ?? []) as ShipmentTrackSummaryRow[];
     rows.forEach((row) => {
+      if (!matchesShipmentTrackDuration(row, filterResult.state.showOverdueShipments)) {
+        return;
+      }
+
       const shipment = Array.isArray(row.shipment)
         ? row.shipment[0]
         : row.shipment;
