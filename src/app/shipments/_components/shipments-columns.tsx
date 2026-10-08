@@ -350,12 +350,6 @@ export function getShipmentColumns(
       },
     },
     {
-      title: "起始日期",
-      dataIndex: "created_at",
-      valueType: "dateRange",
-      hideInTable: true,
-    },
-    {
       title: "运单编号",
       dataIndex: "tracking_no",
       hideInTable: true,
