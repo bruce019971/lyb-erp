@@ -236,7 +236,9 @@ export default function RelabelFormDrawer({
   }, [boxCountByShipmentNo, form]);
 
   const applyDefaultDeliveryStore = useCallback((shipmentNo?: string | null) => {
-    if (mode !== "create") return;
+    if (mode !== "create" && form.getFieldValue("relabel_type") !== "外箱标") {
+      return;
+    }
 
     const trimmedShipmentNo = shipmentNo?.trim();
     const shipmentOption = trimmedShipmentNo
@@ -310,6 +312,20 @@ export default function RelabelFormDrawer({
       new_ml_code: undefined,
     });
   }, [applyDefaultBoxCount, form, mode, open, record]);
+
+  useEffect(() => {
+    if (!open || form.getFieldValue("relabel_type") !== "外箱标") return;
+
+    applyDefaultDeliveryStore(form.getFieldValue("original_shipment_no"));
+  }, [
+    applyDefaultDeliveryStore,
+    form,
+    mode,
+    open,
+    record,
+    selectedOriginalShipmentNo,
+    selectedRelabelType,
+  ]);
 
   useEffect(() => {
     if (!open) return;
@@ -443,6 +459,26 @@ export default function RelabelFormDrawer({
           </Form.Item>
 
           <Form.Item
+            label="换标类型"
+            name="relabel_type"
+            rules={[{ required: true, message: "请选择换标类型" }]}
+          >
+            <Select
+              allowClear
+              placeholder="请选择换标类型"
+              onChange={(value) => {
+                if (value === "外箱标") {
+                  form.setFields([{ name: "product_count", value: undefined }]);
+                }
+              }}
+              options={relabelTypeOptions.map((item) => ({
+                label: item,
+                value: item,
+              }))}
+            />
+          </Form.Item>
+
+          <Form.Item
             label="送仓店铺"
             name="delivery_store"
             rules={[{ required: true, message: "请选择送仓店铺" }]}
@@ -450,6 +486,7 @@ export default function RelabelFormDrawer({
             <Select
               showSearch
               allowClear
+              disabled={selectedRelabelType !== "外箱标及产品标"}
               placeholder="请选择送仓店铺"
               optionFilterProp="label"
               options={deliveryStoreOptions}
@@ -484,26 +521,6 @@ export default function RelabelFormDrawer({
               min={1}
               precision={0}
               placeholder="请输入外箱数"
-            />
-          </Form.Item>
-
-          <Form.Item
-            label="换标类型"
-            name="relabel_type"
-            rules={[{ required: true, message: "请选择换标类型" }]}
-          >
-            <Select
-              allowClear
-              placeholder="请选择换标类型"
-              onChange={(value) => {
-                if (value === "外箱标") {
-                  form.setFields([{ name: "product_count", value: undefined }]);
-                }
-              }}
-              options={relabelTypeOptions.map((item) => ({
-                label: item,
-                value: item,
-              }))}
             />
           </Form.Item>
 
