@@ -8,6 +8,8 @@ import { useEffect, useMemo, useState } from "react";
 
 import DamagesPage from "../damages/_components/damages-page";
 import FreightsPage from "../freights/_components/freights-page";
+import StorageRentPage from "../storage-rent/_components/storage-rent-page";
+import { canAccessStorageRent } from "@/lib/storage-rent-permissions";
 import LogisticsPage from "../logistics/_components/logistics-page";
 import ProfilePage from "../profile/_components/profile-page";
 import ProductsPage from "../products/_components/products-page";
@@ -40,6 +42,7 @@ function renderPage(key: PageKey) {
   if (key === "stores") return <StoresPage />;
   if (key === "relabels") return <RelabelsPage />;
   if (key === "freights") return <FreightsPage />;
+  if (key === "storage_rent") return <StorageRentPage />;
   if (key === "damages") return <DamagesPage />;
   if (key === "shipment_tracks") return <ShipmentTracksPage />;
   if (key === "profile") return <ProfilePage />;
@@ -84,6 +87,7 @@ export default function Workbench({
 
             return (
               item.key === "profile" ||
+              (item.key === "storage_rent" && canAccessStorageRent(authSession)) ||
               authSession?.menuPermissions.includes(item.key) ||
               hasLegacyDamagePermission
             );

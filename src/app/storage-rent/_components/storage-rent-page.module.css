@@ -1,0 +1,13 @@
+.table :global(.ant-pro-table-search .ant-select-multiple .ant-select-selector) {
+  max-height: 32px;
+  overflow-y: hidden;
+}
+
+.table :global(.ant-pro-table-search .ant-select-selection-overflow) {
+  flex-wrap: nowrap;
+}
+
+.table :global(.ant-table-summary) > tr > td {
+  background: #f8fafc;
+  font-weight: 600;
+}

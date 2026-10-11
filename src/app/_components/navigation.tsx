@@ -4,6 +4,7 @@ import {
   AppstoreOutlined,
   ControlOutlined,
   DollarOutlined,
+  ContainerOutlined,
   LogoutOutlined,
   ProfileOutlined,
   RadarChartOutlined,
@@ -28,6 +29,7 @@ export type PageKey =
   | "logistics"
   | "relabels"
   | "freights"
+  | "storage_rent"
   | "damages"
   | "shipment_tracks"
   | "profile"
@@ -66,6 +68,13 @@ export const pageConfigs: PageConfig[] = [
     label: "运费管理",
     icon: <DollarOutlined />,
     href: "/freights",
+    section: "core",
+  },
+  {
+    key: "storage_rent",
+    label: "仓租管理",
+    icon: <ContainerOutlined />,
+    href: "/storage-rent",
     section: "core",
   },
   {

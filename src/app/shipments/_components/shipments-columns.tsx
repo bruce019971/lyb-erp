@@ -407,7 +407,7 @@ export function getShipmentColumns(
       dataIndex: "overseas_warehouse_arrived_at",
       valueType: "dateRange",
       width: 88,
-      hideInSearch: true,
+      formItemProps: { label: "到仓日期" },
       render: (_, record) =>
         renderNowrapShipmentDate(record.overseas_warehouse_arrived_at),
     },
