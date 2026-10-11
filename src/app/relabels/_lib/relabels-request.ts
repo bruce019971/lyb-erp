@@ -21,22 +21,58 @@ type RelabelRequestParams = {
   pendingRecordIds?: string[];
 } & Record<string, unknown>;
 
-export async function requestRelabelRecords(
+interface RelabelSearchQuery {
+  in(field: string, values: string[]): this;
+  ilike(field: string, value: string): this;
+  or(filters: string): this;
+}
+
+async function requestLogisticsShipmentNos(params: RelabelRequestParams) {
+  const rawValues = Array.isArray(params.logistics_provider)
+    ? params.logistics_provider
+    : [params.logistics_provider];
+  const providers = rawValues
+    .map((value) => typeof value === "string" ? value.trim() : "")
+    .filter(Boolean);
+  if (providers.length === 0) return undefined;
+
+  const shipmentNos = new Set<string>();
+  const pageSize = 1000;
+  let from = 0;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from("shipment_records")
+      .select("shipment_no")
+      .eq("status", "有效")
+      .in("logistics_provider", providers)
+      .not("shipment_no", "is", null)
+      .order("id", { ascending: true })
+      .range(from, from + pageSize - 1);
+
+    if (error) throw error;
+    const rows = data ?? [];
+    rows.forEach((item) => {
+      const shipmentNo = typeof item.shipment_no === "string"
+        ? item.shipment_no.trim()
+        : "";
+      if (shipmentNo) shipmentNos.add(shipmentNo);
+    });
+    if (rows.length < pageSize) return [...shipmentNos];
+    from += rows.length;
+  }
+}
+
+function applyRelabelSearchParams<T extends RelabelSearchQuery>(
+  query: T,
   params: RelabelRequestParams,
-  sorter: Record<string, SortOrder> = {},
-): Promise<{ data: RelabelRecord[]; success: boolean; total: number }> {
-  const current = params.current ?? 1;
-  const pageSize = params.pageSize ?? 20;
-  const from = (current - 1) * pageSize;
-  const to = from + pageSize - 1;
-
-  let query = supabase
-    .from("relabel_records")
-    .select("*", { count: "exact" })
-    .range(from, to);
-
+  logisticsShipmentNos?: string[],
+): T {
   if (params.pendingRecordIds) {
     query = query.in("id", params.pendingRecordIds);
+  }
+  if (logisticsShipmentNos) {
+    query = query.in("original_shipment_no", logisticsShipmentNos);
   }
 
   function splitShipmentNos(value: unknown) {
@@ -89,54 +125,68 @@ export async function requestRelabelRecords(
     );
   }
 
-  function normalizeMultiSelectValues(value: unknown) {
-    const values = Array.isArray(value) ? value : [value];
+  return query;
+}
 
-    return values
-      .map((item) => (typeof item === "string" ? item.trim() : ""))
-      .filter(Boolean);
-  }
+export async function requestRelabelFeeSummary(
+  params: RelabelRequestParams,
+): Promise<number> {
+  const logisticsShipmentNos = await requestLogisticsShipmentNos(params);
+  if (logisticsShipmentNos?.length === 0) return 0;
 
-  const logisticsProviderValues = normalizeMultiSelectValues(
-    params.logistics_provider,
-  );
-  if (logisticsProviderValues.length > 0) {
-    const { data: shipmentRows, error: shipmentError } = await supabase
-      .from("shipment_records")
-      .select("shipment_no")
-      .eq("status", "有效")
-      .in("logistics_provider", logisticsProviderValues)
-      .not("shipment_no", "is", null)
-      .range(0, 9999);
+  const pageSize = 1000;
+  let from = 0;
+  let totalCents = 0;
 
-    if (shipmentError) {
-      return {
-        data: [],
-        success: false,
-        total: 0,
-      };
-    }
-
-    const shipmentNos = Array.from(
-      new Set(
-        (shipmentRows ?? [])
-          .map((item) =>
-            typeof item.shipment_no === "string" ? item.shipment_no.trim() : "",
-          )
-          .filter(Boolean),
-      ),
+  while (true) {
+    const query = applyRelabelSearchParams(
+      supabase
+        .from("relabel_records")
+        .select("relabel_fee")
+        .order("id", { ascending: true })
+        .range(from, from + pageSize - 1),
+      params,
+      logisticsShipmentNos,
     );
+    const { data, error } = await query;
+    if (error) throw error;
 
-    if (shipmentNos.length === 0) {
-      return {
-        data: [],
-        success: true,
-        total: 0,
-      };
-    }
-
-    query = query.in("original_shipment_no", shipmentNos);
+    const rows = data ?? [];
+    rows.forEach((item) => {
+      const fee = Number(item.relabel_fee ?? 0);
+      if (Number.isFinite(fee)) totalCents += Math.round(fee * 100);
+    });
+    if (rows.length < pageSize) return totalCents / 100;
+    from += rows.length;
   }
+}
+
+export async function requestRelabelRecords(
+  params: RelabelRequestParams,
+  sorter: Record<string, SortOrder> = {},
+): Promise<{ data: RelabelRecord[]; success: boolean; total: number }> {
+  const current = params.current ?? 1;
+  const pageSize = params.pageSize ?? 20;
+  const from = (current - 1) * pageSize;
+  const to = from + pageSize - 1;
+  let logisticsShipmentNos: string[] | undefined;
+  try {
+    logisticsShipmentNos = await requestLogisticsShipmentNos(params);
+  } catch {
+    return { data: [], success: false, total: 0 };
+  }
+  if (logisticsShipmentNos?.length === 0) {
+    return { data: [], success: true, total: 0 };
+  }
+
+  let query = applyRelabelSearchParams(
+    supabase
+      .from("relabel_records")
+      .select("*", { count: "exact" })
+      .range(from, to),
+    params,
+    logisticsShipmentNos,
+  );
 
   const orderField = Object.keys(sorter ?? {})[0];
   const orderDirection = orderField ? sorter[orderField] : undefined;

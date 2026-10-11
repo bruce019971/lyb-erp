@@ -1,15 +1,16 @@
 "use client";
 
 import { CheckCircleOutlined, PlusOutlined, ReloadOutlined } from "@ant-design/icons";
-import type { ActionType } from "@ant-design/pro-components";
+import type { ActionType, ColumnsState } from "@ant-design/pro-components";
 import { ProTable } from "@ant-design/pro-components";
-import { App, Button, Spin, Tooltip } from "antd";
+import { App, Button, Spin, Table, Tooltip } from "antd";
 import type { Key, MutableRefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
 import {
   batchMarkRelabelsDelivered,
+  requestRelabelFeeSummary,
   requestRelabelRecords,
 } from "../_lib/relabels-request";
 import {
@@ -100,6 +101,9 @@ export default function RelabelsTable({
   const { message } = App.useApp();
   const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
   const [batchDelivering, setBatchDelivering] = useState(false);
+  const [feeSummary, setFeeSummary] = useState<number | null>(null);
+  const [columnsState, setColumnsState] = useState<Record<string, ColumnsState>>({});
+  const requestVersionRef = useRef(0);
   const batchDeliveringRef = useRef(false);
   const columns = useMemo(
     () =>
@@ -134,6 +138,26 @@ export default function RelabelsTable({
         : {},
     [originalShipmentNo],
   );
+  const summaryColumns = columns
+    .map((column, index) => {
+      const key = String(column.key ?? column.dataIndex ?? index);
+      return {
+        key,
+        dataIndex: column.dataIndex,
+        hidden: column.hideInTable || columnsState[key]?.show === false,
+        fixed: columnsState[key]?.fixed ?? column.fixed,
+        order: columnsState[key]?.order,
+        index,
+      };
+    })
+    .filter((column) => !column.hidden)
+    .sort((left, right) => {
+      const fixedOrder = (fixed: unknown) => fixed === "left" ? -1 : fixed === "right" ? 1 : 0;
+      return fixedOrder(left.fixed) - fixedOrder(right.fixed) ||
+        (left.order || right.order
+          ? (left.order ?? 0) - (right.order ?? 0)
+          : left.index - right.index);
+    });
   const searchParamsRef = useRef<Record<string, unknown>>(initialSearchParams);
   const loadingRef = useRef(true);
   const loadingMoreRef = useRef(false);
@@ -154,6 +178,9 @@ export default function RelabelsTable({
       options?: { append?: boolean },
     ) => {
       const append = options?.append ?? false;
+      const requestVersion = append
+        ? requestVersionRef.current
+        : ++requestVersionRef.current;
 
       if (append) {
         loadingMoreRef.current = true;
@@ -162,14 +189,30 @@ export default function RelabelsTable({
         loadingRef.current = true;
         setLoading(true);
         setSelectedRowKeys([]);
+        setFeeSummary(null);
       }
 
       try {
-        const result = await requestRelabelRecords({
-          ...params,
-          current: page,
-          pageSize: PAGE_SIZE,
-        });
+        const [recordsResult, summaryResult] = await Promise.allSettled([
+          requestRelabelRecords({
+            ...params,
+            current: page,
+            pageSize: PAGE_SIZE,
+          }),
+          append ? Promise.resolve(null) : requestRelabelFeeSummary(params),
+        ]);
+        if (requestVersion !== requestVersionRef.current) return;
+
+        if (!append) {
+          if (summaryResult.status === "fulfilled") {
+            setFeeSummary(summaryResult.value);
+          } else {
+            message.error("换标费用合计加载失败，请刷新重试");
+          }
+        }
+        if (recordsResult.status === "rejected") throw recordsResult.reason;
+        const result = recordsResult.value;
+        if (!result.success) throw new Error("换标记录加载失败，请刷新重试");
         const pendingIds = new Set(getPendingRelabelDownloadIds());
         const nextData = (result.data ?? []).map((record) => ({
           ...record,
@@ -183,14 +226,23 @@ export default function RelabelsTable({
         );
         currentPageRef.current = page;
         hasMoreRef.current = page * PAGE_SIZE < result.total;
+      } catch (error) {
+        if (requestVersion !== requestVersionRef.current) return;
+        if (!append) {
+          setDataSource([]);
+          hasMoreRef.current = false;
+        }
+        message.error(error instanceof Error ? error.message : "换标记录加载失败，请刷新重试");
       } finally {
-        loadingRef.current = false;
-        loadingMoreRef.current = false;
-        setLoading(false);
-        setLoadingMore(false);
+        if (requestVersion === requestVersionRef.current) {
+          loadingRef.current = false;
+          loadingMoreRef.current = false;
+          setLoading(false);
+          setLoadingMore(false);
+        }
       }
     },
-    [],
+    [message],
   );
 
   const reloadFirstPage = useCallback(async () => {
@@ -312,9 +364,11 @@ export default function RelabelsTable({
 
   return (
     <ProTable<RelabelRecord>
+      className="relabels-table-with-sticky-summary"
       rowKey="id"
       size="small"
       columns={columns}
+      columnsState={{ value: columnsState, onChange: setColumnsState }}
       dataSource={dataSource}
       loading={loading || batchDelivering}
       rowSelection={{
@@ -391,6 +445,27 @@ export default function RelabelsTable({
         void loadPage(1, initialSearchParams, { append: false });
       }}
       pagination={false}
+      summary={() => (
+        <Table.Summary fixed="bottom">
+          <Table.Summary.Row className="relabel-summary-row">
+            <Table.Summary.Cell index={0} />
+            {summaryColumns.map((column, index) => (
+              <Table.Summary.Cell key={column.key} index={index + 1}>
+                {index === 0 ? "合计" : null}
+                {column.dataIndex === "relabel_fee" ? (
+                  <span className="whitespace-nowrap">
+                    {loading ? "计算中…" : feeSummary === null ? "—" :
+                      `¥${feeSummary.toLocaleString("zh-CN", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}`}
+                  </span>
+                ) : null}
+              </Table.Summary.Cell>
+            ))}
+          </Table.Summary.Row>
+        </Table.Summary>
+      )}
       dateFormatter="string"
       form={{
         initialValues: initialSearchParams,

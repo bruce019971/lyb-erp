@@ -38,6 +38,8 @@ function renderShipmentNoSearchInput() {
       allowClear
       open={false}
       tokenSeparators={TOKEN_SEPARATORS}
+      maxTagCount="responsive"
+      maxTagTextLength={18}
       placeholder="可用回车、空格或逗号分隔"
       className="w-full"
     />
