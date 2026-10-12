@@ -5,10 +5,12 @@ import type { ProColumns } from "@ant-design/pro-components";
 import { ProTable } from "@ant-design/pro-components";
 import { Alert, App, Button, ConfigProvider, Select, Table, Tooltip, Typography } from "antd";
 import zhCN from "antd/locale/zh_CN";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   splitShipmentSearchValues,
+  normalizeProductSearchValues,
+  type StorageRentFilterOptions,
   type StorageRentRecord,
   type StorageRentResult,
 } from "../_lib/storage-rent";
@@ -21,20 +23,23 @@ function formatMoney(value: number) {
   })}`;
 }
 
-const columns: ProColumns<StorageRentRecord>[] = [
+function getColumns(options: StorageRentFilterOptions, optionsLoading: boolean): ProColumns<StorageRentRecord>[] {
+  return [
   {
     title: "货件号",
     dataIndex: "shipment_no",
     width: 180,
     renderFormItem: () => (
       <Select
-        mode="tags"
+        mode="multiple"
         allowClear
-        open={false}
+        showSearch
+        optionFilterProp="label"
+        loading={optionsLoading}
+        options={options.shipmentNos.map((value) => ({ label: value, value }))}
         maxTagCount={1}
         maxTagTextLength={18}
-        tokenSeparators={[" ", "\n", "\t", ",", "，"]}
-        placeholder="输入货件号，回车分隔"
+        placeholder="请选择货件号"
         className="w-full"
       />
     ),
@@ -47,7 +52,18 @@ const columns: ProColumns<StorageRentRecord>[] = [
     dataIndex: "product_name",
     width: 220,
     ellipsis: true,
-    fieldProps: { placeholder: "请输入产品名称关键词" },
+    valueType: "select",
+    fieldProps: {
+      mode: "multiple",
+      allowClear: true,
+      showSearch: true,
+      optionFilterProp: "label",
+      maxTagCount: 1,
+      maxTagTextLength: 18,
+      loading: optionsLoading,
+      options: options.productNames.map((value) => ({ label: value, value })),
+      placeholder: "请选择产品名称",
+    },
   },
   { title: "箱数", dataIndex: "box_count", width: 80, search: false },
   { title: "到仓日期", dataIndex: "overseas_warehouse_arrived_at", width: 110, search: false },
@@ -62,6 +78,7 @@ const columns: ProColumns<StorageRentRecord>[] = [
     render: (_, record) => record.storage_fee === null ? "-" : formatMoney(record.storage_fee),
   },
 ];
+}
 
 function StorageRentTable() {
   const { message } = App.useApp();
@@ -72,18 +89,24 @@ function StorageRentTable() {
     data: [], total: 0, total_fee: 0, missing_box_count: 0,
   });
   const [current, setCurrent] = useState(1);
+  const [filterOptions, setFilterOptions] = useState<StorageRentFilterOptions>({
+    shipmentNos: [], productNames: [],
+  });
+  const [optionsLoading, setOptionsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const columns = useMemo(() => getColumns(filterOptions, optionsLoading), [filterOptions, optionsLoading]);
 
   const load = useCallback(async () => {
     const version = ++requestVersion.current;
     setLoading(true);
+    setLoadError(null);
     const params = new URLSearchParams();
     splitShipmentSearchValues(paramsRef.current.shipment_no).forEach((value) => {
       params.append("shipment_no", value);
     });
-    const productName = paramsRef.current.product_name;
-    if (typeof productName === "string" && productName.trim()) {
-      params.set("product_name", productName.trim());
-    }
+    normalizeProductSearchValues(paramsRef.current.product_name).forEach((value) => {
+      params.append("product_name", value);
+    });
     try {
       const response = await fetch(`/api/storage-rent?${params}`, { cache: "no-store" });
       const payload = await response.json() as StorageRentResult & { error?: string };
@@ -94,7 +117,9 @@ function StorageRentTable() {
     } catch (error) {
       if (version !== requestVersion.current) return;
       setResult({ data: [], total: 0, total_fee: 0, missing_box_count: 0 });
-      message.error(error instanceof Error ? error.message : "仓租记录加载失败");
+      const errorMessage = error instanceof Error ? error.message : "仓租记录加载失败";
+      setLoadError(errorMessage);
+      message.error(errorMessage);
     } finally {
       if (version === requestVersion.current) setLoading(false);
     }
@@ -110,6 +135,24 @@ function StorageRentTable() {
       requestVersion.current += 1;
     };
   }, [load]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadOptions() {
+      try {
+        const response = await fetch("/api/storage-rent?options=1", { cache: "no-store" });
+        const payload = await response.json() as StorageRentFilterOptions & { error?: string };
+        if (!response.ok) throw new Error(payload.error || "货件筛选选项加载失败");
+        if (!cancelled) setFilterOptions(payload);
+      } catch (error) {
+        if (!cancelled) message.error(error instanceof Error ? error.message : "货件筛选选项加载失败");
+      } finally {
+        if (!cancelled) setOptionsLoading(false);
+      }
+    }
+    void loadOptions();
+    return () => { cancelled = true; };
+  }, [message]);
 
   return (
     <ProTable<StorageRentRecord>
@@ -128,7 +171,9 @@ function StorageRentTable() {
           <Button type="text" icon={<ReloadOutlined />} onClick={() => void load()} />
         </Tooltip>,
       ]}
-      tableExtraRender={() => result.missing_box_count > 0 ? (
+      tableExtraRender={() => loadError ? (
+        <Alert type="error" showIcon message={loadError} />
+      ) : result.missing_box_count > 0 ? (
         <Alert type="warning" showIcon message={`有 ${result.missing_box_count} 条货件缺少有效箱数，未计入仓租合计`} />
       ) : null}
       onSubmit={(values) => {

@@ -6,6 +6,8 @@ import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { canAccessStorageRent } from "@/lib/storage-rent-permissions";
 import {
   calculateStorageRent,
+  buildStorageRentFilterOptions,
+  normalizeProductSearchValues,
   splitShipmentSearchValues,
   summarizeStorageRent,
   type StorageRentRecord,
@@ -42,10 +44,25 @@ export async function GET(request: Request) {
     }
 
     const params = new URL(request.url).searchParams;
-    const shipmentNos = splitShipmentSearchValues(params.getAll("shipment_no"));
-    const productName = params.get("product_name")?.trim();
-    const records: StorageRentRecord[] = [];
     const batchSize = 500;
+    if (params.get("options") === "1") {
+      const shipments: Pick<StorageRentShipment, "shipment_no" | "product_name">[] = [];
+      for (let offset = 0; ; offset += batchSize) {
+        const { data, error } = await client.from("shipment_records")
+          .select("shipment_no, product_name")
+          .eq("status", "有效")
+          .order("id", { ascending: true })
+          .range(offset, offset + batchSize - 1);
+        if (error) throw new Error(error.message);
+        const rows = data ?? [];
+        shipments.push(...rows);
+        if (rows.length < batchSize) break;
+      }
+      return NextResponse.json(buildStorageRentFilterOptions(shipments));
+    }
+    const shipmentNos = splitShipmentSearchValues(params.getAll("shipment_no"));
+    const productNames = normalizeProductSearchValues(params.getAll("product_name"));
+    const records: StorageRentRecord[] = [];
 
     // 完整读取符合条件的货件后计算，防止数据库单次返回上限截断合计。
     for (let offset = 0; ; offset += batchSize) {
@@ -59,7 +76,7 @@ export async function GET(request: Request) {
         .order("id", { ascending: true })
         .range(offset, offset + batchSize - 1);
       if (shipmentNos.length) query = query.in("shipment_no", shipmentNos);
-      if (productName) query = query.ilike("product_name", `%${productName}%`);
+      if (productNames.length) query = query.in("product_name", productNames);
 
       const { data, error } = await query;
       if (error) throw new Error(error.message);

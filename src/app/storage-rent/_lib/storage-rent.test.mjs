@@ -41,6 +41,26 @@ test("按日历日期处理跨年、闰年和夏令时，无时区偏差", () =>
   }
 });
 
+test("兼容数据库实际返回的带时间和时区的日期，保持货件页面的日历日期", () => {
+  for (const [arrival, delivery] of [
+    ["2026-09-01T00:00:00+00:00", "2026-10-01T00:00:00+00:00"],
+    ["2026-09-01T00:00:00.000Z", "2026-10-01T00:00:00.000Z"],
+    ["2026-09-01T00:00:00+08:00", "2026-10-01T23:59:59-06:00"],
+    ["2026-09-01 00:00:00+00:00", "2026-10-01"],
+  ]) {
+    const result = rent.calculateStorageRent({ ...shipment,
+      overseas_warehouse_arrived_at: arrival, appointment_time: delivery,
+    });
+    assert.equal(result.overdue_days, 1);
+    assert.equal(result.storage_fee, 2.4);
+    assert.equal(result.overseas_warehouse_arrived_at, "2026-09-01");
+    assert.equal(result.appointment_time, "2026-10-01");
+  }
+  assert.equal(rent.calculateStorageRent({ ...shipment,
+    overseas_warehouse_arrived_at: "2026-02-30T00:00:00+00:00",
+  }), null);
+});
+
 test("排除未送仓、无效、缺少日期、无效日期或日期倒置的货件", () => {
   for (const override of [
     { delivery_status: "否" }, { delivery_status: null }, { status: "无效" },
@@ -67,6 +87,17 @@ test("货件号批量筛选支持中文逗号、换行、空格和去重", () =>
   assert.deepEqual(rent.splitShipmentSearchValues(["S001，S002\nS003", "S001 S004"]),
     ["S001", "S002", "S003", "S004"]);
   assert.deepEqual(rent.splitShipmentSearchValues(undefined), []);
+});
+
+test("筛选选项来自货件字段并去重，产品名称中的空格和标点完整保留", () => {
+  assert.deepEqual(rent.buildStorageRentFilterOptions([
+    { shipment_no: "S002", product_name: "A B，组合" },
+    { shipment_no: "S001", product_name: "A B，组合" },
+    { shipment_no: " S001 ", product_name: " " },
+    { shipment_no: null, product_name: null },
+  ]), { shipmentNos: ["S001", "S002"], productNames: ["A B，组合"] });
+  assert.deepEqual(rent.normalizeProductSearchValues([" A B，组合 ", "A B，组合", "产品C"]),
+    ["A B，组合", "产品C"]);
 });
 
 test("仓租权限支持管理员和明确授权角色，拒绝未登录及未授权角色", () => {
@@ -98,6 +129,10 @@ function loadRoute({ loggedIn = true, allowed = true, enabled = true } = {}) {
         const count = this.from === 0 ? 500 : 1;
         return Promise.resolve({ data: Array.from({ length: count }, (_, i) => ({
           ...shipment, id: String(this.from + i),
+          shipment_no: this.from === 0 ? "S001" : "S002",
+          product_name: this.from === 0 ? "产品A" : "产品 B 组合",
+          overseas_warehouse_arrived_at: "2026-09-01T00:00:00+00:00",
+          appointment_time: "2026-10-01T00:00:00+00:00",
         })), error: null }).then(resolve);
       },
     };
@@ -123,7 +158,7 @@ function loadRoute({ loggedIn = true, allowed = true, enabled = true } = {}) {
 
 test("接口完整读取多批数据，查询条件和合计覆盖所有筛选记录", async () => {
   const { GET, calls, ranges } = loadRoute();
-  const response = await GET(new Request("http://localhost/api/storage-rent?shipment_no=S001&shipment_no=S002&product_name=产品A"));
+  const response = await GET(new Request("http://localhost/api/storage-rent?shipment_no=S001&shipment_no=S002&product_name=产品A&product_name=产品%20B%20组合"));
   assert.equal(response.status, 200);
   const result = await response.json();
   assert.deepEqual(ranges, [[0, 499], [500, 999]]);
@@ -135,14 +170,29 @@ test("接口完整读取多批数据，查询条件和合计覆盖所有筛选�
     ["shipment_records", "not", "overseas_warehouse_arrived_at", "is", null],
     ["shipment_records", "not", "appointment_time", "is", null],
     ["shipment_records", "in", "shipment_no", ["S001", "S002"]],
-    ["shipment_records", "ilike", "product_name", "%产品A%"],
+    ["shipment_records", "in", "product_name", ["产品A", "产品 B 组合"]],
   ]) assert.ok(calls.some((call) => JSON.stringify(call) === JSON.stringify(expected)));
+});
+
+test("下拉选项读取全部有效货件，不受仓租日期及送仓状态限制", async () => {
+  const { GET, calls, ranges } = loadRoute();
+  const response = await GET(new Request("http://localhost/api/storage-rent?options=1"));
+  assert.equal(response.status, 200);
+  const options = await response.json();
+  assert.deepEqual(options.shipmentNos, ["S001", "S002"]);
+  assert.equal(options.productNames.length, 2);
+  assert.ok(options.productNames.includes("产品 B 组合"));
+  assert.deepEqual(ranges, [[0, 499], [500, 999]]);
+  assert.ok(calls.some((call) => JSON.stringify(call) === JSON.stringify(["shipment_records", "eq", "status", "有效"])));
+  assert.ok(calls.every((call) => call[2] !== "delivery_status" && call[1] !== "not"));
 });
 
 test("接口在未登录、停用或未授权时拒绝读取货件", async () => {
   for (const [options, status] of [[{ loggedIn: false }, 401], [{ allowed: false }, 403], [{ enabled: false }, 403]]) {
     const { GET, calls } = loadRoute(options);
     assert.equal((await GET(new Request("http://localhost/api/storage-rent"))).status, status);
+    assert.ok(calls.every(([table]) => table !== "shipment_records"));
+    assert.equal((await GET(new Request("http://localhost/api/storage-rent?options=1"))).status, status);
     assert.ok(calls.every(([table]) => table !== "shipment_records"));
   }
 });
