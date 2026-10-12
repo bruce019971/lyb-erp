@@ -139,6 +139,14 @@ td.relabel-delivery-done-cell:hover,
   color: #94a3b8 !important;
 }
 
+.shipment-track-arrived-row > td,
+.shipment-track-arrived-row .ant-typography,
+.shipment-track-arrived-row .ant-btn,
+.shipment-track-arrived-row .ant-picker-input > input,
+.shipment-track-arrived-row a {
+  font-weight: 600;
+}
+
 .shipment-warehouse-pending-delivery-row > td {
   background: #fff7e6 !important;
   font-weight: 600;

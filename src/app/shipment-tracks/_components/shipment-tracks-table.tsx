@@ -521,6 +521,12 @@ export default function ShipmentTracksTable({
         columns={columns}
         dataSource={dataSource}
         loading={loading}
+        rowClassName={(record) => [
+          record.warehouse_arrived_time?.trim() || record.latest_track?.trim() === "已到仓"
+            ? "shipment-track-arrived-row"
+            : "",
+          record.delivery_status === "是" ? "shipment-delivered-row" : "",
+        ].filter(Boolean).join(" ")}
         rowSelection={{
           selectedRowKeys: selectedTrackIds,
           preserveSelectedRowKeys: true,
