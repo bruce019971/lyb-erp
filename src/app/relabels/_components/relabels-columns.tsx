@@ -207,7 +207,17 @@ export function getRelabelColumns(
       dataIndex: "relabel_fee",
       width: 92,
       search: false,
-      render: (_, record) => record.relabel_fee ?? "",
+      render: (_, record) => record.payable_relabel_fee === null ? (
+        <Tooltip title="费用或外箱数、外箱标单价缺失，无法计算"><span>-</span></Tooltip>
+      ) : record.payable_relabel_fee ?? record.relabel_fee ?? "",
+    },
+    {
+      title: "时效天数",
+      dataIndex: "duration_days",
+      tooltip: "原货件到仓日期减开船日期；51天起免除外箱标费用",
+      width: 100,
+      search: false,
+      render: (_, record) => record.duration_days ?? "-",
     },
     {
       title: "送仓时间",

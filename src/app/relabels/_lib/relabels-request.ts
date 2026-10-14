@@ -9,6 +9,8 @@ import type {
   RelabelUpdateValues,
 } from "./relabels";
 import { normalizeNewMlCode } from "./relabels";
+import { calculatePayableRelabelFee } from "./relabel-fee";
+import { requestRelabelFeeContexts } from "./relabel-fee-request";
 import {
   completeRelabelDownload,
   getPendingRelabelDownloadIds,
@@ -142,7 +144,7 @@ export async function requestRelabelFeeSummary(
     const query = applyRelabelSearchParams(
       supabase
         .from("relabel_records")
-        .select("relabel_fee")
+        .select("original_shipment_no, relabel_fee, relabel_type, box_count")
         .order("id", { ascending: true })
         .range(from, from + pageSize - 1),
       params,
@@ -152,9 +154,13 @@ export async function requestRelabelFeeSummary(
     if (error) throw error;
 
     const rows = data ?? [];
+    const contexts = await requestRelabelFeeContexts(rows.map((item) => item.original_shipment_no ?? ""));
     rows.forEach((item) => {
-      const fee = Number(item.relabel_fee ?? 0);
-      if (Number.isFinite(fee)) totalCents += Math.round(fee * 100);
+      const fee = calculatePayableRelabelFee(item, contexts.get(item.original_shipment_no?.trim() ?? ""));
+      if (fee === null && item.relabel_fee !== null) {
+        throw new Error("缺少外箱数或外箱标单价，无法计算换标费用合计");
+      }
+      if (fee !== null) totalCents += Math.round(fee * 100);
     });
     if (rows.length < pageSize) return totalCents / 100;
     from += rows.length;
@@ -223,6 +229,7 @@ export async function requestRelabelRecords(
     ),
   );
   const productNameByShipmentNo = new Map<string, string | null>();
+  const feeContexts = await requestRelabelFeeContexts(relabelOriginalShipmentNos);
   const originalStoreByShipmentNo = new Map<string, string | null>();
   const trackingNoByShipmentNo = new Map<string, string | null>();
 
@@ -293,6 +300,8 @@ export async function requestRelabelRecords(
 
     return {
       ...item,
+      duration_days: feeContexts.get(shipmentNo ?? "")?.duration_days ?? null,
+      payable_relabel_fee: calculatePayableRelabelFee(item, feeContexts.get(shipmentNo ?? "")),
       pending_instruction_download: pendingIds.has(item.id),
       product_name: productName,
       original_store: originalStore,

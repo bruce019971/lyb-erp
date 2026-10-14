@@ -24,6 +24,8 @@ import type {
   RelabelUpdateValues,
 } from "../_lib/relabels";
 import { relabelTypeOptions, requiresProductRelabel } from "../_lib/relabels";
+import { calculatePayableRelabelFee, type RelabelFeeContext } from "../_lib/relabel-fee";
+import { requestRelabelFeeContexts } from "../_lib/relabel-fee-request";
 import {
   createRelabelRecord,
   updateRelabelRecord,
@@ -123,6 +125,33 @@ export default function RelabelFormDrawer({
   const selectedRelabelType = Form.useWatch("relabel_type", form);
   const selectedBoxCount = Form.useWatch("box_count", form);
   const selectedProductCount = Form.useWatch("product_count", form);
+  const originalRelabelFee = Form.useWatch("relabel_fee", form);
+  const [feeContext, setFeeContext] = useState<{
+    shipmentNo: string;
+    context?: RelabelFeeContext;
+    error?: boolean;
+  } | null>(null);
+  const selectedShipmentNo = selectedOriginalShipmentNo?.trim() ?? "";
+  const feeContextReady = feeContext?.shipmentNo === selectedShipmentNo && !feeContext?.error;
+  const payableFee = feeContextReady ? calculatePayableRelabelFee({
+    relabel_fee: originalRelabelFee,
+    relabel_type: selectedRelabelType,
+    box_count: selectedBoxCount,
+  }, feeContext?.context) : null;
+
+  useEffect(() => {
+    if (!open || !selectedShipmentNo) return;
+    let cancelled = false;
+    requestRelabelFeeContexts([selectedShipmentNo]).then((contexts) => {
+      if (!cancelled) setFeeContext({ shipmentNo: selectedShipmentNo, context: contexts.get(selectedShipmentNo) });
+    }).catch(() => {
+      if (!cancelled) {
+        setFeeContext({ shipmentNo: selectedShipmentNo, error: true });
+        message.error("时效及费用加载失败，请重新打开表单重试");
+      }
+    });
+    return () => { cancelled = true; };
+  }, [message, open, selectedShipmentNo]);
   const shouldShowProductCount =
     requiresProductRelabel(selectedRelabelType);
 
@@ -562,13 +591,28 @@ export default function RelabelFormDrawer({
             </Form.Item>
           ) : null}
 
-          <Form.Item label="换标费用" name="relabel_fee">
+          <Form.Item name="relabel_fee" hidden>
+            <InputNumber />
+          </Form.Item>
+          <Form.Item
+            label="换标费用"
+            extra={feeContextReady && payableFee !== null &&
+              (selectedRelabelType === "外箱标" || selectedRelabelType === "外箱标及产品标") &&
+              (feeContext?.context?.duration_days ?? 0) > 50
+              ? "时效超过50天，已免除外箱标费用"
+              : undefined}
+          >
             <InputNumber
+              value={payableFee}
               className="!w-full"
               min={0}
               precision={2}
               readOnly
-              placeholder="根据换标类型和物流商单价自动计算"
+              placeholder={selectedShipmentNo && !feeContextReady
+                ? feeContext?.shipmentNo === selectedShipmentNo && feeContext.error
+                  ? "费用加载失败，请重新打开表单"
+                  : "正在加载时效及费用…"
+                : "根据换标类型和物流商单价自动计算"}
             />
           </Form.Item>
 

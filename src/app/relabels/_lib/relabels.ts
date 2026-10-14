@@ -14,6 +14,8 @@ export type RelabelRecord = {
   box_count: number | null;
   product_count: number | null;
   relabel_fee: number | null;
+  payable_relabel_fee?: number | null;
+  duration_days?: number | null;
   relabel_type: string | null;
   instruction_submitted: string | null;
   delivery_status: string | null;
