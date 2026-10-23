@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabase";
 
 import {
   calculateShipmentTrackDurationDays,
+  calculateEstimatedWarehouseArrival,
   sanitizeShipmentTrackText,
   type ShipmentTrackEvent,
   type ShipmentTrackRecord,
@@ -42,6 +43,8 @@ type ShipmentTrackRow = {
   track_events?: unknown;
   sailing_time: string | null;
   warehouse_arrived_time: string | null;
+  estimated_duration_days: number | null;
+  estimated_delivery_time: string | null;
   track_updated_at: string | null;
   created_at: string | null;
   updated_at: string | null;
@@ -154,6 +157,11 @@ function normalizeTrackRow(row: ShipmentTrackRow): ShipmentTrackRecord {
     track_events: trackEvents,
     sailing_time: row.sailing_time,
     warehouse_arrived_time: row.warehouse_arrived_time,
+    estimated_duration_days: row.estimated_duration_days ?? null,
+    estimated_delivery_time: row.estimated_delivery_time ?? null,
+    estimated_warehouse_arrived_time: calculateEstimatedWarehouseArrival(
+      row.sailing_time, row.estimated_duration_days,
+    ),
     duration_days: calculateShipmentTrackDurationDays(
       row.sailing_time,
       row.warehouse_arrived_time,
@@ -317,7 +325,7 @@ export async function requestShipmentTrackRecords(
   let query = supabase
     .from("shipment_tracks")
     .select(
-      "id, shipment_record_id, latest_track, track_events, sailing_time, warehouse_arrived_time, track_updated_at, created_at, updated_at, shipment:shipment_records!inner(shipment_no, tracking_no, logistics_provider, product_name, total_qty, order_store, delivery_status)",
+      "id, shipment_record_id, latest_track, track_events, sailing_time, warehouse_arrived_time, estimated_duration_days, estimated_delivery_time, track_updated_at, created_at, updated_at, shipment:shipment_records!inner(shipment_no, tracking_no, logistics_provider, product_name, total_qty, order_store, delivery_status)",
       { count: "exact" },
     )
     .eq("shipment.status", "有效");
@@ -630,6 +638,8 @@ export async function updateShipmentTrackRecord(
   values: {
     sailing_time?: string | null;
     warehouse_arrived_time?: string | null;
+    estimated_duration_days?: number;
+    estimated_delivery_time?: string | null;
   },
 ) {
   const response = await fetch(`/api/shipment-tracks/${id}`, {

@@ -473,6 +473,13 @@ export function getShipmentColumns(
       },
     },
     {
+      title: "预计送仓时间",
+      dataIndex: "estimated_delivery_time",
+      width: 130,
+      search: false,
+      render: (_, record) => renderNowrapShipmentDate(record.estimated_delivery_time),
+    },
+    {
       title: "是否换标",
       dataIndex: "is_relabel",
       width: 210,

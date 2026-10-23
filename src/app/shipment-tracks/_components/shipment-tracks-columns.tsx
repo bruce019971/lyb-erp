@@ -1,12 +1,15 @@
 import { SyncOutlined } from "@ant-design/icons";
 import type { ProColumns } from "@ant-design/pro-components";
-import { Button, DatePicker, Select, Tooltip, Typography } from "antd";
+import { Button, DatePicker, InputNumber, Select, Tooltip, Typography } from "antd";
 import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
 import { useEffect, useRef, useState } from "react";
 
 import {
   formatShipmentTrackDate,
+  canEditEstimatedDelivery,
+  isValidEstimatedDeliveryDate,
+  type ShipmentTrackEditableField,
   type ShipmentTrackRecord,
 } from "../_lib/shipment-tracks";
 
@@ -15,12 +18,12 @@ type ShipmentTrackSearchOption = {
   value: string;
 };
 
-type ShipmentTrackDateField = "sailing_time" | "warehouse_arrived_time";
+type ShipmentTrackDateField = Exclude<ShipmentTrackEditableField, "estimated_duration_days">;
 
 type ShipmentTrackDateChangeHandler = (
   record: ShipmentTrackRecord,
-  field: ShipmentTrackDateField,
-  value: Dayjs | null,
+  field: ShipmentTrackEditableField,
+  value: Dayjs | number | null,
 ) => void | Promise<void>;
 
 function renderShipmentTrackSearchTagsInput() {
@@ -47,7 +50,7 @@ function EditableTrackDatePicker({
 }: {
   disabled: boolean;
   field: ShipmentTrackDateField;
-  onCancel: (record: ShipmentTrackRecord, field: ShipmentTrackDateField) => void;
+  onCancel: (record: ShipmentTrackRecord, field: ShipmentTrackEditableField) => void;
   onChange: ShipmentTrackDateChangeHandler;
   record: ShipmentTrackRecord;
 }) {
@@ -73,6 +76,11 @@ function EditableTrackDatePicker({
       format="YYYY/MM/DD"
       allowClear
       disabled={disabled}
+      disabledDate={field === "estimated_delivery_time"
+        ? (date) => !isValidEstimatedDeliveryDate(
+            record.estimated_warehouse_arrived_time, date.format("YYYY-MM-DD"),
+          )
+        : undefined}
       value={formattedValue ? dayjs(formattedValue) : null}
       onOpenChange={(nextOpen) => {
         setOpen(nextOpen);
@@ -103,26 +111,66 @@ function EditableTrackDatePicker({
   );
 }
 
+function EditableEstimatedDuration({
+  record, disabled, onChange, onCancel,
+}: {
+  record: ShipmentTrackRecord;
+  disabled: boolean;
+  onChange: ShipmentTrackDateChangeHandler;
+  onCancel: (record: ShipmentTrackRecord, field: ShipmentTrackEditableField) => void;
+}) {
+  const [value, setValue] = useState<number | null>(record.estimated_duration_days);
+  const submittedRef = useRef(false);
+  const save = () => {
+    if (disabled || submittedRef.current) return;
+    submittedRef.current = true;
+    void Promise.resolve(onChange(record, "estimated_duration_days", value))
+      .finally(() => { submittedRef.current = false; });
+  };
+
+  return (
+    <InputNumber<number>
+      autoFocus
+      aria-label="预计时效天数"
+      size="small"
+      min={1}
+      max={2147483647}
+      step={1}
+      value={value}
+      disabled={disabled}
+      onChange={setValue}
+      onPressEnter={save}
+      onBlur={save}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          submittedRef.current = true;
+          onCancel(record, "estimated_duration_days");
+        }
+      }}
+    />
+  );
+}
+
 export function getShipmentTrackColumns(
   onUpdateTrack: (record: ShipmentTrackRecord) => void,
   onOpenTrackDetails: (record: ShipmentTrackRecord) => void,
   onChangeTrackDate: ShipmentTrackDateChangeHandler,
   onStartTrackDateEdit: (
     record: ShipmentTrackRecord,
-    field: ShipmentTrackDateField,
+    field: ShipmentTrackEditableField,
   ) => void,
   onCancelTrackDateEdit: (
     record: ShipmentTrackRecord,
-    field: ShipmentTrackDateField,
+    field: ShipmentTrackEditableField,
   ) => void,
   isTrackDateEditing: (
     record: ShipmentTrackRecord,
-    field: ShipmentTrackDateField,
+    field: ShipmentTrackEditableField,
   ) => boolean,
   isUpdatingTrack: (record: ShipmentTrackRecord) => boolean,
   isTrackDateUpdating: (
     record: ShipmentTrackRecord,
-    field: ShipmentTrackDateField,
+    field: ShipmentTrackEditableField,
   ) => boolean,
   orderStoreOptions: ShipmentTrackSearchOption[],
   productSelectOptions: ShipmentTrackSearchOption[],
@@ -328,6 +376,63 @@ export function getShipmentTrackColumns(
           </Typography.Text>
         );
       },
+    },
+    {
+      title: "预计时效天数",
+      dataIndex: "estimated_duration_days",
+      width: 150,
+      search: false,
+      onCell: (record) => ({
+        className: "cursor-pointer",
+        onDoubleClick: () => onStartTrackDateEdit(record, "estimated_duration_days"),
+      }),
+      render: (_, record) => isTrackDateEditing(record, "estimated_duration_days") ? (
+        <EditableEstimatedDuration
+          key={`${record.id}:estimated-duration`}
+          record={record}
+          disabled={isTrackDateUpdating(record, "estimated_duration_days")}
+          onChange={onChangeTrackDate}
+          onCancel={onCancelTrackDateEdit}
+        />
+      ) : (
+        <Typography.Text className="block min-h-6 whitespace-nowrap">
+          {record.estimated_duration_days == null ? "-" : `${record.estimated_duration_days}天`}
+        </Typography.Text>
+      ),
+    },
+    {
+      title: "预计到仓时间",
+      dataIndex: "estimated_warehouse_arrived_time",
+      width: 160,
+      search: false,
+      render: (_, record) => formatShipmentTrackDate(record.estimated_warehouse_arrived_time) || "-",
+    },
+    {
+      title: "预计送仓时间",
+      dataIndex: "estimated_delivery_time",
+      width: 160,
+      search: false,
+      onCell: (record) => ({
+        className: canEditEstimatedDelivery(record) ? "cursor-pointer" : undefined,
+        onDoubleClick: () => {
+          if (canEditEstimatedDelivery(record)) onStartTrackDateEdit(record, "estimated_delivery_time");
+        },
+      }),
+      render: (_, record) => isTrackDateEditing(record, "estimated_delivery_time") && canEditEstimatedDelivery(record) ? (
+        <EditableTrackDatePicker
+          record={record}
+          field="estimated_delivery_time"
+          disabled={isTrackDateUpdating(record, "estimated_delivery_time")}
+          onChange={onChangeTrackDate}
+          onCancel={onCancelTrackDateEdit}
+        />
+      ) : (
+        <Tooltip title="仅清关中且已有预计到仓时间的货件可双击编辑，须至少晚于预计到仓时间2天">
+          <Typography.Text className="block min-h-6 whitespace-nowrap">
+            {formatShipmentTrackDate(record.estimated_delivery_time) || "-"}
+          </Typography.Text>
+        </Tooltip>
+      ),
     },
     {
       title: "时效天数",

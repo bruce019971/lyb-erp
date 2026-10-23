@@ -28,6 +28,13 @@ type DateLikeValue = {
   format: (template: string) => string;
 };
 
+type ShipmentRecordWithTrack = ShipmentRecord & {
+  shipment_track:
+    | { estimated_delivery_time: string | null }
+    | Array<{ estimated_delivery_time: string | null }>
+    | null;
+};
+
 interface ShipmentSearchQuery {
   ilike(field: string, value: string): this;
   in(field: string, values: string[]): this;
@@ -376,7 +383,7 @@ export async function requestShipmentRecords(
   }
   let query = supabase
     .from("shipment_records")
-    .select("*", { count: "exact" })
+    .select("*, shipment_track:shipment_tracks(estimated_delivery_time)", { count: "exact" })
     .eq("status", "有效");
 
   query = applyShipmentSearchParams(query, params, [...relabelMap.keys()]);
@@ -473,7 +480,10 @@ export async function requestShipmentRecords(
   }
 
   const shipmentRecords = await attachProductMlCodes(
-    (data ?? []) as ShipmentRecord[],
+    ((data ?? []) as ShipmentRecordWithTrack[]).map(({ shipment_track, ...record }) => {
+      const track = Array.isArray(shipment_track) ? shipment_track[0] : shipment_track;
+      return { ...record, estimated_delivery_time: track?.estimated_delivery_time ?? null };
+    }),
   );
   return {
     data: shipmentRecords.map((item) => {

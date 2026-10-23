@@ -3,6 +3,12 @@ import { NextResponse } from "next/server";
 
 import { APP_SESSION_COOKIE, verifySessionToken } from "@/lib/app-session";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import {
+  calculateEstimatedWarehouseArrival,
+  canEditEstimatedDelivery,
+  isValidEstimatedDeliveryDate,
+  isValidEstimatedDuration,
+} from "@/app/shipment-tracks/_lib/shipment-tracks";
 import { syncShipmentWarehouseArrivedAt } from "../_shipment-warehouse-sync";
 
 export const runtime = "nodejs";
@@ -23,11 +29,16 @@ type OperatorRow = {
 type ShipmentTrackUpdateBody = {
   sailing_time?: unknown;
   warehouse_arrived_time?: unknown;
+  estimated_duration_days?: unknown;
+  estimated_delivery_time?: unknown;
 };
 
 type ShipmentTrackBeforeUpdateRow = {
   shipment_record_id: string;
   warehouse_arrived_time: string | null;
+  sailing_time: string | null;
+  latest_track: string | null;
+  estimated_duration_days: number | null;
 };
 
 async function verifyShipmentTrackOperator() {
@@ -73,7 +84,7 @@ function normalizeDateValue(value: unknown, fieldLabel: string) {
   }
 
   const timestamp = Date.parse(`${value}T00:00:00Z`);
-  if (Number.isNaN(timestamp)) {
+  if (Number.isNaN(timestamp) || new Date(timestamp).toISOString().slice(0, 10) !== value) {
     throw new Error(`${fieldLabel}格式不正确`);
   }
 
@@ -97,6 +108,8 @@ export async function PATCH(
     const updateValues: {
       sailing_time?: string | null;
       warehouse_arrived_time?: string | null;
+      estimated_duration_days?: number;
+      estimated_delivery_time?: string | null;
     } = {};
 
     if ("sailing_time" in body) {
@@ -113,6 +126,19 @@ export async function PATCH(
       );
     }
 
+    if ("estimated_duration_days" in body) {
+      if (!isValidEstimatedDuration(body.estimated_duration_days)) {
+        throw new Error("预计时效天数必须为正整数（不超过2147483647）");
+      }
+      updateValues.estimated_duration_days = body.estimated_duration_days;
+    }
+
+    if ("estimated_delivery_time" in body) {
+      updateValues.estimated_delivery_time = normalizeDateValue(
+        body.estimated_delivery_time, "预计送仓时间",
+      );
+    }
+
     if (Object.keys(updateValues).length === 0) {
       throw new Error("没有需要更新的轨迹字段");
     }
@@ -124,11 +150,11 @@ export async function PATCH(
     let previousWarehouseArrivedTime: string | null = null;
     let shipmentRecordId: string | null = null;
 
-    if (shouldSyncWarehouseArrivedTime) {
+    if (shouldSyncWarehouseArrivedTime || "estimated_delivery_time" in updateValues) {
       const { data: existingTrackData, error: existingTrackError } =
         await adminClient
           .from("shipment_tracks")
-          .select("shipment_record_id, warehouse_arrived_time")
+          .select("shipment_record_id, warehouse_arrived_time, sailing_time, latest_track, estimated_duration_days")
           .eq("id", trackId)
           .single();
 
@@ -139,6 +165,25 @@ export async function PATCH(
       const existingTrack = existingTrackData as ShipmentTrackBeforeUpdateRow;
       previousWarehouseArrivedTime = existingTrack.warehouse_arrived_time;
       shipmentRecordId = existingTrack.shipment_record_id;
+
+      if ("estimated_delivery_time" in updateValues) {
+        const arrival = calculateEstimatedWarehouseArrival(
+          "sailing_time" in updateValues ? updateValues.sailing_time ?? null : existingTrack.sailing_time,
+          updateValues.estimated_duration_days ?? existingTrack.estimated_duration_days,
+        );
+        if (!canEditEstimatedDelivery({
+          latest_track: existingTrack.latest_track,
+          warehouse_arrived_time: "warehouse_arrived_time" in updateValues
+            ? updateValues.warehouse_arrived_time ?? null : existingTrack.warehouse_arrived_time,
+          estimated_warehouse_arrived_time: arrival,
+        })) {
+          throw new Error("仅清关中且已有预计到仓时间的货件可编辑预计送仓时间");
+        }
+        if (updateValues.estimated_delivery_time &&
+          !isValidEstimatedDeliveryDate(arrival, updateValues.estimated_delivery_time)) {
+          throw new Error("预计送仓时间须至少晚于预计到仓时间2天");
+        }
+      }
     }
 
     const { data, error } = await adminClient
@@ -146,7 +191,7 @@ export async function PATCH(
       .update(updateValues)
       .eq("id", trackId)
       .select(
-        "id, shipment_record_id, latest_track, track_events, sailing_time, warehouse_arrived_time, track_updated_at, created_at, updated_at, shipment:shipment_records!inner(shipment_no, tracking_no, logistics_provider, product_name, total_qty, order_store, delivery_status)",
+        "id, shipment_record_id, latest_track, track_events, sailing_time, warehouse_arrived_time, estimated_duration_days, estimated_delivery_time, track_updated_at, created_at, updated_at, shipment:shipment_records!inner(shipment_no, tracking_no, logistics_provider, product_name, total_qty, order_store, delivery_status)",
       )
       .single();
 

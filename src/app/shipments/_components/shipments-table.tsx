@@ -178,6 +178,7 @@ type ShipmentSummaryColumnKey =
   | "total_qty"
   | "overseas_warehouse_arrived_at"
   | "appointment_time"
+  | "estimated_delivery_time"
   | "is_relabel"
   | "instruction_submitted"
   | "delivery_status"
@@ -196,6 +197,7 @@ const SHIPMENT_SUMMARY_COLUMN_KEYS: ShipmentSummaryColumnKey[] = [
   "total_qty",
   "overseas_warehouse_arrived_at",
   "appointment_time",
+  "estimated_delivery_time",
   "is_relabel",
   "instruction_submitted",
   "delivery_status",
@@ -749,7 +751,7 @@ export default function ShipmentsTable({
           setColumnsStateMap(value as ShipmentColumnsState),
       }}
       scroll={{
-        x: 2042,
+        x: 2172,
         y: searchCollapsed
           ? SHIPMENTS_TABLE_SCROLL_Y_COLLAPSED
           : SHIPMENTS_TABLE_SCROLL_Y_EXPANDED,

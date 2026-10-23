@@ -27,6 +27,7 @@ export type ShipmentRecord = {
   warehouse_arrived_status: string | null;
   overseas_warehouse_arrived_at: string | null;
   appointment_time: string | null;
+  estimated_delivery_time?: string | null;
   instruction_submitted?: string | null;
   delivery_status: string | null;
   is_relabel: string | null;

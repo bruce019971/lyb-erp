@@ -31,7 +31,10 @@ import {
   updateTongtuShipmentTrack,
 } from "../_lib/shipment-tracks-request";
 import {
-  formatShipmentTrackDate,
+  canEditEstimatedDelivery,
+  isValidEstimatedDuration,
+  isValidEstimatedDeliveryDate,
+  type ShipmentTrackEditableField,
   formatShipmentTrackDateTime,
   type ShipmentTrackRecord,
 } from "../_lib/shipment-tracks";
@@ -52,7 +55,6 @@ const SHIPMENT_TRACKS_TABLE_SCROLL_Y_EXPANDED = "calc(100vh - 420px)";
 const TRACK_UPDATE_PROVIDER_NAMES = ["赛易", "日升辉", "通途", "唐朝"];
 const COLUMNS_STATE_STORAGE_KEY =
   "mercado-inbound-planning:shipment-tracks:columns:v1";
-type ShipmentTrackDateField = "sailing_time" | "warehouse_arrived_time";
 type ShipmentTrackColumnsState = Record<string, { show?: boolean }>;
 type ShipmentTrackSummaryColumnKey =
   | "shipment_no"
@@ -62,6 +64,9 @@ type ShipmentTrackSummaryColumnKey =
   | "latest_track"
   | "sailing_time"
   | "warehouse_arrived_time"
+  | "estimated_duration_days"
+  | "estimated_warehouse_arrived_time"
+  | "estimated_delivery_time"
   | "duration_days"
   | "created_at";
 
@@ -73,6 +78,9 @@ const SHIPMENT_TRACK_SUMMARY_COLUMN_KEYS: ShipmentTrackSummaryColumnKey[] = [
   "latest_track",
   "sailing_time",
   "warehouse_arrived_time",
+  "estimated_duration_days",
+  "estimated_warehouse_arrived_time",
+  "estimated_delivery_time",
   "duration_days",
   "created_at",
 ];
@@ -334,21 +342,23 @@ export default function ShipmentTracksTable({
   );
 
   const getTrackDateKey = useCallback(
-    (record: ShipmentTrackRecord, field: ShipmentTrackDateField) =>
+    (record: ShipmentTrackRecord, field: ShipmentTrackEditableField) =>
       `${record.id}:${field}`,
     [],
   );
 
   const handleStartTrackDateEdit = useCallback((
     record: ShipmentTrackRecord,
-    field: ShipmentTrackDateField,
+    field: ShipmentTrackEditableField,
   ) => {
+    if (isUpdatingTrack(record) || updatingTrackDateKeys.length > 0) return;
+    if (field === "estimated_delivery_time" && !canEditEstimatedDelivery(record)) return;
     setEditingTrackDateKey(getTrackDateKey(record, field));
-  }, [getTrackDateKey]);
+  }, [getTrackDateKey, isUpdatingTrack, updatingTrackDateKeys]);
 
   const handleCancelTrackDateEdit = useCallback((
     record: ShipmentTrackRecord,
-    field: ShipmentTrackDateField,
+    field: ShipmentTrackEditableField,
   ) => {
     const editKey = getTrackDateKey(record, field);
     setEditingTrackDateKey((current) =>
@@ -358,11 +368,22 @@ export default function ShipmentTracksTable({
 
   const handleChangeTrackDate = useCallback(async (
     record: ShipmentTrackRecord,
-    field: ShipmentTrackDateField,
-    value: Dayjs | null,
+    field: ShipmentTrackEditableField,
+    value: Dayjs | number | null,
   ) => {
-    const nextValue = value ? value.format("YYYY-MM-DD") : null;
-    const currentValue = formatShipmentTrackDate(record[field]) || null;
+    if (field === "estimated_duration_days" && !isValidEstimatedDuration(value)) {
+      messageApi.error("预计时效天数必须为正整数（不超过2147483647）");
+      return;
+    }
+    const nextValue = typeof value === "number" ? value : value ? value.format("YYYY-MM-DD") : null;
+    if (field === "estimated_delivery_time" && (
+      !canEditEstimatedDelivery(record) ||
+      (typeof nextValue === "string" && !isValidEstimatedDeliveryDate(record.estimated_warehouse_arrived_time, nextValue))
+    )) {
+      messageApi.error("仅清关中的货件可编辑，且预计送仓时间须至少晚于预计到仓时间2天");
+      return;
+    }
+    const currentValue = record[field] ?? null;
     const updateKey = getTrackDateKey(record, field);
 
     if (nextValue === currentValue) {
@@ -385,10 +406,10 @@ export default function ShipmentTracksTable({
           item.id === nextRecord.id ? nextRecord : item,
         ),
       );
-      messageApi.success("轨迹时间更新成功");
+      messageApi.success("货件轨迹更新成功");
     } catch (error) {
       messageApi.error(
-        error instanceof Error ? error.message : "轨迹时间更新失败",
+        error instanceof Error ? error.message : "货件轨迹更新失败",
       );
     } finally {
       setUpdatingTrackDateKeys((current) =>
@@ -401,13 +422,13 @@ export default function ShipmentTracksTable({
   }, [getTrackDateKey, messageApi]);
 
   const isTrackDateEditing = useCallback(
-    (record: ShipmentTrackRecord, field: ShipmentTrackDateField) =>
+    (record: ShipmentTrackRecord, field: ShipmentTrackEditableField) =>
       editingTrackDateKey === getTrackDateKey(record, field),
     [editingTrackDateKey, getTrackDateKey],
   );
 
   const isTrackDateUpdating = useCallback(
-    (record: ShipmentTrackRecord, field: ShipmentTrackDateField) =>
+    (record: ShipmentTrackRecord, field: ShipmentTrackEditableField) =>
       updatingTrackDateKeys.includes(getTrackDateKey(record, field)),
     [getTrackDateKey, updatingTrackDateKeys],
   );
@@ -593,7 +614,7 @@ export default function ShipmentTracksTable({
           </Space>,
         ]}
         scroll={{
-          x: 1360,
+          x: 1830,
           y: searchCollapsed
             ? SHIPMENT_TRACKS_TABLE_SCROLL_Y_COLLAPSED
             : SHIPMENT_TRACKS_TABLE_SCROLL_Y_EXPANDED,
