@@ -284,8 +284,9 @@ export function getShipmentTrackColumns(
     {
       title: "最新轨迹",
       dataIndex: "latest_track",
-      width: 300,
+      width: 200,
       ellipsis: true,
+      onCell: () => ({ style: { maxWidth: 200 } }),
       valueType: "select",
       fieldProps: {
         placeholder: "请选择最新轨迹",
@@ -297,7 +298,11 @@ export function getShipmentTrackColumns(
       },
       render: (_, record) =>
         record.latest_track ? (
-          <Typography.Link onClick={() => onOpenTrackDetails(record)}>
+          <Typography.Link
+            className="!block max-w-[200px] truncate"
+            title={record.latest_track}
+            onClick={() => onOpenTrackDetails(record)}
+          >
             {record.latest_track}
           </Typography.Link>
         ) : (
