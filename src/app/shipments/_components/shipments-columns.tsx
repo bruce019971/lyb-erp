@@ -428,7 +428,7 @@ export function getShipmentColumns(
       sortDirections: ["ascend", "descend"],
       valueType: "dateRange",
       width: 110,
-      formItemProps: { label: "到仓日期" },
+      hideInSearch: true,
       render: (_, record) =>
         renderNowrapShipmentDate(record.overseas_warehouse_arrived_at),
     },
