@@ -1,3 +1,5 @@
+export const DEFAULT_ESTIMATED_DURATION_DAYS = 40;
+
 export type ShipmentTrackEvent = {
   time: string | null;
   content: string;

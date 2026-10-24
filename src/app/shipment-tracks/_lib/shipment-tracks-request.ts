@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import {
   calculateShipmentTrackDurationDays,
   calculateEstimatedWarehouseArrival,
+  DEFAULT_ESTIMATED_DURATION_DAYS,
   sanitizeShipmentTrackText,
   type ShipmentTrackEvent,
   type ShipmentTrackRecord,
@@ -157,10 +158,10 @@ function normalizeTrackRow(row: ShipmentTrackRow): ShipmentTrackRecord {
     track_events: trackEvents,
     sailing_time: row.sailing_time,
     warehouse_arrived_time: row.warehouse_arrived_time,
-    estimated_duration_days: row.estimated_duration_days ?? null,
+    estimated_duration_days: row.estimated_duration_days ?? DEFAULT_ESTIMATED_DURATION_DAYS,
     estimated_delivery_time: row.estimated_delivery_time ?? null,
     estimated_warehouse_arrived_time: calculateEstimatedWarehouseArrival(
-      row.sailing_time, row.estimated_duration_days,
+      row.sailing_time, row.estimated_duration_days ?? DEFAULT_ESTIMATED_DURATION_DAYS,
     ),
     duration_days: calculateShipmentTrackDurationDays(
       row.sailing_time,

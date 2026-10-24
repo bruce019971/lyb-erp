@@ -15,6 +15,27 @@ function loadModule(path, mocks = {}) {
 }
 const estimates = loadModule("./shipment-tracks.ts");
 
+test("未设置时使用40天，保存自定义天数后重新计算，未开船时仍不计算", async (t) => {
+  let row = { id: "track-1", sailing_time: "2026-10-01", estimated_duration_days: null };
+  t.mock.method(globalThis, "fetch", async (_url, options) => {
+    row = { ...row, ...JSON.parse(options.body) };
+    return Response.json({ data: row });
+  });
+  const requests = loadModule("./shipment-tracks-request.ts", {
+    "@/lib/supabase": { supabase: {} },
+    "./shipment-tracks": estimates,
+  });
+  const initial = await requests.updateShipmentTrackRecord(row.id, {});
+  assert.equal(initial.estimated_duration_days, 40);
+  assert.equal(initial.estimated_warehouse_arrived_time, "2026-11-10");
+  const changed = await requests.updateShipmentTrackRecord(row.id, { estimated_duration_days: 50 });
+  assert.equal(changed.estimated_duration_days, 50);
+  assert.equal(changed.estimated_warehouse_arrived_time, "2026-11-20");
+  const unsailed = await requests.updateShipmentTrackRecord(row.id, { sailing_time: null });
+  assert.equal(unsailed.estimated_duration_days, 50);
+  assert.equal(unsailed.estimated_warehouse_arrived_time, null);
+});
+
 test("预计时效只接受正整数，拒绝空值、小数、字符串和超出数据库范围的值", () => {
   for (const value of [null, undefined, "20", 0, -1, 1.5, NaN, Infinity, 2147483648]) {
     assert.equal(estimates.isValidEstimatedDuration(value), false);

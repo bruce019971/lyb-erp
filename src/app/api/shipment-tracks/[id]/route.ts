@@ -5,6 +5,7 @@ import { APP_SESSION_COOKIE, verifySessionToken } from "@/lib/app-session";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import {
   calculateEstimatedWarehouseArrival,
+  DEFAULT_ESTIMATED_DURATION_DAYS,
   canEditEstimatedDelivery,
   isValidEstimatedDeliveryDate,
   isValidEstimatedDuration,
@@ -169,7 +170,7 @@ export async function PATCH(
       if ("estimated_delivery_time" in updateValues) {
         const arrival = calculateEstimatedWarehouseArrival(
           "sailing_time" in updateValues ? updateValues.sailing_time ?? null : existingTrack.sailing_time,
-          updateValues.estimated_duration_days ?? existingTrack.estimated_duration_days,
+          updateValues.estimated_duration_days ?? existingTrack.estimated_duration_days ?? DEFAULT_ESTIMATED_DURATION_DAYS,
         );
         if (!canEditEstimatedDelivery({
           latest_track: existingTrack.latest_track,
