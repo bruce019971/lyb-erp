@@ -364,9 +364,15 @@ export default function RelabelFormDrawer({
     const shipment = shipmentNo
       ? shipmentOptionByShipmentNo.get(shipmentNo)
       : undefined;
-    const productCount = requiresProductRelabel(relabelType)
-      ? normalizeNumberValue(shipment?.total_qty) ?? undefined
-      : undefined;
+    const boxCount = normalizeNumberValue(form.getFieldValue("box_count"));
+    const pcsPerBox = normalizeNumberValue(shipment?.pcs_per_box);
+    const productCount = relabelType === "外箱标及产品标"
+      ? boxCount !== null && pcsPerBox !== null && pcsPerBox > 0
+        ? boxCount * pcsPerBox
+        : undefined
+      : requiresProductRelabel(relabelType)
+        ? normalizeNumberValue(shipment?.total_qty) ?? undefined
+        : undefined;
 
     form.setFields([{ name: "product_count", value: productCount }]);
   }, [
@@ -374,6 +380,7 @@ export default function RelabelFormDrawer({
     mode,
     open,
     record,
+    selectedBoxCount,
     selectedOriginalShipmentNo,
     selectedRelabelType,
     shipmentOptionByShipmentNo,
@@ -558,7 +565,12 @@ export default function RelabelFormDrawer({
               label="产品数"
               name="product_count"
               rules={[
-                { required: true, message: "请输入产品数" },
+                {
+                  required: true,
+                  message: selectedRelabelType === "外箱标及产品标"
+                    ? "无法计算产品数，请填写外箱数并确认原货件装箱数大于0"
+                    : "请输入产品数",
+                },
                 {
                   validator: async (_, value?: number | null) => {
                     if (value === undefined || value === null) return;
@@ -573,7 +585,11 @@ export default function RelabelFormDrawer({
                 className="!w-full"
                 min={1}
                 precision={0}
-                placeholder="请输入产品数"
+                readOnly={selectedRelabelType === "外箱标及产品标"}
+                controls={selectedRelabelType !== "外箱标及产品标"}
+                placeholder={selectedRelabelType === "外箱标及产品标"
+                  ? "根据外箱数 × 原货件装箱数自动计算"
+                  : "请输入产品数"}
               />
             </Form.Item>
           ) : null}
