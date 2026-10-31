@@ -666,6 +666,23 @@ export async function updateShipmentRecord(
   return data as ShipmentRecord;
 }
 
+async function syncRelabelsDelivered(record: ShipmentRecord) {
+  const shipmentNo = record.shipment_no?.trim();
+  if (!shipmentNo) return;
+
+  const { error } = await supabase
+    .from("relabel_records")
+    .update({
+      delivery_status: "是",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("original_shipment_no", shipmentNo);
+
+  if (error) {
+    throw new Error(`货件已设为已送仓，但同步换标记录失败，请重试：${error.message}`);
+  }
+}
+
 export async function updateShipmentDeliveryStatus(
   record: ShipmentRecord,
   value: string,
@@ -680,6 +697,9 @@ export async function updateShipmentDeliveryStatus(
   const normalizedValue = value;
 
   if ((record.delivery_status ?? "否") === normalizedValue) {
+    if (normalizedValue === "是") {
+      await syncRelabelsDelivered(record);
+    }
     return record;
   }
 
@@ -697,7 +717,12 @@ export async function updateShipmentDeliveryStatus(
     throw error;
   }
 
-  return data as ShipmentRecord;
+  const updatedRecord = data as ShipmentRecord;
+  if (normalizedValue === "是") {
+    await syncRelabelsDelivered(updatedRecord);
+  }
+
+  return updatedRecord;
 }
 
 export async function updateShipmentInstructionStatus(
