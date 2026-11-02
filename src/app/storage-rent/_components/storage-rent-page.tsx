@@ -163,7 +163,7 @@ function StorageRentTable() {
       dataSource={result.data}
       loading={loading}
       headerTitle="仓租管理"
-      tooltip="仅显示已到仓且已送仓的超期货件。到仓、送仓当天均计入，前30天免租；仓租 = 0.8 × 箱数 × 超期天数。"
+      tooltip="仅显示已到仓且已送仓的超期货件。到仓、送仓当天均计入，前30天免租；第31–60天每箱每天0.8元，第61–90天每箱每天1元，分段累计计算仓租。"
       search={{ labelWidth: "auto", span: 8, collapsed: false, collapseRender: false }}
       options={false}
       toolBarRender={() => [

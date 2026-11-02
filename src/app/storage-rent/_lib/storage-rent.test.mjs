@@ -28,6 +28,27 @@ test("到仓、送仓当天均计入，30天免费，31天收一天仓租", () =
   assert.equal(rent.calculateStorageRent({ ...shipment, appointment_time: "2026-10-02" }).storage_fee, 4.8);
 });
 
+test("按仓储天数分段累计，31至60天每箱每天0.8元，61至90天每箱每天1元", () => {
+  for (const [storageDays, feePerBox] of [
+    [31, 0.8], [59, 23.2], [60, 24], [61, 25], [75, 39], [89, 53], [90, 54],
+  ]) {
+    const deliveryDate = new Date(Date.UTC(2026, 8, storageDays)).toISOString().slice(0, 10);
+    const result = rent.calculateStorageRent({ ...shipment, appointment_time: deliveryDate });
+    assert.equal(result.overdue_days, storageDays - 30);
+    assert.equal(result.storage_fee, Math.round(feePerBox * 100) * shipment.box_count / 100);
+  }
+});
+
+test("合计包含跨档费用，不把前30个收费日追溯改按1元计算", () => {
+  const data = [
+    rent.calculateStorageRent({ ...shipment, box_count: 2, appointment_time: "2026-10-30" }),
+    rent.calculateStorageRent({ ...shipment, box_count: 3, appointment_time: "2026-10-31" }),
+    rent.calculateStorageRent({ ...shipment, box_count: 1, appointment_time: "2026-11-29" }),
+  ];
+  assert.deepEqual(data.map((row) => row.storage_fee), [48, 75, 54]);
+  assert.equal(rent.summarizeStorageRent(data).total_fee, 177);
+});
+
 test("按日历日期处理跨年、闰年和夏令时，无时区偏差", () => {
   for (const [arrival, delivery, overdue] of [
     ["2024-02-01", "2024-03-02", 1],

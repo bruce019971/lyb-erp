@@ -29,6 +29,7 @@ export type StorageRentFilterOptions = {
 const MILLISECONDS_PER_DAY = 86_400_000;
 const FREE_STORAGE_DAYS = 30;
 const DAILY_RENT_CENTS = 80;
+const SECOND_TIER_DAILY_RENT_CENTS = 100;
 
 function normalizeStorageDate(value: string | null) {
   const text = value?.trim();
@@ -60,6 +61,12 @@ export function calculateStorageRent(
   const boxCount = shipment.box_count;
   const validBoxCount = typeof boxCount === "number" &&
     Number.isInteger(boxCount) && boxCount > 0;
+  const firstTierDays = Math.min(overdueDays, 30);
+  const secondTierDays = Math.min(Math.max(overdueDays - 30, 0), 30);
+  const remainingDays = Math.max(overdueDays - 60, 0);
+  const rentPerBoxCents = firstTierDays * DAILY_RENT_CENTS +
+    secondTierDays * SECOND_TIER_DAILY_RENT_CENTS +
+    remainingDays * DAILY_RENT_CENTS;
 
   return {
     ...shipment,
@@ -67,7 +74,7 @@ export function calculateStorageRent(
     appointment_time: deliveryDate,
     overdue_days: overdueDays,
     storage_fee: validBoxCount
-      ? (DAILY_RENT_CENTS * boxCount * overdueDays) / 100
+      ? (rentPerBoxCents * boxCount) / 100
       : null,
   };
 }
