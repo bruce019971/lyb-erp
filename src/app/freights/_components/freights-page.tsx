@@ -22,19 +22,16 @@ import RishenghuiAuthModal from "../../shipments/_components/rishenghui-auth-mod
 import { calculateFreightTotalFee, type FreightRecord } from "../_lib/freights";
 import {
   batchConfirmFreightRecords,
-  fetchRishenghuiFreightBill,
   fetchRishenghuiFreightUnitPrice,
   fetchRishenghuiFreightVolume,
-  fetchSaleasyFreightBill,
   fetchSaleasyFreightExtraFee,
   fetchSaleasyFreightVolume,
-  fetchTangchaoFreightBill,
-  fetchTongtuFreightBill,
   fetchTongtuFreightVolume,
   confirmSaleasyFreightTotalFee,
   type FreightVolumeBox,
   updateFreightRecord,
 } from "../_lib/freights-request";
+import { fetchFreightBill, generateFreightBills, getBatchBillSkipReason, type BatchFreightBillResult } from "../_lib/freight-bills";
 import FreightsEditDrawer from "./freights-edit-drawer";
 import FreightsTable from "./freights-table";
 
@@ -90,6 +87,9 @@ export default function FreightsPage() {
     null,
   );
   const [batchConfirming, setBatchConfirming] = useState(false);
+  const [batchGeneratingBills, setBatchGeneratingBills] = useState(false);
+  const batchGeneratingBillsRef = useRef(false);
+  const [billProgress, setBillProgress] = useState({ completed: 0, total: 0 });
   const [volumeDetail, setVolumeDetail] = useState<{
     open: boolean;
     providerName: string;
@@ -324,24 +324,11 @@ export default function FreightsPage() {
   ) {
     try {
       setFetchingBillId(record.id);
-      const result =
+      const result = await fetchFreightBill(record,
         providerName === "日升辉"
-          ? await fetchRishenghuiFreightBill({
-              freightId: record.id,
-              accessToken:
-                accessTokenOverride?.trim() || getRequiredRishenghuiAccessToken(),
-            })
-          : providerName === "通途"
-            ? await fetchTongtuFreightBill({
-                freightId: record.id,
-              })
-            : providerName === "唐朝"
-              ? await fetchTangchaoFreightBill({
-                  freightId: record.id,
-                })
-              : await fetchSaleasyFreightBill({
-                  freightId: record.id,
-                });
+          ? accessTokenOverride?.trim() || getRequiredRishenghuiAccessToken()
+          : "",
+      );
 
       showBillResultModal({
         record,
@@ -432,6 +419,75 @@ export default function FreightsPage() {
     }
 
     void fetchAndSaveBill(record, providerName);
+  }
+
+  async function generateSelectedBills(records: FreightRecord[], accessToken: string) {
+    if (batchGeneratingBillsRef.current) return;
+    batchGeneratingBillsRef.current = true;
+    setBatchGeneratingBills(true);
+    setEditingPaidStatusId(null);
+    try {
+      const results = await generateFreightBills(records, accessToken, (completed, total) => {
+        setBillProgress({ completed, total });
+      });
+      const succeeded = results.filter((item) => item.status === "success");
+      const failures = results.filter((item) => item.status === "failed");
+      const skipped = results.filter((item) => item.status === "skipped");
+      if (failures.some((item) => item.record.logistics_provider?.trim() === "日升辉" &&
+        item.status === "failed" && isRishenghuiTokenError(new Error(item.message)))) {
+        setRishenghuiAccessToken("");
+        clearStoredRishenghuiAccessToken();
+      }
+      tableActionRef.current?.reload();
+      modalApi.confirm({
+        title: `账单生成完成：成功 ${succeeded.length} 条，失败 ${failures.length} 条，跳过 ${skipped.length} 条`,
+        icon: null,
+        width: 800,
+        content: (
+          <Table<BatchFreightBillResult>
+            size="small"
+            rowKey={(item) => item.record.id}
+            dataSource={results}
+            pagination={{ pageSize: 10, showSizeChanger: false }}
+            columns={[
+              { title: "货件号", render: (_, item) => item.record.shipment_no || "-" },
+              { title: "物流商", render: (_, item) => item.record.logistics_provider || "-" },
+              { title: "总费用", render: (_, item) => item.status === "success" ? item.totalFee ?? item.record.total_fee ?? "-" : item.record.total_fee ?? "-" },
+              { title: "账单金额", render: (_, item) => item.status === "success" ? item.billAmount : "-" },
+              { title: "结果", render: (_, item) => item.status === "success"
+                ? item.isConsistent ? "生成成功，金额一致" : <span className="text-red-600">生成成功，金额与总费用不一致</span>
+                : `${item.status === "failed" ? "失败" : "跳过"}：${item.message}` },
+            ]}
+          />
+        ),
+        okText: failures.length ? "重试失败项" : "确定",
+        cancelText: "关闭",
+        onOk: () => {
+          if (failures.length) handleBatchGenerateBills(failures.map((item) => item.record));
+        },
+      });
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "批量生成账单失败");
+      tableActionRef.current?.reload();
+    } finally {
+      batchGeneratingBillsRef.current = false;
+      setBatchGeneratingBills(false);
+    }
+  }
+
+  function handleBatchGenerateBills(records: FreightRecord[]) {
+    if (batchGeneratingBillsRef.current || batchConfirming) return;
+    const eligible = records.filter((record) => getBatchBillSkipReason(record) === null);
+    if (!eligible.length) {
+      messageApi.warning("请先选择总费用及货件信息完整、未出账单且未支付的运费记录");
+      return;
+    }
+    const token = getStoredRishenghuiAccessToken().trim();
+    if (eligible.some((record) => record.logistics_provider?.trim() === "日升辉") && !token) {
+      showRishenghuiTokenRequiredModal(undefined, (accessToken) => generateSelectedBills(records, accessToken));
+      return;
+    }
+    void generateSelectedBills(records, token);
   }
 
   function showUnitPriceSavedMessage(totalFee?: number | null) {
@@ -964,6 +1020,11 @@ export default function FreightsPage() {
                 shipmentOptions={shipmentOptions}
                 logisticsOptions={logisticsOptions}
                 onBatchConfirm={handleBatchConfirm}
+                onBatchGenerateBills={handleBatchGenerateBills}
+                isBatchGeneratingBills={batchGeneratingBills}
+                billProgress={billProgress}
+                isRowUpdating={Boolean(fetchingVolumeId || fetchingBillId || fetchingUnitPriceId ||
+                  fetchingExtraFeeId || confirmingSaleasyTotalFeeId || updatingPaidStatusId || calculatingFreightId)}
                 onEdit={(record) => {
                   if (hasBillAmount(record)) {
                     messageApi.warning("账单金额已存在，不能编辑");

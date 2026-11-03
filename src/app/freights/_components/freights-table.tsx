@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircleOutlined } from "@ant-design/icons";
+import { CheckCircleOutlined, FileSearchOutlined } from "@ant-design/icons";
 import type { ActionType } from "@ant-design/pro-components";
 import { ProTable } from "@ant-design/pro-components";
 import { Button, Table, Tooltip } from "antd";
@@ -11,6 +11,7 @@ import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
 import type { ShipmentOption } from "../../shipments/_lib/shipments";
 import type { FreightRecord, FreightSummary } from "../_lib/freights";
 import { requestFreightRecords } from "../_lib/freights-request";
+import { getBatchBillSkipReason } from "../_lib/freight-bills";
 import { getFreightColumns } from "./freights-columns";
 
 type FreightsTableProps = {
@@ -18,6 +19,10 @@ type FreightsTableProps = {
   shipmentOptions: ShipmentOption[];
   logisticsOptions: LogisticsProviderOption[];
   onBatchConfirm: (records: FreightRecord[]) => void;
+  onBatchGenerateBills: (records: FreightRecord[]) => void;
+  isBatchGeneratingBills: boolean;
+  billProgress: { completed: number; total: number };
+  isRowUpdating: boolean;
   onEdit: (record: FreightRecord) => void;
   onFetchVolume: (record: FreightRecord) => void;
   onFetchBill: (record: FreightRecord) => void;
@@ -80,6 +85,10 @@ export default function FreightsTable({
   shipmentOptions,
   logisticsOptions,
   onBatchConfirm,
+  onBatchGenerateBills,
+  isBatchGeneratingBills,
+  billProgress,
+  isRowUpdating,
   onEdit,
   onFetchVolume,
   onFetchBill,
@@ -156,6 +165,11 @@ export default function FreightsTable({
     const selectedIds = new Set(selectedRowKeys.map((key) => String(key)));
     return dataSource.filter((record) => selectedIds.has(record.id));
   }, [dataSource, selectedRowKeys]);
+  const selectedConfirmableRecords = selectedRecords.filter((record) =>
+    hasBillAmount(record.bill_amount) && record.freight_paid_status !== "是",
+  );
+  const selectedBillRecords = selectedRecords.filter((record) => getBatchBillSkipReason(record) === null);
+  const batchBusy = isBatchGeneratingBills || isBatchConfirming;
 
   const loadRecords = useCallback(
     async (params: Record<string, unknown>) => {
@@ -208,7 +222,7 @@ export default function FreightsTable({
       size="small"
       columns={columns}
       dataSource={dataSource}
-      loading={loading}
+      loading={loading || batchBusy}
       rowSelection={{
         type: "checkbox",
         selectedRowKeys,
@@ -218,12 +232,10 @@ export default function FreightsTable({
           const confirmed = record.freight_paid_status === "是";
 
           return {
-            disabled: !billed || confirmed,
-            title: !billed
-              ? "账单未出，不能选择"
-              : confirmed
-                ? "运费已确认"
-                : "选择该运费记录",
+            disabled: loading || batchBusy || isRowUpdating || confirmed || (!billed && getBatchBillSkipReason(record) !== null),
+            title: confirmed ? "运费已确认"
+              : billed ? "选择该记录以确认运费"
+                : getBatchBillSkipReason(record) ?? "选择该记录以生成账单",
           };
         },
       }}
@@ -251,20 +263,32 @@ export default function FreightsTable({
       tableAlertRender={false}
       tableAlertOptionRender={false}
       toolBarRender={() => [
+        <Tooltip key="batch-bills" title={`为选中的 ${selectedBillRecords.length} 条未出账单记录生成账单，已出账单的记录自动跳过`}>
+          <Button
+            icon={<FileSearchOutlined />}
+            disabled={!selectedBillRecords.length || loading || batchBusy || isRowUpdating}
+            loading={isBatchGeneratingBills}
+            onClick={() => onBatchGenerateBills(selectedRecords)}
+          >
+            {isBatchGeneratingBills
+              ? `生成账单中 ${billProgress.completed}/${billProgress.total}`
+              : "批量生成账单"}
+          </Button>
+        </Tooltip>,
         <Tooltip
           key="batch-confirm"
           title={
-            selectedRecords.length > 0
-              ? `确认选中的 ${selectedRecords.length} 条运费记录`
+            selectedConfirmableRecords.length > 0
+              ? `确认选中的 ${selectedConfirmableRecords.length} 条已出账单运费记录`
               : "请先选择已出账单且未确认的运费记录"
           }
         >
           <Button
             type="primary"
             icon={<CheckCircleOutlined />}
-            disabled={selectedRecords.length === 0}
+            disabled={selectedConfirmableRecords.length === 0 || loading || batchBusy || isRowUpdating}
             loading={isBatchConfirming}
-            onClick={() => onBatchConfirm(selectedRecords)}
+            onClick={() => onBatchConfirm(selectedConfirmableRecords)}
           >
             批量确认运费
           </Button>
@@ -280,6 +304,7 @@ export default function FreightsTable({
         void loadRecords({});
       }}
       pagination={false}
+      form={{ disabled: batchBusy }}
       dateFormatter="string"
       summary={() => (
         <Table.Summary fixed="bottom">
