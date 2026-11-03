@@ -482,7 +482,7 @@ export function getShipmentColumns(
     {
       title: "是否换标",
       dataIndex: "is_relabel",
-      width: 210,
+      width: 300,
       render: (_, record) => {
         const relabels = record.relabel_records ?? [];
         if (!relabels.length) return <Typography.Text type="secondary">-</Typography.Text>;
@@ -492,6 +492,9 @@ export function getShipmentColumns(
             {relabels.map((relabel) => (
               <Typography.Text key={relabel.id} className="whitespace-nowrap">
                 {relabel.delivery_store?.trim() || "-"}/{relabel.delivery_shipment_no?.trim() || "-"}
+                {relabel.relabel_type?.trim() === "外箱标及产品标"
+                  ? `/${relabel.new_ml_code?.trim() || "-"}`
+                  : null}
               </Typography.Text>
             ))}
           </div>

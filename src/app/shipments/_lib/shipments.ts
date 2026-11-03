@@ -5,6 +5,8 @@ export type ShipmentRelabelRecord = {
   original_shipment_no: string;
   delivery_store: string | null;
   delivery_shipment_no: string | null;
+  relabel_type: string | null;
+  new_ml_code: string | null;
   delivery_time: string | null;
 };
 

@@ -349,7 +349,7 @@ async function requestShipmentRelabelMap() {
   for (let from = 0; ; from += pageSize) {
     const { data, error } = await supabase
       .from("relabel_records")
-      .select("id, original_shipment_no, delivery_store, delivery_shipment_no, delivery_time")
+      .select("id, original_shipment_no, delivery_store, delivery_shipment_no, relabel_type, new_ml_code, delivery_time")
       .order("delivery_time", { ascending: true, nullsFirst: false })
       .order("id", { ascending: true })
       .range(from, from + pageSize - 1);
