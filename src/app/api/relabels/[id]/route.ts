@@ -33,7 +33,7 @@ async function verifyOperator() {
     .eq("id", session.userId)
     .single();
 
-  if (error) {
+  if (error || !data) {
     throw new Error("当前登录用户未绑定系统账号");
   }
 
@@ -65,13 +65,40 @@ export async function DELETE(
     }
 
     const adminClient = createSupabaseAdminClient();
+    const { data: record, error: recordError } = await adminClient
+      .from("relabel_records")
+      .select("original_shipment_no")
+      .eq("id", id.trim())
+      .maybeSingle();
+
+    if (recordError) throw new Error(recordError.message);
+    if (!record) {
+      return NextResponse.json({ error: "换标记录不存在或已删除，请刷新列表" }, { status: 404 });
+    }
+
+    const originalShipmentNo = record.original_shipment_no?.trim();
+    if (originalShipmentNo) {
+      // 先清空送仓时间，失败时保留换标记录及关联货件号，允许重试删除。
+      const { error: shipmentError } = await adminClient
+        .from("shipment_records")
+        .update({ appointment_time: null, updated_at: new Date().toISOString() })
+        .eq("shipment_no", originalShipmentNo)
+        .eq("status", "有效");
+
+      if (shipmentError) {
+        throw new Error(`清空原货件送仓时间失败，换标记录尚未删除：${shipmentError.message}`);
+      }
+    }
+
     const { error } = await adminClient
       .from("relabel_records")
       .delete()
       .eq("id", id.trim());
 
     if (error) {
-      throw error;
+      throw new Error(originalShipmentNo
+        ? `原货件送仓时间已清空，但换标记录删除失败，请重试：${error.message}`
+        : `换标记录删除失败，请重试：${error.message}`);
     }
 
     return NextResponse.json({ data: true });

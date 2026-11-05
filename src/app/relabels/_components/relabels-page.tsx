@@ -145,7 +145,7 @@ export default function RelabelsPage() {
     modalApi.confirm({
       title: "删除换标记录",
       icon: <ExclamationCircleFilled className="!text-amber-500" />,
-      content: `将永久删除原货件号 ${record.original_shipment_no || "-"}、送仓货件号 ${record.delivery_shipment_no || "-"} 的换标记录，是否继续？`,
+      content: `将永久删除原货件号 ${record.original_shipment_no || "-"}、送仓货件号 ${record.delivery_shipment_no || "-"} 的换标记录，并清空原货件的送仓时间，是否继续？`,
       okText: "确定删除",
       cancelText: "取消",
       okButtonProps: { danger: true },
