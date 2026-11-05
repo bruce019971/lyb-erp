@@ -142,15 +142,10 @@ export default function RelabelsPage() {
   }
 
   function handleDelete(record: RelabelRecord) {
-    if (record.delivery_time?.trim()) {
-      messageApi.warning("送仓时间不为空的货件不允许删除");
-      return;
-    }
-
     modalApi.confirm({
       title: "删除换标记录",
       icon: <ExclamationCircleFilled className="!text-amber-500" />,
-      content: "此操作将永久删除该换标记录，是否继续？",
+      content: `将永久删除原货件号 ${record.original_shipment_no || "-"}、送仓货件号 ${record.delivery_shipment_no || "-"} 的换标记录，是否继续？`,
       okText: "确定删除",
       cancelText: "取消",
       okButtonProps: { danger: true },

@@ -319,9 +319,7 @@ export function getRelabelColumns(
       width: 120,
       fixed: "right",
       search: false,
-      render: (_, record) => {
-        const hasDeliveryTime = Boolean(record.delivery_time?.trim());
-        const actions = [
+      render: (_, record) => [
           <Tooltip key="edit" title="编辑">
             <Button
               type="text"
@@ -331,28 +329,17 @@ export function getRelabelColumns(
             />
           </Tooltip>,
           <RelabelInstructionDownload key="download" record={record} />,
-        ];
-
-        if (!hasDeliveryTime) {
-          actions.push(
-            <Tooltip
-              key="delete"
-              title="删除"
-            >
-              <Button
-                type="text"
-                size="small"
-                danger
-                icon={<DeleteOutlined />}
-                loading={isDeleting(record)}
-                onClick={() => onDelete(record)}
-              />
-            </Tooltip>,
-          );
-        }
-
-        return actions;
-      },
+          <Tooltip key="delete" title="删除">
+            <Button
+              type="text"
+              size="small"
+              danger
+              icon={<DeleteOutlined />}
+              loading={isDeleting(record)}
+              onClick={() => onDelete(record)}
+            />
+          </Tooltip>,
+        ],
     },
   ];
 }
