@@ -7,18 +7,20 @@ export type StorageRentShipment = {
   appointment_time: string | null;
   delivery_status: string | null;
   status: string | null;
+  storage_rent_paid_status: "是" | "否";
 };
 
 export type StorageRentRecord = StorageRentShipment & {
-  overdue_days: number;
+  overdue_days: number | null;
   storage_fee: number | null;
+  calculation_note: string | null;
 };
 
 export type StorageRentResult = {
   data: StorageRentRecord[];
   total: number;
   total_fee: number;
-  missing_box_count: number;
+  uncalculated_count: number;
 };
 
 export type StorageRentFilterOptions = {
@@ -47,16 +49,25 @@ function normalizeStorageDate(value: string | null) {
 export function calculateStorageRent(
   shipment: StorageRentShipment,
 ): StorageRentRecord | null {
-  if (shipment.status !== "有效" || shipment.delivery_status !== "是") return null;
+  if (shipment.status !== "有效" || !shipment.appointment_time?.trim()) return null;
   const arrivedDate = normalizeStorageDate(shipment.overseas_warehouse_arrived_at);
   const deliveryDate = normalizeStorageDate(shipment.appointment_time);
-  if (arrivedDate === null || deliveryDate === null) return null;
+  const record: StorageRentRecord = {
+    ...shipment,
+    overseas_warehouse_arrived_at: arrivedDate,
+    appointment_time: deliveryDate,
+    overdue_days: null,
+    storage_fee: null,
+    calculation_note: null,
+  };
+  if (deliveryDate === null) return { ...record, calculation_note: "送仓日期无效，无法计算仓租" };
+  if (arrivedDate === null) return { ...record, calculation_note: "到仓日期缺失或无效，无法计算仓租" };
   const arrivedDay = Date.parse(`${arrivedDate}T00:00:00.000Z`) / MILLISECONDS_PER_DAY;
   const deliveryDay = Date.parse(`${deliveryDate}T00:00:00.000Z`) / MILLISECONDS_PER_DAY;
+  if (deliveryDay < arrivedDay) return { ...record, calculation_note: "送仓日期早于到仓日期，无法计算仓租" };
 
-  // 到仓当天和送仓当天均计入仓储天数，第31天开始收费。
-  const overdueDays = deliveryDay - arrivedDay + 1 - FREE_STORAGE_DAYS;
-  if (overdueDays <= 0) return null;
+  // 仓储天数按送仓日期与到仓日期的日历差计算，前30天免租。
+  const overdueDays = Math.max(deliveryDay - arrivedDay - FREE_STORAGE_DAYS, 0);
 
   const boxCount = shipment.box_count;
   const validBoxCount = typeof boxCount === "number" &&
@@ -69,13 +80,12 @@ export function calculateStorageRent(
     remainingDays * DAILY_RENT_CENTS;
 
   return {
-    ...shipment,
-    overseas_warehouse_arrived_at: arrivedDate,
-    appointment_time: deliveryDate,
+    ...record,
     overdue_days: overdueDays,
-    storage_fee: validBoxCount
+    storage_fee: overdueDays === 0 ? 0 : validBoxCount
       ? (rentPerBoxCents * boxCount) / 100
       : null,
+    calculation_note: overdueDays > 0 && !validBoxCount ? "缺少有效箱数，无法计算仓租" : null,
   };
 }
 
@@ -88,7 +98,7 @@ export function summarizeStorageRent(data: StorageRentRecord[]): StorageRentResu
     data,
     total: data.length,
     total_fee: cents / 100,
-    missing_box_count: data.filter((record) => record.storage_fee === null).length,
+    uncalculated_count: data.filter((record) => record.storage_fee === null).length,
   };
 }
 
