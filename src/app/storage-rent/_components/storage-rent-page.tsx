@@ -31,7 +31,8 @@ function getColumns(options: StorageRentFilterOptions, optionsLoading: boolean):
     width: 180,
     renderFormItem: () => (
       <Select
-        mode="multiple"
+        mode="tags"
+        tokenSeparators={[" ", "\n", "\r", "\t", ",", "，"]}
         allowClear
         showSearch
         optionFilterProp="label"
@@ -39,7 +40,7 @@ function getColumns(options: StorageRentFilterOptions, optionsLoading: boolean):
         options={options.shipmentNos.map((value) => ({ label: value, value }))}
         maxTagCount={1}
         maxTagTextLength={18}
-        placeholder="请选择货件号"
+        placeholder="可选择或粘贴货件号，支持换行、空格、逗号分隔"
         className="w-full"
       />
     ),
