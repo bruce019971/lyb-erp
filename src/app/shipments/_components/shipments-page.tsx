@@ -659,6 +659,11 @@ export default function ShipmentsPage({ embedded = false }: ShipmentsPageProps) 
       return;
     }
 
+    if (records.some((record) => record.tracking_no?.trim())) {
+      messageApi.warning("所选货件中已有运单编号，不能批量物流下单");
+      return;
+    }
+
     const orderableRecords = records.filter((record) => {
       return !record.tracking_no?.trim() && supportsLogisticsOrder(record);
     });

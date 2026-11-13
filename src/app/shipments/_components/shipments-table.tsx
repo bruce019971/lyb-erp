@@ -787,6 +787,7 @@ export default function ShipmentsTable({
           .map((item) => String(item))
           .filter(Boolean);
         const hasSelectedRows = selectedIds.length > 0;
+        const hasSelectedTrackingNo = selectedRecords.some((record) => Boolean(record.tracking_no?.trim()));
         const actions = [
           <Tooltip key="create" title="新增货件">
             <Button type="text" icon={<PlusOutlined />} disabled={batchDelivering} onClick={onCreate} />
@@ -812,12 +813,13 @@ export default function ShipmentsTable({
           <Tooltip
             key="batch-logistics-order"
             title={
-              hasSelectedRows ? "批量物流下单" : "请先选择需要下单的货件"
+              hasSelectedTrackingNo ? "所选货件中已有运单编号，不能批量物流下单"
+                : hasSelectedRows ? "批量物流下单" : "请先选择需要下单的货件"
             }
           >
             <Button
               type="primary"
-              disabled={!hasSelectedRows || batchDelivering}
+              disabled={loading || !hasSelectedRows || hasSelectedTrackingNo || batchDelivering}
               loading={isBatchSubmittingLogisticsOrder}
               icon={<ShoppingCartOutlined />}
               onClick={() => onBatchLogisticsOrder(selectedRecords)}
