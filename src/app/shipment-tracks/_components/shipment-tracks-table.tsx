@@ -73,6 +73,7 @@ type ShipmentTrackSummaryColumnKey =
 const SHIPMENT_TRACK_SUMMARY_COLUMN_KEYS: ShipmentTrackSummaryColumnKey[] = [
   "shipment_no",
   "product_name",
+  "created_at",
   "total_qty",
   "order_store",
   "latest_track",
@@ -82,7 +83,6 @@ const SHIPMENT_TRACK_SUMMARY_COLUMN_KEYS: ShipmentTrackSummaryColumnKey[] = [
   "estimated_warehouse_arrived_time",
   "estimated_delivery_time",
   "duration_days",
-  "created_at",
 ];
 
 function buildSelectOptions(values: Array<string | null | undefined>) {

@@ -234,6 +234,16 @@ export function getShipmentTrackColumns(
       render: (_, record) => record.product_name || "-",
     },
     {
+      title: "创建时间",
+      dataIndex: "created_at",
+      valueType: "date",
+      width: 160,
+      search: false,
+      sorter: true,
+      render: (_, record) =>
+        formatShipmentTrackDate(record.created_at) || "-",
+    },
+    {
       title: "产品数",
       dataIndex: "total_qty",
       valueType: "digit",
@@ -447,16 +457,6 @@ export function getShipmentTrackColumns(
       search: false,
       render: (_, record) =>
         record.duration_days == null ? "-" : `${record.duration_days}天`,
-    },
-    {
-      title: "创建时间",
-      dataIndex: "created_at",
-      valueType: "date",
-      width: 160,
-      search: false,
-      sorter: true,
-      render: (_, record) =>
-        formatShipmentTrackDate(record.created_at) || "-",
     },
     {
       title: "操作",
