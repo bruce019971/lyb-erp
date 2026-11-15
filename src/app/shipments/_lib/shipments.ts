@@ -97,6 +97,14 @@ export function formatShipmentDate(value?: string | null) {
   return value.slice(0, 10);
 }
 
+export function getShipmentEstimatedDeliveryTime(record: ShipmentRecord) {
+  const hasDeliveryTime = Boolean(record.appointment_time?.trim()) ||
+    (record.is_relabel === "是" &&
+      record.relabel_delivery_times?.some((value) => Boolean(value.trim())));
+
+  return hasDeliveryTime ? null : record.estimated_delivery_time ?? null;
+}
+
 export function canEditShipmentInstructionStatus(record: ShipmentRecord) {
   const deliveryTimes =
     record.is_relabel === "是" && record.relabel_delivery_times?.length

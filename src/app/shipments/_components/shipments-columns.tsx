@@ -11,6 +11,7 @@ import type { SortOrder } from "antd/es/table/interface";
 
 import {
   formatShipmentDate,
+  getShipmentEstimatedDeliveryTime,
   canEditShipmentInstructionStatus,
   canEditShipmentDeliveryStatus,
   isShipmentDeliveryOverdue,
@@ -477,7 +478,8 @@ export function getShipmentColumns(
       dataIndex: "estimated_delivery_time",
       width: 130,
       search: false,
-      render: (_, record) => renderNowrapShipmentDate(record.estimated_delivery_time),
+      render: (_, record) =>
+        renderNowrapShipmentDate(getShipmentEstimatedDeliveryTime(record)),
     },
     {
       title: "是否换标",
