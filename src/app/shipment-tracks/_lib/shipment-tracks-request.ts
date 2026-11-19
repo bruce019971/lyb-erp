@@ -1,6 +1,7 @@
 import type { SortOrder } from "antd/es/table/interface";
 
 import { supabase } from "@/lib/supabase";
+import { getPageRange } from "@/lib/table-pagination";
 
 import {
   calculateShipmentTrackDurationDays,
@@ -16,13 +17,26 @@ type ShipmentTrackRequestParams = {
   pageSize?: number;
 } & Record<string, unknown>;
 
+export type ShipmentTrackFilterOptions = {
+  order_stores: string[];
+  product_names: string[];
+  logistics_providers: string[];
+};
+
+export async function requestShipmentTrackFilterOptions(): Promise<ShipmentTrackFilterOptions> {
+  const { data, error } = await supabase.from("shipment_track_filter_options")
+    .select("order_stores, product_names, logistics_providers").single();
+  if (error) throw error;
+  return data as ShipmentTrackFilterOptions;
+}
+
 export type ShipmentTrackSummary = {
   totalQty: number;
   total: number;
 };
 
 type ShipmentTrackFilterState = {
-  matchedShipmentIds: string[] | null;
+  shipmentFilters: Record<string, string[]>;
   showOverdueShipments: boolean;
   showDeliveredShipments: boolean;
   warehouseArrived: string;
@@ -31,6 +45,7 @@ type ShipmentTrackFilterState = {
 
 interface ShipmentTrackSearchQuery {
   eq(field: string, value: string): this;
+  gt(field: string, value: number): this;
   in(field: string, values: string[]): this;
   not(field: string, operator: string, value: unknown): this;
   is(field: string, value: unknown): this;
@@ -193,59 +208,18 @@ async function resolveShipmentTrackFilterState(
   const latestTrack = typeof params.latest_track === "string"
     ? params.latest_track.trim()
     : "";
-  const shouldFilterShipments =
-    shipmentNoValues.length > 0 ||
-    trackingNoValues.length > 0 ||
-    orderStoreValues.length > 0 ||
-    productNameValues.length > 0 ||
-    logisticsProviderValues.length > 0 ||
-    Boolean(warehouseArrived);
-  let matchedShipmentIds: string[] | null = null;
-
-  if (shouldFilterShipments) {
-    let shipmentQuery = supabase
-      .from("shipment_records")
-      .select("id")
-      .eq("status", "有效");
-
-    if (shipmentNoValues.length > 0) {
-      shipmentQuery = shipmentQuery.in("shipment_no", shipmentNoValues);
-    }
-
-    if (trackingNoValues.length > 0) {
-      shipmentQuery = shipmentQuery.in("tracking_no", trackingNoValues);
-    }
-
-    if (orderStoreValues.length > 0) {
-      shipmentQuery = shipmentQuery.in("order_store", orderStoreValues);
-    }
-
-    if (productNameValues.length > 0) {
-      shipmentQuery = shipmentQuery.in("product_name", productNameValues);
-    }
-
-    if (logisticsProviderValues.length > 0) {
-      shipmentQuery = shipmentQuery.in(
-        "logistics_provider",
-        logisticsProviderValues,
-      );
-    }
-
-    const { data: shipmentRows, error: shipmentError } = await shipmentQuery;
-
-    if (shipmentError) {
-      return { success: false };
-    }
-
-    matchedShipmentIds = (shipmentRows ?? [])
-      .map((item) => item.id)
-      .filter((item): item is string => Boolean(item));
-  }
+  const shipmentFilters = {
+    shipment_no: shipmentNoValues,
+    tracking_no: trackingNoValues,
+    order_store: orderStoreValues,
+    product_name: productNameValues,
+    logistics_provider: logisticsProviderValues,
+  };
 
   return {
     success: true,
     state: {
-      matchedShipmentIds,
+      shipmentFilters,
       showOverdueShipments,
       showDeliveredShipments,
       warehouseArrived,
@@ -265,9 +239,7 @@ function applyShipmentTrackFilterState<TQuery extends ShipmentTrackSearchQuery>(
   }
 
   if (state.showOverdueShipments) {
-    nextQuery = nextQuery
-      .not("sailing_time", "is", null)
-      .not("warehouse_arrived_time", "is", null);
+    nextQuery = nextQuery.gt("duration_days", 50);
   }
 
   if (!state.showDeliveredShipments) {
@@ -276,8 +248,8 @@ function applyShipmentTrackFilterState<TQuery extends ShipmentTrackSearchQuery>(
     });
   }
 
-  if (state.matchedShipmentIds && state.matchedShipmentIds.length > 0) {
-    nextQuery = nextQuery.in("shipment_record_id", state.matchedShipmentIds);
+  for (const [field, values] of Object.entries(state.shipmentFilters)) {
+    if (values.length) nextQuery = nextQuery.in(`shipment.${field}`, values);
   }
 
   if (state.warehouseArrived === "是") {
@@ -287,19 +259,6 @@ function applyShipmentTrackFilterState<TQuery extends ShipmentTrackSearchQuery>(
   }
 
   return nextQuery as TQuery;
-}
-
-function matchesShipmentTrackDuration(
-  row: Pick<ShipmentTrackRow, "sailing_time" | "warehouse_arrived_time">,
-  showOverdueShipments: boolean,
-) {
-  if (!showOverdueShipments) return true;
-
-  const durationDays = calculateShipmentTrackDurationDays(
-    row.sailing_time,
-    row.warehouse_arrived_time,
-  );
-  return durationDays !== null && durationDays > 50;
 }
 
 function getEmptyShipmentTrackSummary(): ShipmentTrackSummary {
@@ -317,10 +276,6 @@ export async function requestShipmentTrackRecords(
 
   if (!filterResult.success) {
     return { data: [], success: false, total: 0 };
-  }
-
-  if (filterResult.state.matchedShipmentIds?.length === 0) {
-    return { data: [], success: true, total: 0 };
   }
 
   let query = supabase
@@ -351,32 +306,22 @@ export async function requestShipmentTrackRecords(
     query = query.order("id", { ascending: true });
   }
 
-  const pageSize = 1000;
-  const records: ShipmentTrackRecord[] = [];
-  let from = 0;
-
-  while (true) {
-    const { data, error, count } = await query.range(from, from + pageSize - 1);
-
-    if (error) {
-      return { data: [], success: false, total: 0 };
-    }
-
-    const rows = (data ?? []) as ShipmentTrackRow[];
-    records.push(
-      ...rows
-        .filter((row) =>
-          matchesShipmentTrackDuration(row, filterResult.state.showOverdueShipments),
-        )
-        .map(normalizeTrackRow),
-    );
-
-    if (rows.length < pageSize || (count !== null && from + rows.length >= count)) {
-      return { data: records, success: true, total: records.length };
-    }
-
-    from += pageSize;
+  const { from, to } = getPageRange(params);
+  const { data, error, count } = await query.range(from, to);
+  // PostgREST reports an out-of-range offset as 416. Recover the current count
+  // so the table can move to the last page after deletions.
+  if (error?.code === "PGRST103") {
+    const first = await query.range(0, 0);
+    if (first.error) throw first.error;
+    return { data: [], success: true, total: first.count ?? 0 };
   }
+
+  if (error) throw error;
+  return {
+    data: ((data ?? []) as ShipmentTrackRow[]).map(normalizeTrackRow),
+    success: true,
+    total: count ?? 0,
+  };
 }
 
 export async function requestShipmentTrackSummary(
@@ -384,12 +329,7 @@ export async function requestShipmentTrackSummary(
 ): Promise<ShipmentTrackSummary> {
   const filterResult = await resolveShipmentTrackFilterState(params);
 
-  if (
-    !filterResult.success ||
-    filterResult.state.matchedShipmentIds?.length === 0
-  ) {
-    return getEmptyShipmentTrackSummary();
-  }
+  if (!filterResult.success) throw new Error("货件筛选失败");
 
   const pageSize = 1000;
   let page = 0;
@@ -411,16 +351,10 @@ export async function requestShipmentTrackSummary(
 
     const { data, error } = await query;
 
-    if (error) {
-      return getEmptyShipmentTrackSummary();
-    }
+    if (error) throw error;
 
     const rows = (data ?? []) as ShipmentTrackSummaryRow[];
     rows.forEach((row) => {
-      if (!matchesShipmentTrackDuration(row, filterResult.state.showOverdueShipments)) {
-        return;
-      }
-
       const shipment = Array.isArray(row.shipment)
         ? row.shipment[0]
         : row.shipment;

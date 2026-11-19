@@ -2,6 +2,7 @@ import type { FilterValue, SortOrder } from "antd/es/table/interface";
 import { message } from "antd";
 
 import { supabase } from "@/lib/supabase";
+import { getPageRange } from "@/lib/table-pagination";
 
 import {
   shipmentDateFields,
@@ -11,7 +12,6 @@ import {
   type ShipmentCreateValues,
   type ShipmentOption,
   type ShipmentRecord,
-  type ShipmentRelabelRecord,
   type ShipmentUpdateValues,
 } from "./shipments";
 
@@ -28,19 +28,12 @@ type DateLikeValue = {
   format: (template: string) => string;
 };
 
-type ShipmentRecordWithTrack = ShipmentRecord & {
-  shipment_track:
-    | { estimated_delivery_time: string | null }
-    | Array<{ estimated_delivery_time: string | null }>
-    | null;
-};
-
 interface ShipmentSearchQuery {
   ilike(field: string, value: string): this;
   in(field: string, values: string[]): this;
   not(field: string, operator: string, value: unknown): this;
   is(field: string, value: unknown): this;
-  eq(field: string, value: string): this;
+  eq(field: string, value: string | boolean): this;
   or(filters: string): this;
   gte(field: string, value: unknown): this;
   lte(field: string, value: unknown): this;
@@ -117,7 +110,6 @@ function getExpiringShipmentCutoffDateTime() {
 function applyShipmentSearchParams<TQuery extends ShipmentSearchQuery>(
   query: TQuery,
   params: ShipmentRequestParams,
-  relabelShipmentNos: string[] = [],
 ) {
   let nextQuery = query;
 
@@ -193,15 +185,8 @@ function applyShipmentSearchParams<TQuery extends ShipmentSearchQuery>(
 
   const isRelabel =
     typeof params.is_relabel === "string" ? params.is_relabel.trim() : "";
-  if (isRelabel === "是") {
-    nextQuery = relabelShipmentNos.length
-      ? nextQuery.in("shipment_no", relabelShipmentNos)
-      : nextQuery.is("id", null);
-  } else if (isRelabel === "否") {
-    for (let index = 0; index < relabelShipmentNos.length; index += 100) {
-      const values = relabelShipmentNos.slice(index, index + 100).map((value) => JSON.stringify(value)).join(",");
-      nextQuery = nextQuery.or(`shipment_no.is.null,shipment_no.not.in.(${values})`);
-    }
+  if (isRelabel === "是" || isRelabel === "否") {
+    nextQuery = nextQuery.eq("has_relabel", isRelabel === "是");
   }
 
   shipmentDateFields.forEach((field) => {
@@ -342,52 +327,10 @@ async function attachProductMlCodes(records: ShipmentRecord[]) {
   });
 }
 
-async function requestShipmentRelabelMap() {
-  const result = new Map<string, ShipmentRelabelRecord[]>();
-  const pageSize = 1000;
-
-  for (let from = 0; ; from += pageSize) {
-    const { data, error } = await supabase
-      .from("relabel_records")
-      .select("id, original_shipment_no, delivery_store, delivery_shipment_no, relabel_type, new_ml_code, delivery_time")
-      .order("delivery_time", { ascending: true, nullsFirst: false })
-      .order("id", { ascending: true })
-      .range(from, from + pageSize - 1);
-    if (error) throw error;
-
-    const rows = (data ?? []) as ShipmentRelabelRecord[];
-    rows.forEach((row) => {
-      const shipmentNo = row.original_shipment_no?.trim();
-      if (!shipmentNo) return;
-      const records = result.get(shipmentNo) ?? [];
-      records.push(row);
-      result.set(shipmentNo, records);
-    });
-    if (rows.length < pageSize) return result;
-  }
-}
-
-export async function requestShipmentRecords(
-  params: ShipmentRequestParams,
-  sorter: Record<string, SortOrder>,
-  filters: Record<string, FilterValue | null> = {},
+function applyShipmentColumnFilters<TQuery extends ShipmentSearchQuery>(
+  query: TQuery,
+  filters: Record<string, FilterValue | null>,
 ) {
-  let relabelMap: Map<string, ShipmentRelabelRecord[]>;
-  try {
-    relabelMap = await requestShipmentRelabelMap();
-  } catch (error) {
-    message.error(error && typeof error === "object" && "message" in error
-      ? String(error.message)
-      : "读取换标记录失败");
-    return { data: [], success: false, total: 0 };
-  }
-  let query = supabase
-    .from("shipment_records")
-    .select("*, shipment_track:shipment_tracks(estimated_delivery_time)", { count: "exact" })
-    .eq("status", "有效");
-
-  query = applyShipmentSearchParams(query, params, [...relabelMap.keys()]);
-
   function splitFilterText(value?: string) {
     return (value ?? "")
       .trim()
@@ -429,15 +372,6 @@ export async function requestShipmentRecords(
   }
 
   shipmentDateFields.forEach((field) => {
-    const value = params[field];
-    if (Array.isArray(value)) {
-      const [start, end] = value;
-      const normalizedStart = normalizeDateRangeValue(field, start, "start");
-      const normalizedEnd = normalizeDateRangeValue(field, end, "end");
-      if (normalizedStart) query = query.gte(field, normalizedStart);
-      if (normalizedEnd) query = query.lte(field, normalizedEnd);
-    }
-
     const filterRange = getFilterDateRange(field);
     const normalizedFilterStart = normalizeDateRangeValue(
       field,
@@ -453,13 +387,30 @@ export async function requestShipmentRecords(
     if (normalizedFilterEnd) query = query.lte(field, normalizedFilterEnd);
   });
 
+  return query;
+}
+
+export async function requestShipmentRecords(
+  params: ShipmentRequestParams,
+  sorter: Record<string, SortOrder>,
+  filters: Record<string, FilterValue | null> = {},
+) {
+  let query = supabase
+    .from("shipment_list_view")
+    .select("*", { count: "exact" })
+    .eq("status", "有效");
+
+  query = applyShipmentSearchParams(query, params);
+  query = applyShipmentColumnFilters(query, filters);
+
   const orderFieldKey = Object.keys(sorter ?? {})[0];
-  const orderField = orderFieldKey;
+  const orderField = orderFieldKey === "appointment_time" ? "effective_appointment_time" : orderFieldKey;
   const orderDirection = orderFieldKey ? sorter[orderFieldKey] : undefined;
 
   if (orderField && orderDirection) {
     query = query.order(orderField, {
       ascending: orderDirection === "ascend",
+      nullsFirst: false,
     });
   } else {
     query = query.order("created_at", {
@@ -468,7 +419,15 @@ export async function requestShipmentRecords(
     });
   }
 
-  const { data, error, count } = await query;
+  const { from, to } = getPageRange(params);
+  const { data, error, count } = await query.order("id", { ascending: true }).range(from, to);
+  // PostgREST reports an out-of-range offset as 416. Recover the current count
+  // so the table can move to the last page after deletions.
+  if (error?.code === "PGRST103") {
+    const first = await query.range(0, 0);
+    if (first.error) throw first.error;
+    return { data: [], success: true, total: first.count ?? 0 };
+  }
 
   if (error) {
     message.error(error.message);
@@ -479,15 +438,10 @@ export async function requestShipmentRecords(
     };
   }
 
-  const shipmentRecords = await attachProductMlCodes(
-    ((data ?? []) as ShipmentRecordWithTrack[]).map(({ shipment_track, ...record }) => {
-      const track = Array.isArray(shipment_track) ? shipment_track[0] : shipment_track;
-      return { ...record, estimated_delivery_time: track?.estimated_delivery_time ?? null };
-    }),
-  );
+  const shipmentRecords = await attachProductMlCodes((data ?? []) as ShipmentRecord[]);
   return {
     data: shipmentRecords.map((item) => {
-      const relabels = relabelMap.get(item.shipment_no?.trim() ?? "") ?? [];
+      const relabels = item.relabel_records ?? [];
       return {
         ...item,
         delivery_status: item.delivery_status ?? "否",
@@ -506,11 +460,8 @@ export async function requestShipmentRecords(
 
 export async function requestShipmentSummary(
   params: ShipmentRequestParams,
+  filters: Record<string, FilterValue | null> = {},
 ): Promise<ShipmentSummary> {
-  const isRelabel = typeof params.is_relabel === "string" ? params.is_relabel.trim() : "";
-  const relabelShipmentNos = isRelabel === "是" || isRelabel === "否"
-    ? [...(await requestShipmentRelabelMap()).keys()]
-    : [];
   const pageSize = 1000;
   let page = 0;
   let summary: ShipmentSummary = {
@@ -524,12 +475,13 @@ export async function requestShipmentSummary(
     const from = page * pageSize;
     const to = from + pageSize - 1;
     let query = supabase
-      .from("shipment_records")
+      .from("shipment_list_view")
       .select("box_count, total_qty, goods_value")
       .eq("status", "有效")
+      .order("id", { ascending: true })
       .range(from, to);
 
-    query = applyShipmentSearchParams(query, params, relabelShipmentNos);
+    query = applyShipmentColumnFilters(applyShipmentSearchParams(query, params), filters);
 
     const { data, error } = await query;
 

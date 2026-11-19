@@ -23,6 +23,7 @@ test("未设置时使用40天，保存自定义天数后重新计算，未开船
   });
   const requests = loadModule("./shipment-tracks-request.ts", {
     "@/lib/supabase": { supabase: {} },
+    "@/lib/table-pagination": loadModule("../../../lib/table-pagination.ts"),
     "./shipment-tracks": estimates,
   });
   const initial = await requests.updateShipmentTrackRecord(row.id, {});

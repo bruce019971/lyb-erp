@@ -13,9 +13,9 @@ import {
 } from "@ant-design/icons";
 import type { ActionType } from "@ant-design/pro-components";
 import { ProTable } from "@ant-design/pro-components";
+import { useServerTable } from "@/hooks/use-server-table";
 import type { FormInstance } from "antd";
 import { App, Button, Space, Switch, Table, Tooltip, Typography } from "antd";
-import type { Key } from "react";
 import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -78,12 +78,12 @@ type ShipmentsTableProps = {
 
 const STORAGE_PREFIX = "mercado-inbound-planning:shipments";
 const COLUMNS_STATE_STORAGE_KEY = `${STORAGE_PREFIX}:columns:v3`;
-const SHIPMENTS_TABLE_SCROLL_Y_COLLAPSED = "calc(100vh - 360px)";
-const SHIPMENTS_TABLE_SCROLL_Y_EXPANDED = "calc(100vh - 520px)";
+const SHIPMENTS_TABLE_SCROLL_Y_COLLAPSED = "calc(100vh - 408px)";
+const SHIPMENTS_TABLE_SCROLL_Y_EXPANDED = "calc(100vh - 568px)";
 
 type ShipmentColumnsState = Record<string, { show?: boolean }>;
 
-export type ShipmentsTableAction = ActionType & {
+export type ShipmentsTableAction = Pick<ActionType, "reload" | "reloadAndRest"> & {
   prependCreatedRecord: (record: ShipmentRecord) => boolean;
 };
 
@@ -130,27 +130,6 @@ function formatSummaryMoney(value: number) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
-}
-
-function toFiniteNumber(value?: number | null) {
-  return typeof value === "number" && Number.isFinite(value) ? value : 0;
-}
-
-function hasActiveSearchValue(value: unknown): boolean {
-  if (Array.isArray(value)) return value.some(hasActiveSearchValue);
-  if (typeof value === "string") return Boolean(value.trim());
-  return value !== undefined && value !== null && value !== "";
-}
-
-function normalizeCreatedShipmentRecord(record: ShipmentRecord): ShipmentRecord {
-  return {
-    ...record,
-    delivery_status: record.delivery_status ?? "否",
-    relabel_delivery_times: record.relabel_delivery_times ?? [],
-    relabel_records: record.relabel_records ?? [],
-    is_relabel: record.relabel_records?.length ? "是" : "否",
-    is_delivery_completed: record.delivery_status === "是",
-  };
 }
 
 function buildRequestParams(
@@ -275,16 +254,10 @@ export default function ShipmentsTable({
     [message, storeOptions],
   );
   const searchParamsRef = useRef<Record<string, unknown>>({});
-  const [dataSource, setDataSource] = useState<ShipmentRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
   const [editingInstructionId, setEditingInstructionId] = useState<string | null>(null);
   const [instructionUpdating, setInstructionUpdating] = useState(false);
   const [batchInstructionUpdating, setBatchInstructionUpdating] = useState(false);
   const [batchDelivering, setBatchDelivering] = useState(false);
-  const [reloadRequest, setReloadRequest] = useState(0);
-  const [summary, setSummary] = useState<ShipmentSummary | null>(null);
-  const [summaryLoading, setSummaryLoading] = useState(false);
   const [searchCollapsed, setSearchCollapsed] = useState(true);
   const [longTermInventoryOnly, setLongTermInventoryOnly] = useState(false);
   const [expiringShipmentsOnly, setExpiringShipmentsOnly] = useState(false);
@@ -303,10 +276,14 @@ export default function ShipmentsTable({
       ),
     [storeOptions],
   );
-  const selectedRecords = useMemo(() => {
-    const selectedIdSet = new Set(selectedRowKeys.map((item) => String(item)));
-    return dataSource.filter((item) => selectedIdSet.has(item.id));
-  }, [dataSource, selectedRowKeys]);
+  const buildParams = useCallback((params: Record<string, unknown>) => buildRequestParams(
+    params, longTermInventoryOnly, expiringShipmentsOnly, localStoreNames,
+  ), [longTermInventoryOnly, expiringShipmentsOnly, localStoreNames]);
+  const {
+    dataSource, setDataSource, loading, summary, summaryLoading,
+    selectedRowKeys, setSelectedRowKeys, selectedRecords, onSelectionChange,
+    loadRecords, reload, refresh, pagination, onTableChange,
+  } = useServerTable<ShipmentRecord, ShipmentSummary>({ request: requestShipmentRecords, requestSummary: requestShipmentSummary, buildParams });
 
   const selectedInstructionRecords = selectedRecords.filter(canEditShipmentInstructionStatus);
   const selectedDeliverableRecords = selectedRecords.filter((record) =>
@@ -329,12 +306,13 @@ export default function ShipmentsTable({
         : item));
       setEditingInstructionId(null);
       message.success("是否提交指令已更新");
+      await refresh();
     } catch (error) {
       message.error(error instanceof Error ? error.message : "是否提交指令更新失败");
     } finally {
       setInstructionUpdating(false);
     }
-  }, [statusUpdating, message]);
+  }, [statusUpdating, message, setDataSource, refresh]);
 
   async function handleBatchInstructionStatus() {
     if (statusUpdating || loading || !selectedInstructionRecords.length) return;
@@ -349,6 +327,7 @@ export default function ShipmentsTable({
         return updated ? { ...item, ...updated, is_relabel: item.is_relabel } : item;
       }));
       setSelectedRowKeys((current) => current.filter((id) => !updatedById.has(String(id))));
+      if (succeeded.length) await refresh();
       const skipped = selectedRecords.length - selectedInstructionRecords.length;
       const summary = `已将 ${succeeded.length} 条货件的是否提交指令设置为“是”`;
       if (failures.length) {
@@ -388,7 +367,7 @@ export default function ShipmentsTable({
       }
       if (succeeded.length) {
         try {
-          await reloadFirstPage();
+          await refresh();
         } catch {
           message.warning("状态已更新，但列表刷新失败，请手动刷新");
         }
@@ -413,92 +392,15 @@ export default function ShipmentsTable({
         ),
       );
     },
-    [],
-  );
-
-  const loadRecords = useCallback(
-    async (params: Record<string, unknown>) => {
-      setLoading(true);
-
-      try {
-        setSummaryLoading(true);
-        const requestParams = buildRequestParams(
-          params,
-          longTermInventoryOnly,
-          expiringShipmentsOnly,
-          localStoreNames,
-        );
-
-        const [result, summaryResult] = await Promise.all([
-          requestShipmentRecords(requestParams, {}, {}),
-          requestShipmentSummary(requestParams),
-        ]);
-
-        setSummary(summaryResult);
-        setSummaryLoading(false);
-
-        const nextData = result.data ?? [];
-        setDataSource(nextData);
-        setSelectedRowKeys([]);
-      } finally {
-        setLoading(false);
-        setSummaryLoading(false);
-      }
-    },
-    [expiringShipmentsOnly, localStoreNames, longTermInventoryOnly],
+    [setDataSource],
   );
 
   const reloadFirstPage = useCallback(async () => {
     await loadRecords(searchParamsRef.current);
   }, [loadRecords]);
 
-  const prependCreatedRecord = useCallback((record: ShipmentRecord) => {
-    // 新建接口未返回关联信息时，重新读取列表以获取实际换标记录。
-    if (record.relabel_records === undefined) return false;
-
-    const hasActiveSearch = Object.values(searchParamsRef.current).some(
-      hasActiveSearchValue,
-    );
-
-    if (hasActiveSearch || longTermInventoryOnly || expiringShipmentsOnly) {
-      return false;
-    }
-
-    const normalizedRecord = normalizeCreatedShipmentRecord(record);
-
-    setDataSource((current) => {
-      if (current.some((item) => item.id === normalizedRecord.id)) {
-        return current;
-      }
-
-      return [normalizedRecord, ...current];
-    });
-    setSummary((current) =>
-      current
-        ? {
-            boxCount: Number(
-              (
-                current.boxCount + toFiniteNumber(normalizedRecord.box_count)
-              ).toFixed(2),
-            ),
-            totalQty: Number(
-              (
-                current.totalQty + toFiniteNumber(normalizedRecord.total_qty)
-              ).toFixed(2),
-            ),
-            goodsValue: Number(
-              (
-                current.goodsValue + toFiniteNumber(normalizedRecord.goods_value)
-              ).toFixed(2),
-            ),
-            total: current.total + 1,
-          }
-        : current,
-    );
-    setSelectedRowKeys([]);
-
-    return true;
-  }, [expiringShipmentsOnly, longTermInventoryOnly]);
+  // A new row must be reloaded with the active server filters/order/page limit.
+  const prependCreatedRecord = useCallback(() => false, []);
 
   const handleGenerateCartonLabel = useCallback(
     async (record: ShipmentRecord) => {
@@ -529,7 +431,7 @@ export default function ShipmentsTable({
         }
 
         message.success(`${shipmentNo}外箱标签生成成功`);
-        setReloadRequest((value) => value + 1);
+        await refresh();
       } catch (error) {
         message.error(
           error instanceof Error ? error.message : "外箱标签生成失败",
@@ -543,6 +445,7 @@ export default function ShipmentsTable({
       onFinishGenerateCartonLabel,
       onStartGenerateCartonLabel,
       updateShipmentRow,
+      refresh,
     ],
   );
 
@@ -607,21 +510,13 @@ export default function ShipmentsTable({
   }, [reloadFirstPage]);
 
   useEffect(() => {
-    if (reloadRequest === 0) return;
-
-    void reloadFirstPage();
-  }, [reloadFirstPage, reloadRequest]);
-
-  useEffect(() => {
     if (!actionRef) return;
 
     actionRef.current = {
-      reload: () => {
-        void reloadFirstPage();
-      },
+      reload,
       reloadAndRest: () => {
         searchParamsRef.current = {};
-        void loadRecords({});
+        return loadRecords({});
       },
       prependCreatedRecord,
     } as ShipmentsTableAction;
@@ -629,7 +524,7 @@ export default function ShipmentsTable({
     return () => {
       actionRef.current = undefined;
     };
-  }, [actionRef, loadRecords, prependCreatedRecord, reloadFirstPage]);
+  }, [actionRef, loadRecords, prependCreatedRecord, reload]);
 
   return (
     <ProTable<ShipmentRecord>
@@ -673,9 +568,7 @@ export default function ShipmentsTable({
         selectedRowKeys,
         preserveSelectedRowKeys: true,
         getCheckboxProps: () => ({ disabled: statusUpdating }),
-        onChange: (keys) => {
-          setSelectedRowKeys(keys);
-        },
+        onChange: onSelectionChange,
       }}
       rowClassName={(record) => {
         if (record.is_delivery_completed || record.delivery_status === "是") return "shipment-delivered-row";
@@ -779,7 +672,7 @@ export default function ShipmentsTable({
       options={{
         density: false,
         fullScreen: false,
-        reload: false,
+        reload: () => { void reload(); },
         setting: true,
       }}
       toolBarRender={() => {
@@ -895,7 +788,8 @@ export default function ShipmentsTable({
 
         return actions;
       }}
-      pagination={false}
+      pagination={pagination}
+      onChange={onTableChange}
       dateFormatter="string"
     />
   );

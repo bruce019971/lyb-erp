@@ -5,10 +5,9 @@ import { App, ConfigProvider, Modal, message } from "antd";
 import zhCN from "antd/locale/zh_CN";
 import { useEffect, useRef, useState } from "react";
 
-import type { ShipmentOption } from "../../shipments/_lib/shipments";
+import { requestShipmentTrackFilterOptions, type ShipmentTrackFilterOptions } from "../_lib/shipment-tracks-request";
 import {
   getRishenghuiAccessToken,
-  requestShipmentOptions,
 } from "../../shipments/_lib/shipments-request";
 import {
   clearStoredRishenghuiAccessToken,
@@ -25,7 +24,7 @@ export default function ShipmentTracksPage() {
   const [mounted, setMounted] = useState(false);
   const [rishenghuiAuthOpen, setRishenghuiAuthOpen] = useState(false);
   const [rishenghuiAccessToken, setRishenghuiAccessToken] = useState("");
-  const [shipmentOptions, setShipmentOptions] = useState<ShipmentOption[]>([]);
+  const [shipmentOptions, setShipmentOptions] = useState<ShipmentTrackFilterOptions>({ order_stores: [], product_names: [], logistics_providers: [] });
   const [messageApi, contextHolder] = message.useMessage();
   const [modalApi, modalContextHolder] = Modal.useModal();
   const tableActionRef = useRef<ActionType>(undefined);
@@ -55,13 +54,13 @@ export default function ShipmentTracksPage() {
 
     async function loadOptions() {
       try {
-        const options = await requestShipmentOptions();
+        const options = await requestShipmentTrackFilterOptions();
         if (!cancelled) {
           setShipmentOptions(options);
         }
       } catch (error) {
         if (!cancelled) {
-          setShipmentOptions([]);
+          setShipmentOptions({ order_stores: [], product_names: [], logistics_providers: [] });
         }
         messageApi.error(
           error instanceof Error ? error.message : "货件选项加载失败",

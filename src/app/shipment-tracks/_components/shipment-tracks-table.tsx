@@ -3,6 +3,7 @@
 import type { ActionType } from "@ant-design/pro-components";
 import { SyncOutlined } from "@ant-design/icons";
 import { ProTable } from "@ant-design/pro-components";
+import { useServerTable } from "@/hooks/use-server-table";
 import {
   App,
   Button,
@@ -15,15 +16,14 @@ import {
   Typography,
 } from "antd";
 import type { Dayjs } from "dayjs";
-import type { Key, MutableRefObject } from "react";
+import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { ShipmentOption } from "../../shipments/_lib/shipments";
+import type { ShipmentTrackFilterOptions } from "../_lib/shipment-tracks-request";
 import {
   getRequiredTangchaoAuthKey,
   requestShipmentTrackRecords,
   requestShipmentTrackSummary,
-  type ShipmentTrackSummary,
   updateShipmentTrackRecord,
   updateTangchaoShipmentTrack,
   updateRishenghuiShipmentTrack,
@@ -42,7 +42,7 @@ import { getShipmentTrackColumns } from "./shipment-tracks-columns";
 
 type ShipmentTracksTableProps = {
   actionRef?: MutableRefObject<ActionType | undefined>;
-  shipmentOptions: ShipmentOption[];
+  shipmentOptions: ShipmentTrackFilterOptions;
   rishenghuiAccessToken: string;
   onRequireRishenghuiToken: (
     content?: string,
@@ -50,8 +50,8 @@ type ShipmentTracksTableProps = {
   ) => void;
 };
 
-const SHIPMENT_TRACKS_TABLE_SCROLL_Y_COLLAPSED = "calc(100vh - 280px)";
-const SHIPMENT_TRACKS_TABLE_SCROLL_Y_EXPANDED = "calc(100vh - 420px)";
+const SHIPMENT_TRACKS_TABLE_SCROLL_Y_COLLAPSED = "calc(100vh - 328px)";
+const SHIPMENT_TRACKS_TABLE_SCROLL_Y_EXPANDED = "calc(100vh - 468px)";
 const TRACK_UPDATE_PROVIDER_NAMES = ["赛易", "日升辉", "通途", "唐朝"];
 const COLUMNS_STATE_STORAGE_KEY =
   "mercado-inbound-planning:shipment-tracks:columns:v1";
@@ -118,16 +118,11 @@ export default function ShipmentTracksTable({
   shipmentOptions,
 }: ShipmentTracksTableProps) {
   const searchParamsRef = useRef<Record<string, unknown>>({});
-  const [dataSource, setDataSource] = useState<ShipmentTrackRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [summary, setSummary] = useState<ShipmentTrackSummary | null>(null);
-  const [summaryLoading, setSummaryLoading] = useState(false);
   const [columnsStateMap, setColumnsStateMap] =
     useState<ShipmentTrackColumnsState>(() => readShipmentTrackColumnsState());
   const [batchUpdating, setBatchUpdating] = useState(false);
   const [showOverdueShipments, setShowOverdueShipments] = useState(false);
   const [showDeliveredShipments, setShowDeliveredShipments] = useState(false);
-  const [selectedTrackIds, setSelectedTrackIds] = useState<Key[]>([]);
   const [updatingTrackIds, setUpdatingTrackIds] = useState<string[]>([]);
   const [updatingTrackDateKeys, setUpdatingTrackDateKeys] = useState<string[]>(
     [],
@@ -139,6 +134,17 @@ export default function ShipmentTracksTable({
     useState<ShipmentTrackRecord | null>(null);
   const [searchCollapsed, setSearchCollapsed] = useState(true);
   const { message: messageApi } = App.useApp();
+  const buildParams = useCallback((params: Record<string, unknown>) => ({
+    ...params,
+    show_overdue_shipments: showOverdueShipments,
+    show_delivered_shipments: showDeliveredShipments,
+  }), [showOverdueShipments, showDeliveredShipments]);
+  const {
+    dataSource, setDataSource, loading, summary, summaryLoading,
+    selectedRowKeys: selectedTrackIds, setSelectedRowKeys: setSelectedTrackIds,
+    selectedRecords: selectedTrackRecords, onSelectionChange,
+    loadRecords, reload, refresh, pagination, onTableChange,
+  } = useServerTable({ request: requestShipmentTrackRecords, requestSummary: requestShipmentTrackSummary, buildParams });
 
   function isColumnVisible(key: string) {
     return columnsStateMap[key]?.show !== false;
@@ -202,6 +208,7 @@ export default function ShipmentTracksTable({
         ),
       );
       messageApi.success(`${record.shipment_no || "货件"}轨迹更新成功`);
+      await refresh();
     } catch (error) {
       const description =
         error instanceof Error ? error.message : "轨迹更新失败";
@@ -219,7 +226,7 @@ export default function ShipmentTracksTable({
     } finally {
       setUpdatingTrackIds((current) => current.filter((id) => id !== record.id));
     }
-  }, [messageApi, onRequireRishenghuiToken, requestTrackUpdate]);
+  }, [messageApi, onRequireRishenghuiToken, requestTrackUpdate, setDataSource, refresh]);
 
   const handleUpdateTrack = useCallback(async (
     record: ShipmentTrackRecord,
@@ -241,11 +248,6 @@ export default function ShipmentTracksTable({
     rishenghuiAccessToken,
     runUpdateTrack,
   ]);
-
-  const selectedTrackRecords = useMemo(() => {
-    const selectedIdSet = new Set(selectedTrackIds);
-    return dataSource.filter((item) => selectedIdSet.has(item.id));
-  }, [dataSource, selectedTrackIds]);
 
   const handleBatchUpdateTracks = useCallback(async (
     records: ShipmentTrackRecord[],
@@ -287,6 +289,7 @@ export default function ShipmentTracksTable({
     }
 
     if (successCount > 0) {
+      await refresh();
       messageApi.success(`轨迹批量更新完成：成功 ${successCount} 个`);
     }
 
@@ -307,6 +310,9 @@ export default function ShipmentTracksTable({
   }, [
     messageApi,
     requestTrackUpdate,
+    setDataSource,
+    setSelectedTrackIds,
+    refresh,
   ]);
 
   const handleBatchUpdateTracksClick = useCallback(() => {
@@ -407,6 +413,7 @@ export default function ShipmentTracksTable({
         ),
       );
       messageApi.success("货件轨迹更新成功");
+      await refresh();
     } catch (error) {
       messageApi.error(
         error instanceof Error ? error.message : "货件轨迹更新失败",
@@ -419,7 +426,7 @@ export default function ShipmentTracksTable({
         current === updateKey ? null : current,
       );
     }
-  }, [getTrackDateKey, messageApi]);
+  }, [getTrackDateKey, messageApi, setDataSource, refresh]);
 
   const isTrackDateEditing = useCallback(
     (record: ShipmentTrackRecord, field: ShipmentTrackEditableField) =>
@@ -434,17 +441,17 @@ export default function ShipmentTracksTable({
   );
 
   const orderStoreOptions = useMemo(
-    () => buildSelectOptions(shipmentOptions.map((item) => item.order_store)),
+    () => buildSelectOptions(shipmentOptions.order_stores),
     [shipmentOptions],
   );
   const productSelectOptions = useMemo(
-    () => buildSelectOptions(shipmentOptions.map((item) => item.product_name)),
+    () => buildSelectOptions(shipmentOptions.product_names),
     [shipmentOptions],
   );
   const logisticsProviderOptions = useMemo(
     () =>
       buildSelectOptions(
-        shipmentOptions.map((item) => item.logistics_provider),
+        shipmentOptions.logistics_providers,
       ),
     [shipmentOptions],
   );
@@ -478,35 +485,6 @@ export default function ShipmentTracksTable({
     ],
   );
 
-  const loadRecords = useCallback(
-    async (params: Record<string, unknown>) => {
-      setLoading(true);
-
-      try {
-        setSummaryLoading(true);
-        const requestParams = {
-          ...params,
-          show_overdue_shipments: showOverdueShipments,
-          show_delivered_shipments: showDeliveredShipments,
-        };
-        const [result, summaryResult] = await Promise.all([
-          requestShipmentTrackRecords(requestParams),
-          requestShipmentTrackSummary(requestParams),
-        ]);
-        const nextData = result.data ?? [];
-
-        setSummary(summaryResult);
-        setSummaryLoading(false);
-        setDataSource(nextData);
-        setSelectedTrackIds([]);
-      } finally {
-        setLoading(false);
-        setSummaryLoading(false);
-      }
-    },
-    [showDeliveredShipments, showOverdueShipments],
-  );
-
   const reloadFirstPage = useCallback(async () => {
     await loadRecords(searchParamsRef.current);
   }, [loadRecords]);
@@ -519,19 +497,17 @@ export default function ShipmentTracksTable({
     if (!actionRef) return;
 
     actionRef.current = {
-      reload: () => {
-        void reloadFirstPage();
-      },
+      reload,
       reloadAndRest: () => {
         searchParamsRef.current = {};
-        void loadRecords({});
+        return loadRecords({});
       },
     } as ActionType;
 
     return () => {
       actionRef.current = undefined;
     };
-  }, [actionRef, loadRecords, reloadFirstPage]);
+  }, [actionRef, loadRecords, reload]);
 
   return (
     <>
@@ -551,7 +527,7 @@ export default function ShipmentTracksTable({
         rowSelection={{
           selectedRowKeys: selectedTrackIds,
           preserveSelectedRowKeys: true,
-          onChange: (keys) => setSelectedTrackIds(keys),
+          onChange: onSelectionChange,
           getCheckboxProps: (record) => ({
             disabled: batchUpdating || isUpdatingTrack(record),
           }),
@@ -575,7 +551,7 @@ export default function ShipmentTracksTable({
         options={{
           density: false,
           fullScreen: false,
-          reload: false,
+          reload: () => { void reload(); },
           setting: true,
         }}
         columnsState={{
@@ -659,7 +635,8 @@ export default function ShipmentTracksTable({
               })()
             : null
         }
-        pagination={false}
+        pagination={pagination}
+        onChange={onTableChange}
         dateFormatter="string"
       />
       <Modal

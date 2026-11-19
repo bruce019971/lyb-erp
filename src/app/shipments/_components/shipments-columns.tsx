@@ -7,7 +7,6 @@ import {
 } from "@ant-design/icons";
 import type { ProColumns } from "@ant-design/pro-components";
 import { Button, Select, Tooltip, Typography } from "antd";
-import type { SortOrder } from "antd/es/table/interface";
 
 import {
   formatShipmentDate,
@@ -42,22 +41,6 @@ function renderNowrapShipmentDate(value?: string | null) {
       {formatShipmentDate(value)}
     </Typography.Text>
   );
-}
-
-function compareShipmentDates(
-  left: string | null | undefined,
-  right: string | null | undefined,
-  order?: SortOrder,
-) {
-  const leftTime = left ? Date.parse(`${left.slice(0, 10)}T00:00:00Z`) : NaN;
-  const rightTime = right ? Date.parse(`${right.slice(0, 10)}T00:00:00Z`) : NaN;
-  const leftMissing = !Number.isFinite(leftTime);
-  const rightMissing = !Number.isFinite(rightTime);
-  if (leftMissing && rightMissing) return 0;
-  // Ant Design 会反转降序比较结果，空日期在两个方向都放在末尾。
-  if (leftMissing) return order === "descend" ? -1 : 1;
-  if (rightMissing) return order === "descend" ? 1 : -1;
-  return leftTime - rightTime;
 }
 
 function safeFilePart(value?: string | null) {
@@ -423,9 +406,7 @@ export function getShipmentColumns(
     {
       title: "到仓时间",
       dataIndex: "overseas_warehouse_arrived_at",
-      sorter: (left, right, order) => compareShipmentDates(
-        left.overseas_warehouse_arrived_at, right.overseas_warehouse_arrived_at, order,
-      ),
+      sorter: true,
       sortDirections: ["ascend", "descend"],
       valueType: "dateRange",
       width: 110,
@@ -436,13 +417,7 @@ export function getShipmentColumns(
     {
       title: "送仓时间",
       dataIndex: "appointment_time",
-      sorter: (left, right, order) => compareShipmentDates(
-        left.is_relabel === "是" && left.relabel_delivery_times?.length
-          ? left.relabel_delivery_times[0] : left.appointment_time,
-        right.is_relabel === "是" && right.relabel_delivery_times?.length
-          ? right.relabel_delivery_times[0] : right.appointment_time,
-        order,
-      ),
+      sorter: true,
       sortDirections: ["ascend", "descend"],
       tooltip: "多条送仓时间时，按首条显示的时间排序",
       valueType: "dateRange",
