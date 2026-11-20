@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 
 import { APP_SESSION_COOKIE, verifySessionToken } from "@/lib/app-session";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { getPageRange } from "@/lib/table-pagination";
 import {
   SALEASY_TRANSPORT_PLAN_LIST_PATH,
   extractRows,
@@ -166,7 +167,7 @@ function getFiniteNumber(value: unknown) {
   return 0;
 }
 
-function addSummaryValue(summary: FreightSummary, row: FreightRow) {
+function addSummaryValue(summary: FreightSummary, row: FreightSummary) {
   summary.volume += getFiniteNumber(row.volume);
   summary.total_fee += getFiniteNumber(row.total_fee);
   summary.bill_amount += getFiniteNumber(row.bill_amount);
@@ -619,6 +620,47 @@ async function appendSaleasyPlanInfo(
   }
 }
 
+interface FreightSearchQuery {
+  eq(field: string, value: string): unknown;
+  in(field: string, values: string[]): unknown;
+  gte(field: string, value: string): unknown;
+  lte(field: string, value: string): unknown;
+  not(field: string, operator: string, value: null): unknown;
+  is(field: string, value: null): unknown;
+  or(filters: string): unknown;
+}
+
+async function getFreightFilterOptions(
+  searchParams: URLSearchParams,
+  adminClient: ReturnType<typeof createSupabaseAdminClient>,
+) {
+  const field = searchParams.get("field");
+  const keyword = searchParams.get("keyword")?.trim() ?? "";
+  let values: string[];
+  if (field === "order_store" || field === "product_name") {
+    // Reuse the distinct values view introduced with shipment pagination.
+    const column = field === "order_store" ? "order_stores" : "product_names";
+    const { data, error } = await adminClient.from("shipment_track_filter_options")
+      .select(column).single();
+    if (error) throw error;
+    values = ((data as unknown as Record<string, string[]>)[column] ?? [])
+      .filter((value) => value.toLowerCase().includes(keyword.toLowerCase()));
+  } else if (field === "shipment_no" || field === "tracking_no") {
+    let query = adminClient.from("shipment_records").select(field)
+      .eq("status", "有效").not(field, "is", null)
+      .order("created_at", { ascending: false, nullsFirst: false })
+      .order("id", { ascending: true }).limit(50);
+    if (keyword) query = query.ilike(field, `%${keyword}%`);
+    const { data, error } = await query;
+    if (error) throw error;
+    values = (data as unknown as Record<string, string>[] ?? []).map((row) => row[field]);
+  } else {
+    throw new Error("不支持的筛选字段");
+  }
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)))
+    .map((value) => ({ label: value, value }));
+}
+
 export async function GET(request: Request) {
   try {
     await verifyOperator();
@@ -649,168 +691,86 @@ export async function GET(request: Request) {
       searchParams.getAll("freight_paid_status"),
     );
     const adminClient = createSupabaseAdminClient();
-    let matchedShipmentIds: string[] | null = null;
-
-    if (
-      shipmentNoValues.length > 0 ||
-      trackingNoValues.length > 0 ||
-      productNameValues.length > 0 ||
-      orderStoreValues.length > 0 ||
-      logisticsProviderValues.length > 0 ||
-      Boolean(createdAtStart) ||
-      Boolean(createdAtEnd)
-    ) {
-      let shipmentQuery = adminClient
-        .from("shipment_records")
-        .select("id")
-        .eq("status", "有效");
-
-      if (shipmentNoValues.length > 0) {
-        shipmentQuery = shipmentQuery.in("shipment_no", shipmentNoValues);
-      }
-
-      if (trackingNoValues.length > 0) {
-        shipmentQuery = shipmentQuery.in("tracking_no", trackingNoValues);
-      }
-
-      if (productNameValues.length > 0) {
-        shipmentQuery = shipmentQuery.in("product_name", productNameValues);
-      }
-
-      if (orderStoreValues.length > 0) {
-        shipmentQuery = shipmentQuery.in("order_store", orderStoreValues);
-      }
-
-      if (logisticsProviderValues.length > 0) {
-        shipmentQuery = shipmentQuery.in(
-          "logistics_provider",
-          logisticsProviderValues,
-        );
-      }
-
-      if (createdAtStart) {
-        shipmentQuery = shipmentQuery.gte(
-          "created_at",
-          normalizeCreatedAtBoundary(createdAtStart, "start"),
-        );
-      }
-
-      if (createdAtEnd) {
-        shipmentQuery = shipmentQuery.lte(
-          "created_at",
-          normalizeCreatedAtBoundary(createdAtEnd, "end"),
-        );
-      }
-
-      const { data: shipmentRows, error: shipmentError } = await shipmentQuery;
-
-      if (shipmentError) {
-        throw shipmentError;
-      }
-
-      matchedShipmentIds = (shipmentRows ?? [])
-        .map((item) => item.id)
-        .filter((item): item is string => Boolean(item));
+    if (searchParams.get("mode") === "options") {
+      return NextResponse.json({ options: await getFreightFilterOptions(searchParams, adminClient) });
     }
 
-    if (matchedShipmentIds && matchedShipmentIds.length === 0) {
-      return NextResponse.json({
-        data: [],
-        total: 0,
-        summary: normalizeSummary({
-          volume: 0,
-          total_fee: 0,
-          bill_amount: 0,
-        }),
-      });
-    }
-
-    const runFreightQueries = async (includeExtraFeeRemark: boolean) => {
-      const selectFields = includeExtraFeeRemark
-        ? FREIGHT_SELECT_WITH_EXTRA_FEE_REMARK
-        : FREIGHT_SELECT;
-      let query = adminClient
-        .from("freight_records")
-        .select(selectFields, { count: "exact" })
-        .eq("shipment.status", "有效");
-      let summaryQuery = adminClient
-        .from("freight_records")
-        .select(selectFields)
-        .eq("shipment.status", "有效");
-
-      if (matchedShipmentIds && matchedShipmentIds.length > 0) {
-        query = query.in("shipment_record_id", matchedShipmentIds);
-        summaryQuery = summaryQuery.in("shipment_record_id", matchedShipmentIds);
+    function applyFilters(query: FreightSearchQuery) {
+      query.eq("shipment.status", "有效");
+      for (const [field, values] of Object.entries({
+        shipment_no: shipmentNoValues, tracking_no: trackingNoValues,
+        product_name: productNameValues, order_store: orderStoreValues,
+        logistics_provider: logisticsProviderValues,
+      })) {
+        if (values.length) query.in(`shipment.${field}`, values);
       }
-
+      if (createdAtStart) query.gte("shipment.created_at", normalizeCreatedAtBoundary(createdAtStart, "start"));
+      if (createdAtEnd) query.lte("shipment.created_at", normalizeCreatedAtBoundary(createdAtEnd, "end"));
       if (billIssuedValues.includes("是") && !billIssuedValues.includes("否")) {
-        query = query.not("bill_amount", "is", null);
-        summaryQuery = summaryQuery.not("bill_amount", "is", null);
-      } else if (
-        billIssuedValues.includes("否") &&
-        !billIssuedValues.includes("是")
-      ) {
-        query = query.is("bill_amount", null);
-        summaryQuery = summaryQuery.is("bill_amount", null);
+        query.not("bill_amount", "is", null);
+      } else if (billIssuedValues.includes("否") && !billIssuedValues.includes("是")) {
+        query.is("bill_amount", null);
       }
-
-      if (
-        freightPaidStatusValues.includes("是") &&
-        !freightPaidStatusValues.includes("否")
-      ) {
-        query = query.eq("freight_paid_status", "是");
-        summaryQuery = summaryQuery.eq("freight_paid_status", "是");
-      } else if (
-        freightPaidStatusValues.includes("否") &&
-        !freightPaidStatusValues.includes("是")
-      ) {
-        query = query.or("freight_paid_status.is.null,freight_paid_status.eq.否");
-        summaryQuery = summaryQuery.or(
-          "freight_paid_status.is.null,freight_paid_status.eq.否",
-        );
+      if (freightPaidStatusValues.includes("是") && !freightPaidStatusValues.includes("否")) {
+        query.eq("freight_paid_status", "是");
+      } else if (freightPaidStatusValues.includes("否") && !freightPaidStatusValues.includes("是")) {
+        query.or("freight_paid_status.is.null,freight_paid_status.eq.否");
       }
+    }
 
-      return Promise.all([query, summaryQuery]);
+    // Totals are requested separately, contain only numeric fields, and are not
+    // recomputed on page changes. Traverse all matches beyond the API row cap.
+    if (searchParams.get("mode") === "summary") {
+      const summary: FreightSummary = { volume: 0, total_fee: 0, bill_amount: 0 };
+      let totalMatches = Infinity;
+      const fields: string = "volume, total_fee, bill_amount, shipment:shipment_records!inner(id)";
+      for (let from = 0; ; from += 1000) {
+        const query = adminClient.from("freight_records").select(fields, {
+          count: from === 0 ? "exact" : undefined,
+        });
+        applyFilters(query);
+        const { data, error, count } = await query
+          .order("id", { ascending: true }).range(from, from + 999);
+        if (error) throw error;
+        if (count !== null) totalMatches = count;
+        const rows = (data ?? []) as unknown as FreightSummary[];
+        rows.forEach((row) => addSummaryValue(summary, row));
+        if (rows.length < 1000 || from + rows.length >= totalMatches) break;
+      }
+      return NextResponse.json({ summary: normalizeSummary(summary) });
+    }
+
+    const { from, to } = getPageRange({
+      current: searchParams.has("current") ? Number(searchParams.get("current")) : undefined,
+      pageSize: searchParams.has("pageSize") ? Number(searchParams.get("pageSize")) : undefined,
+    });
+    // Displayed order time belongs to the shipment, not the freight record.
+    const ascending = searchParams.get("sortField") === "created_at" && searchParams.get("sortOrder") === "ascend";
+    const makeListQuery = (includeExtraFeeRemark: boolean) => {
+      const fields: string = includeExtraFeeRemark ? FREIGHT_SELECT_WITH_EXTRA_FEE_REMARK : FREIGHT_SELECT;
+      const query = adminClient.from("freight_records").select(fields, { count: "exact" });
+      applyFilters(query);
+      return query.order("shipment(created_at)", { ascending, nullsFirst: false })
+        .order("id", { ascending: true }).returns<FreightRow[]>();
     };
 
-    let [listResult, summaryResult] = await runFreightQueries(true);
-
-    if (
-      isMissingExtraFeeRemarkError(listResult.error) ||
-      isMissingExtraFeeRemarkError(summaryResult.error)
-    ) {
-      [listResult, summaryResult] = await runFreightQueries(false);
+    let includeExtraFeeRemark = true;
+    let listQuery = makeListQuery(includeExtraFeeRemark);
+    let result = await listQuery.range(from, to);
+    if (isMissingExtraFeeRemarkError(result.error)) {
+      includeExtraFeeRemark = false;
+      listQuery = makeListQuery(includeExtraFeeRemark);
+      result = await listQuery.range(from, to);
     }
-    const { data, error, count } = listResult;
-
-    if (error) {
-      throw error;
+    // Let the table move back to the last page after rows cease matching.
+    if (result.error?.code === "PGRST103") {
+      const first = await listQuery.range(0, 0);
+      if (first.error) throw first.error;
+      return NextResponse.json({ data: [], total: first.count ?? 0 });
     }
-
-    if (summaryResult.error) {
-      throw summaryResult.error;
-    }
-
-    const summary = ((summaryResult.data ?? []) as unknown as FreightRow[]).reduce(
-      (result, row) => {
-        addSummaryValue(result, row);
-        return result;
-      },
-      {
-        volume: 0,
-        total_fee: 0,
-        bill_amount: 0,
-      },
-    );
-
-    const records = ((data ?? []) as unknown as FreightRow[])
-      .map(normalizeFreightRow)
-      .sort((left, right) => {
-        const leftTime = left.created_at ? Date.parse(left.created_at) : 0;
-        const rightTime = right.created_at ? Date.parse(right.created_at) : 0;
-
-        return rightTime - leftTime;
-      });
+    const { data, error, count } = result;
+    if (error) throw error;
+    const records = ((data ?? []) as unknown as FreightRow[]).map(normalizeFreightRow);
     const recordsWithSaleasyPlanInfo = await appendSaleasyPlanInfo(
       records,
       adminClient,
@@ -820,7 +780,6 @@ export async function GET(request: Request) {
     return NextResponse.json({
       data: recordsWithSaleasyPlanInfo,
       total: count ?? 0,
-      summary: normalizeSummary(summary),
     });
   } catch (error) {
     const message =

@@ -1,3 +1,5 @@
+import type { SortOrder } from "antd/es/table/interface";
+import { getPageRange } from "@/lib/table-pagination";
 import {
   calculateFreightTotalFee,
   calculateFreightUnitFee,
@@ -56,7 +58,7 @@ function splitSearchTexts(value: unknown) {
     .filter(Boolean);
 }
 
-export async function requestFreightRecords(params: FreightRequestParams) {
+function buildFreightSearchParams(params: FreightRequestParams) {
   const searchParams = new URLSearchParams();
 
   splitSearchTexts(params.shipment_no).forEach((value) => {
@@ -84,26 +86,42 @@ export async function requestFreightRecords(params: FreightRequestParams) {
     searchParams.append("freight_paid_status", value);
   });
 
-  const response = await fetch(`/api/freights?${searchParams.toString()}`);
-  const payload = (await response.json().catch(() => null)) as
-    | {
-        data?: FreightRecord[];
-        total?: number;
-        summary?: FreightSummary;
-        error?: string;
-      }
-    | null;
+  return searchParams;
+}
 
-  if (!response.ok) {
-    return { data: [], success: false, total: 0, summary: null };
+export async function requestFreightRecords(
+  params: FreightRequestParams,
+  sorter: Record<string, SortOrder> = {},
+) {
+  const searchParams = buildFreightSearchParams(params);
+  const { current, pageSize } = getPageRange(params);
+  searchParams.set("current", String(current));
+  searchParams.set("pageSize", String(pageSize));
+  if (sorter.created_at) {
+    searchParams.set("sortField", "created_at");
+    searchParams.set("sortOrder", sorter.created_at);
   }
+  const response = await fetch(`/api/freights?${searchParams}`);
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload?.error || "运费列表读取失败");
+  return { data: (payload.data ?? []) as FreightRecord[], success: true, total: Number(payload.total ?? 0) };
+}
 
-  return {
-    data: payload?.data ?? [],
-    success: true,
-    total: payload?.total ?? 0,
-    summary: payload?.summary ?? null,
-  };
+export async function requestFreightSummary(params: FreightRequestParams): Promise<FreightSummary> {
+  const searchParams = buildFreightSearchParams(params);
+  searchParams.set("mode", "summary");
+  const response = await fetch(`/api/freights?${searchParams}`);
+  const payload = await response.json();
+  if (!response.ok || !payload?.summary) throw new Error(payload?.error || "运费合计读取失败");
+  return payload.summary;
+}
+
+export async function requestFreightFilterOptions(field: string, keyword?: string) {
+  const params = new URLSearchParams({ mode: "options", field, keyword: keyword ?? "" });
+  const response = await fetch(`/api/freights?${params}`);
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload?.error || "筛选选项读取失败");
+  return (payload.options ?? []) as Array<{ label: string; value: string }>;
 }
 
 function normalizeNumberValue(value?: number | null) {

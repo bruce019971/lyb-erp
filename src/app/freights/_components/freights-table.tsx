@@ -4,19 +4,20 @@ import { CheckCircleOutlined, FileSearchOutlined } from "@ant-design/icons";
 import type { ActionType } from "@ant-design/pro-components";
 import { ProTable } from "@ant-design/pro-components";
 import { Button, Table, Tooltip } from "antd";
-import type { Key, MutableRefObject } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { MutableRefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
-import type { ShipmentOption } from "../../shipments/_lib/shipments";
 import type { FreightRecord, FreightSummary } from "../_lib/freights";
-import { requestFreightRecords } from "../_lib/freights-request";
+import { requestFreightRecords, requestFreightSummary } from "../_lib/freights-request";
 import { getBatchBillSkipReason } from "../_lib/freight-bills";
 import { getFreightColumns } from "./freights-columns";
+import { useServerTable } from "@/hooks/use-server-table";
+
+const buildParams = (params: Record<string, unknown>) => params;
 
 type FreightsTableProps = {
   actionRef?: MutableRefObject<ActionType | undefined>;
-  shipmentOptions: ShipmentOption[];
   logisticsOptions: LogisticsProviderOption[];
   onBatchConfirm: (records: FreightRecord[]) => void;
   onBatchGenerateBills: (records: FreightRecord[]) => void;
@@ -82,7 +83,6 @@ function formatSummaryVolume(value?: number | null) {
 
 export default function FreightsTable({
   actionRef,
-  shipmentOptions,
   logisticsOptions,
   onBatchConfirm,
   onBatchGenerateBills,
@@ -130,7 +130,6 @@ export default function FreightsTable({
         isCalculatingFreight,
         isPaidStatusEditing,
         isPaidStatusUpdating,
-        shipmentOptions,
         logisticsOptions,
       ),
     [
@@ -153,41 +152,20 @@ export default function FreightsTable({
       onStartPaidStatusEdit,
       isPaidStatusEditing,
       isPaidStatusUpdating,
-      shipmentOptions,
     ],
   );
   const searchParamsRef = useRef<Record<string, unknown>>({});
-  const [dataSource, setDataSource] = useState<FreightRecord[]>([]);
-  const [summary, setSummary] = useState<FreightSummary | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
-  const selectedRecords = useMemo(() => {
-    const selectedIds = new Set(selectedRowKeys.map((key) => String(key)));
-    return dataSource.filter((record) => selectedIds.has(record.id));
-  }, [dataSource, selectedRowKeys]);
+  const {
+    dataSource, loading, summary, summaryLoading, selectedRecords,
+    selectedRowKeys, onSelectionChange, loadRecords, reload, pagination, onTableChange,
+  } = useServerTable<FreightRecord, FreightSummary>({
+    request: requestFreightRecords, requestSummary: requestFreightSummary, buildParams,
+  });
   const selectedConfirmableRecords = selectedRecords.filter((record) =>
     hasBillAmount(record.bill_amount) && record.freight_paid_status !== "是",
   );
   const selectedBillRecords = selectedRecords.filter((record) => getBatchBillSkipReason(record) === null);
   const batchBusy = isBatchGeneratingBills || isBatchConfirming;
-
-  const loadRecords = useCallback(
-    async (params: Record<string, unknown>) => {
-      setLoading(true);
-
-      try {
-        const result = await requestFreightRecords(params);
-
-        const nextData = result.data ?? [];
-        setDataSource(nextData);
-        setSummary(result.summary ?? null);
-        setSelectedRowKeys([]);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [],
-  );
 
   const reloadFirstPage = useCallback(async () => {
     await loadRecords(searchParamsRef.current);
@@ -201,19 +179,17 @@ export default function FreightsTable({
     if (!actionRef) return;
 
     actionRef.current = {
-      reload: () => {
-        void reloadFirstPage();
-      },
+      reload,
       reloadAndRest: () => {
         searchParamsRef.current = {};
-        void loadRecords({});
+        return loadRecords({});
       },
     } as ActionType;
 
     return () => {
       actionRef.current = undefined;
     };
-  }, [actionRef, loadRecords, reloadFirstPage]);
+  }, [actionRef, loadRecords, reload]);
 
   return (
     <ProTable<FreightRecord>
@@ -226,7 +202,8 @@ export default function FreightsTable({
       rowSelection={{
         type: "checkbox",
         selectedRowKeys,
-        onChange: setSelectedRowKeys,
+        preserveSelectedRowKeys: true,
+        onChange: onSelectionChange,
         getCheckboxProps: (record) => {
           const billed = hasBillAmount(record.bill_amount);
           const confirmed = record.freight_paid_status === "是";
@@ -257,7 +234,7 @@ export default function FreightsTable({
       options={{
         density: false,
         fullScreen: false,
-        reload: false,
+        reload: () => { void reload(); },
         setting: true,
       }}
       tableAlertRender={false}
@@ -294,7 +271,7 @@ export default function FreightsTable({
           </Button>
         </Tooltip>,
       ]}
-      scroll={{ x: 2000, y: "calc(100vh - 360px)" }}
+      scroll={{ x: 2000, y: "calc(100vh - 408px)" }}
       onSubmit={(values) => {
         searchParamsRef.current = values;
         void loadRecords(values);
@@ -303,7 +280,8 @@ export default function FreightsTable({
         searchParamsRef.current = {};
         void loadRecords({});
       }}
-      pagination={false}
+      pagination={{ ...pagination, disabled: batchBusy }}
+      onChange={onTableChange}
       form={{ disabled: batchBusy }}
       dateFormatter="string"
       summary={() => (
@@ -314,19 +292,19 @@ export default function FreightsTable({
               let content = null;
 
               if (key === "shipment_no") {
-                content = "合计";
+                content = summaryLoading ? "合计（计算中）" : "合计";
               }
 
               if (key === "volume") {
-                content = formatSummaryVolume(summary?.volume);
+                content = summary ? formatSummaryVolume(summary.volume) : "—";
               }
 
               if (key === "total_fee") {
-                content = formatSummaryMoney(summary?.total_fee);
+                content = summary ? formatSummaryMoney(summary.total_fee) : "—";
               }
 
               if (key === "bill_amount") {
-                content = formatSummaryMoney(summary?.bill_amount);
+                content = summary ? formatSummaryMoney(summary.bill_amount) : "—";
               }
 
               return (

@@ -12,8 +12,8 @@ import type { ProColumns } from "@ant-design/pro-components";
 import { Button, Select, Tag, Tooltip, Typography } from "antd";
 
 import type { FreightRecord } from "../_lib/freights";
+import { requestFreightFilterOptions } from "../_lib/freights-request";
 import type { LogisticsProviderOption } from "../../logistics/_lib/logistics";
-import type { ShipmentOption } from "../../shipments/_lib/shipments";
 
 const TOKEN_SEPARATORS = [" ", "\n", "\r", "\t", ",", "，"];
 
@@ -52,7 +52,6 @@ export function getFreightColumns(
   isCalculatingFreight: (record: FreightRecord) => boolean,
   isPaidStatusEditing: (record: FreightRecord) => boolean,
   isPaidStatusUpdating: (record: FreightRecord) => boolean,
-  shipmentOptions: ShipmentOption[],
   logisticsOptions: LogisticsProviderOption[],
 ): ProColumns<FreightRecord>[] {
   function canFetchVolume(record: FreightRecord) {
@@ -110,46 +109,6 @@ export function getFreightColumns(
     );
   }
 
-  const shipmentSelectOptions = Array.from(
-    new Set(
-      shipmentOptions
-        .map((item) => item.shipment_no?.trim())
-        .filter((item): item is string => Boolean(item)),
-    ),
-  ).map((item) => ({
-    label: item,
-    value: item,
-  }));
-  const trackingSelectOptions = Array.from(
-    new Set(
-      shipmentOptions
-        .map((item) => item.tracking_no?.trim())
-        .filter((item): item is string => Boolean(item)),
-    ),
-  ).map((item) => ({
-    label: item,
-    value: item,
-  }));
-  const productSelectOptions = Array.from(
-    new Set(
-      shipmentOptions
-        .map((item) => item.product_name?.trim())
-        .filter((item): item is string => Boolean(item)),
-    ),
-  ).map((item) => ({
-    label: item,
-    value: item,
-  }));
-  const orderStoreSelectOptions = Array.from(
-    new Set(
-      shipmentOptions
-        .map((item) => item.order_store?.trim())
-        .filter((item): item is string => Boolean(item)),
-    ),
-  ).map((item) => ({
-    label: item,
-    value: item,
-  }));
   const logisticsSelectOptions = Array.from(
     new Set(
       logisticsOptions
@@ -165,9 +124,12 @@ export function getFreightColumns(
     {
       title: "货件号",
       dataIndex: "shipment_no",
+      debounceTime: 300,
+      request: ({ keyWords }) => requestFreightFilterOptions("shipment_no", keyWords),
       valueType: "select",
       hideInTable: true,
       fieldProps: {
+        filterOption: false,
         mode: "tags",
         showSearch: true,
         optionFilterProp: "label",
@@ -175,15 +137,17 @@ export function getFreightColumns(
         maxTagCount: "responsive",
         maxTagTextLength: 18,
         placeholder: "可粘贴多个货件号",
-        options: shipmentSelectOptions,
       },
     },
     {
       title: "下单店铺",
       dataIndex: "order_store",
+      debounceTime: 300,
+      request: ({ keyWords }) => requestFreightFilterOptions("order_store", keyWords),
       valueType: "select",
       hideInTable: true,
       fieldProps: {
+        filterOption: false,
         mode: "tags",
         showSearch: true,
         optionFilterProp: "label",
@@ -191,15 +155,17 @@ export function getFreightColumns(
         maxTagCount: "responsive",
         maxTagTextLength: 18,
         placeholder: "可粘贴多个下单店铺",
-        options: orderStoreSelectOptions,
       },
     },
     {
       title: "运单编号",
       dataIndex: "tracking_no",
+      debounceTime: 300,
+      request: ({ keyWords }) => requestFreightFilterOptions("tracking_no", keyWords),
       valueType: "select",
       hideInTable: true,
       fieldProps: {
+        filterOption: false,
         mode: "tags",
         showSearch: true,
         optionFilterProp: "label",
@@ -207,7 +173,6 @@ export function getFreightColumns(
         maxTagCount: "responsive",
         maxTagTextLength: 18,
         placeholder: "可粘贴多个运单编号",
-        options: trackingSelectOptions,
       },
     },
     {
@@ -237,11 +202,15 @@ export function getFreightColumns(
     {
       title: "产品名称",
       dataIndex: "product_name",
+      render: (_, record) => record.product_name ?? "",
+      debounceTime: 300,
+      request: ({ keyWords }) => requestFreightFilterOptions("product_name", keyWords),
       width: 180,
       fixed: "left",
       ellipsis: true,
       valueType: "select",
       fieldProps: {
+        filterOption: false,
         mode: "tags",
         showSearch: true,
         optionFilterProp: "label",
@@ -249,7 +218,6 @@ export function getFreightColumns(
         maxTagCount: "responsive",
         maxTagTextLength: 18,
         placeholder: "可粘贴多个产品名称",
-        options: productSelectOptions,
       },
     },
     {
@@ -263,6 +231,7 @@ export function getFreightColumns(
     {
       title: "下单时间",
       dataIndex: "created_at",
+      sorter: true,
       width: 100,
       search: false,
       render: (_, record) => formatFreightDate(record.created_at),
